@@ -1,7 +1,7 @@
 // Карта заказов: MapLibre GL + тайлы OpenFreeMap (данные © OpenStreetMap, ODbL).
 // Перенос design/design/moscow-map.js: метки-плашки HTML-оверлеем, группировка на мелком масштабе,
 // веер плашек на одном адресе, точка базы, круг радиуса. Координаты — сразу lat/lng вместо процентной сетки.
-import type { LngLatBounds, Map as GLMap } from 'maplibre-gl';
+import type { ExpressionSpecification, LngLatBounds, Map as GLMap } from 'maplibre-gl';
 
 export type Pin = { id: number; lat: number; lng: number; urgent: boolean; rate: string; kind: string; active: boolean; title: string };
 export type LatLng = { lat: number; lng: number };
@@ -170,6 +170,8 @@ export class SeasonMapView {
   private async boot() {
     const gl = await import('maplibre-gl');
     if (this.destroyed) return;
+    // Воркер отдаётся статикой той же версии (scripts/copy-maplibre-worker.mjs).
+    gl.setWorkerUrl('/maplibre/maplibre-gl-worker.mjs');
     this.gl = gl;
     const map = new gl.Map({
       container: this.host,
@@ -201,7 +203,7 @@ export class SeasonMapView {
     map.on('load', start);
     setTimeout(start, 900);
     this.paint();
-    ['move', 'zoom', 'resize'].forEach(ev => map.on(ev, () => this.schedulePaint()));
+    (['move', 'zoom', 'resize'] as const).forEach(ev => map.on(ev, () => this.schedulePaint()));
     map.on('moveend', () => this.paint());
 
     map.on('click', (ev) => this.cb.onMapClick?.({ lat: ev.lngLat.lat, lng: ev.lngLat.lng }));
@@ -262,7 +264,7 @@ export class SeasonMapView {
     let style;
     try { style = this.map.getStyle(); } catch { return; }
     if (!style || !style.layers) return;
-    const nm = ['coalesce', ['get', 'name:ru'], ['get', 'name:latin'], ['get', 'name']];
+    const nm: ExpressionSpecification = ['coalesce', ['get', 'name:ru'], ['get', 'name:latin'], ['get', 'name']];
     const BORDER = /bound|admin|border|disput/i;
     const GEOPOL = /country|continent|state|region|province|disput/i;
     let set = 0;

@@ -652,6 +652,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
                       </div>
                       <input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={4} value={code} aria-label="Код из SMS" autoFocus
                         onChange={e => { if (attemptsLeft > 0) { setCode(e.target.value.replace(/\D/g, '').slice(0, 4)); setCodeError(''); } }}
+                        // eslint-disable-next-line react-hooks/refs -- onEnter возвращает обработчик события, ref читается только при нажатии
                         onKeyDown={onEnter(nextStep)}
                         style={css('position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: 0; background: transparent; font-size: 24px; letter-spacing: 34px; cursor: text')} />
                     </div>

@@ -3,12 +3,13 @@ import crypto from 'node:crypto';
 import { CREW_ANY, MONTHS_GEN } from '@/lib/catalog';
 import {
   autoTitle, daysAhead, emptyJobForm, isKnownPayType, isKnownRepeat, isKnownTools, isKnownUnit, jobAllErrors, JOB_FIELD_STEP,
-  jobNum, payNumber, AUTO_ACCEPT_DAYS, type AppStatus, type Applicant, type JobDetail, type JobForm, type JobStatus, type JobSummary, type ShiftInfo
+  jobNum, payNumber, seriesDates, seriesDayLabel, SERIES_STEP, AUTO_ACCEPT_DAYS, type AppStatus, type Applicant, type JobDetail, type JobForm, type JobStatus, type JobSummary, type SeriesInfo, type ShiftInfo
 } from '@/lib/jobs';
 import { badWordIn, findBadField } from '@/lib/moderation';
 import { one, pool, query, tx, type Db } from './db';
 import { AppError, ModerationError } from './errors';
-import { addEvents } from './events';
+import { addEvents, localClock } from './events';
+import { TtlCache } from './cache';
 import { jobDisputes } from './disputes';
 import { jobPhotos } from './files';
 import { publish } from './live';
@@ -81,7 +82,25 @@ function toSummary(r: SummaryRow, viewer: Viewer): JobSummary {
   };
 }
 
+/**
+ * Выдача для гостей не зависит от зрителя — одинаковые запросы в пределах 20 с делят один расчёт и один ответ
+ * (база округлена до ~100 м). Изменения заказов на этом инстансе сбрасывают кэш сразу, на соседних — по времени.
+ */
+const guestSearch = new TtlCache<{ jobs: JobSummary[]; base: { lat: number; lng: number; label: string } }>(20_000, 500);
+export function invalidateSearch() { guestSearch.clear(); guestCard.clear(); }
+
 export async function listJobs(p: ListParams, viewer: Viewer, db: Db = pool()) {
+  if (!viewer && db === pool()) {
+    const b = baseOf(null, p.lat, p.lng);
+    const r3 = (x: number) => Math.round(x * 1000) / 1000;
+    const q: ListParams = { ...p, lat: r3(b.lat), lng: r3(b.lng) };
+    const key = JSON.stringify([q.lat, q.lng, q.today, (q.types || []).slice().sort(), q.minPay || 0, q.km || 0, q.when, (q.q || '').trim().toLowerCase()]);
+    return guestSearch.get(key, () => searchJobs(q, null, db));
+  }
+  return searchJobs(p, viewer, db);
+}
+
+async function searchJobs(p: ListParams, viewer: Viewer, db: Db) {
   const base = baseOf(viewer, p.lat, p.lng);
   const q = (p.q || '').trim().slice(0, 100);
   if (q) {
@@ -148,9 +167,9 @@ async function loadJobRow(num: number, viewer: Viewer, db: Db) {
   const base = baseOf(viewer);
   return one<SummaryRow & {
     description: string; requirement: string | null; repeat_note: string | null; access: string[]; tools: string | null;
-    meet_name: string | null; meet_phone: string | null; pay_when: string | null;
+    meet_name: string | null; meet_phone: string | null; pay_when: string | null; series_len: number;
   }>(
-    `SELECT ${SUMMARY_COLS}, j.description, j.requirement, j.repeat_note, j.access, j.tools, j.meet_name, j.meet_phone, j.pay_when
+    `SELECT ${SUMMARY_COLS}, j.description, j.requirement, j.repeat_note, j.access, j.tools, j.meet_name, j.meet_phone, j.pay_when, j.series_len
        FROM jobs j JOIN job_types t ON t.id = j.type_id
       WHERE j.num = $4`,
     [viewer?.id ?? null, base.lat, base.lng, num],
@@ -158,8 +177,16 @@ async function loadJobRow(num: number, viewer: Viewer, db: Db) {
   );
 }
 
+/** Карточка для гостя тоже не зависит от зрителя — кэшируется так же, как выдача (сбрасывается вместе с ней). */
+const guestCard = new TtlCache<JobDetail>(20_000, 2000);
+
 export async function getJob(num: number, viewer: Viewer, db: Db = pool()): Promise<JobDetail> {
   if (!Number.isSafeInteger(num) || num <= 0) throw new AppError(404, 'Заказ не найден.');
+  if (!viewer && db === pool()) return guestCard.get(String(num), () => loadJob(num, null, db));
+  return loadJob(num, viewer, db);
+}
+
+async function loadJob(num: number, viewer: Viewer, db: Db): Promise<JobDetail> {
   const r = await loadJobRow(num, viewer, db);
   if (!r) throw new AppError(404, 'Заказ не найден — возможно, его удалили.');
   const owner = !!viewer && viewer.id === r.employer_id;
@@ -211,6 +238,7 @@ export async function getJob(num: number, viewer: Viewer, db: Db = pool()): Prom
   const shift = viewer && (owner || meHired || r.my_status)
     ? await loadShift(r.id, r.employer_id, empName, hired, viewer, owner, db)
     : null;
+  const series = r.repeat ? await loadSeries(r, viewer, owner, !!meHired, db) : null;
 
   return {
     ...toSummary(r, viewer),
@@ -229,7 +257,35 @@ export async function getJob(num: number, viewer: Viewer, db: Db = pool()): Prom
     },
     cancellation: cancel && { reason: cancel.reason, notice: cancel.notice, late: cancel.late, at: cancel.at.toISOString() },
     applicantList,
-    shift
+    shift,
+    series
+  };
+}
+
+/** Серия выходов: даты по правилу повтора; снятые дни — свои (исполнитель) или число снявших (работодатель). */
+async function loadSeries(r: { id: string; repeat: string | null; repeat_note: string | null; date: string; series_len: number; status: string },
+  viewer: Viewer, owner: boolean, hired: boolean, db: Db): Promise<SeriesInfo> {
+  const dates = seriesDates(r.repeat!, r.date, r.series_len);
+  const skips = viewer && (owner || hired)
+    ? (await query<{ day: string; n: number; mine: boolean }>(
+      `SELECT to_char(day, 'YYYY-MM-DD') AS day, count(*)::int AS n, bool_or(freelancer_id = $2) AS mine
+         FROM series_skips WHERE job_id = $1 GROUP BY day`, [r.id, viewer.id], db)).rows
+    : [];
+  const today = localClock().day;
+  const live = r.status !== 'cancelled' && r.status !== 'accepted';
+  return {
+    rule: r.repeat! + (r.repeat_note ? ' · ' + r.repeat_note : ''),
+    onCall: !dates,
+    days: Array.from({ length: r.series_len }, (_, i) => {
+      const date = dates ? dates[i] : null;
+      const sk = date ? skips.find(x => x.day === date) : undefined;
+      return {
+        i, date, label: date ? seriesDayLabel(date) : 'вызов ' + (i + 1) + ' · после снегопада',
+        skipped: !!sk?.mine, skippedBy: owner ? sk?.n ?? 0 : 0, past: !!date && date < today
+      };
+    }),
+    canSkip: hired && live && !!dates,
+    canExtend: owner && live && r.series_len + SERIES_STEP <= 60
   };
 }
 
@@ -406,6 +462,7 @@ export async function createJob(raw: unknown, viewer: Viewer, todayRaw: unknown)
     await addEvents([{ userId: viewer.id, kind: 'job', text: 'Заказ опубликован — № ' + jobNum(Number(row!.num)), jobId: row!.id, num: Number(row!.num), silent: true }], db);
     return Number(row!.num);
   });
+  invalidateSearch();
   // «Новая смена рядом» — вне транзакции публикации: сбой рассылки не должен отменять заказ.
   await notifyNearby(num).catch(e => console.error('[nearby]', (e as Error).message));
   return getJob(num, viewer);
@@ -447,6 +504,7 @@ export async function updateJob(num: number, raw: unknown, viewer: Viewer, today
         f.regular ? f.repeatNote || null : null, f.req || null, f.access, f.tools, f.meetName || null, f.meetPhone || null],
       db
     );
+    invalidateSearch();
     const sent = await query<{ freelancer_id: string }>(`SELECT freelancer_id FROM applications WHERE job_id = $1 AND status = 'sent'`, [j.id], db);
     await addEvents(sent.rows.map(a => ({ userId: a.freelancer_id, kind: 'job', text: 'Условия заказа № ' + jobNum(num) + ' изменились — проверьте карточку', jobId: j.id, num })), db);
     await publish(sent.rows.map(a => a.freelancer_id), { t: 'job', num }, db);
@@ -472,6 +530,7 @@ export async function cancelJob(num: number, raw: unknown, viewer: Viewer): Prom
     const late = notice === 'меньше суток' && j.hired > 0;
     await query('INSERT INTO cancellations (job_id, by_role, reason, notice, late) VALUES ($1, $2, $3, $4, $5)', [j.id, 'employer', reason, notice, late], db);
     await query(`UPDATE jobs SET status = 'cancelled', updated_at = now() WHERE id = $1`, [j.id], db);
+    invalidateSearch();
     // Отклики закрываются; нанятые и откликнувшиеся узнают о причине.
     const people = await query<{ freelancer_id: string }>(`SELECT freelancer_id FROM applications WHERE job_id = $1 AND status IN ('sent', 'hired')`, [j.id], db);
     await addEvents(people.rows.map(a => ({ userId: a.freelancer_id, kind: 'cancel', text: 'Заказ № ' + jobNum(num) + ' «' + j.title + '» отменён: ' + reason, jobId: j.id, num, deliver: true, urgent: notice === 'меньше суток' })), db);

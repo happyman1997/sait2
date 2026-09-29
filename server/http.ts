@@ -30,12 +30,19 @@ export function parseNum(raw: string): number {
   return Number(raw);
 }
 
+const JSON_LIMIT = 256 * 1024;
+
 export async function readJson(req: Request): Promise<Record<string, unknown>> {
   const ct = req.headers.get('content-type') || '';
   if (!ct.includes('application/json')) throw new AppError(415, 'Ожидается JSON.');
+  // Формы площадки — единицы килобайт; большой JSON — ошибка или попытка забить память.
+  if (Number(req.headers.get('content-length') || 0) > JSON_LIMIT) throw new AppError(413, 'Слишком большой запрос.');
+  let text: string;
+  try { text = await req.text(); } catch { throw new AppError(400, 'Не удалось прочитать запрос.'); }
+  if (text.length > JSON_LIMIT) throw new AppError(413, 'Слишком большой запрос.');
   try {
-    const body = await req.json();
-    return body && typeof body === 'object' ? body : {};
+    const body = JSON.parse(text);
+    return body && typeof body === 'object' && !Array.isArray(body) ? body : {};
   } catch {
     throw new AppError(400, 'Некорректный JSON.');
   }
@@ -58,13 +65,20 @@ const COMPRESS_MIN = 2048;
  * JSON-ответ; крупный (поиск по карте — до 500 заказов, ~270 КБ) сжимается gzip, если клиент умеет.
  * Сжатие идёт в пуле потоков libuv и не держит цикл событий. За nginx с gzip можно выключить: COMPRESS_JSON=0.
  */
+// Один и тот же объект (кэш выдачи для гостей) кодируется один раз: строка и сжатые байты запоминаются по ссылке.
+const encoded = new WeakMap<object, { body: string; gz?: Promise<Buffer> }>();
+
 async function json(out: unknown, req: Request): Promise<NextResponse> {
-  const body = JSON.stringify(out);
+  const memo = out && typeof out === 'object' ? encoded.get(out) : undefined;
+  const e = memo ?? { body: JSON.stringify(out) };
+  if (!memo && out && typeof out === 'object') encoded.set(out, e);
+  const body = e.body;
   const accepts = /\bgzip\b/.test(req.headers.get('accept-encoding') || '');
   if (body.length < COMPRESS_MIN || !accepts || !config.compressJson()) {
     return new NextResponse(body, { headers: { 'Content-Type': 'application/json' } });
   }
-  const buf = await gzip(body, { level: 5 });
+  e.gz ??= gzip(body, { level: 5 });
+  const buf = await e.gz;
   return new NextResponse(new Uint8Array(buf), {
     headers: { 'Content-Type': 'application/json', 'Content-Encoding': 'gzip', 'Vary': 'Accept-Encoding' }
   });
@@ -125,7 +139,9 @@ export async function assertSameOrigin(req: Request) {
 export async function readForm(req: Request): Promise<FormData> {
   const ct = req.headers.get('content-type') || '';
   if (!ct.includes('multipart/form-data')) throw new AppError(415, 'Ожидается загрузка файла.');
+  // Без длины тело читалось бы целиком в память — браузер для FormData длину всегда присылает.
   const len = Number(req.headers.get('content-length') || 0);
+  if (!len) throw new AppError(411, 'Не указан размер загрузки — обновите страницу и попробуйте ещё раз.');
   if (len > 9 * 1024 * 1024) throw new AppError(413, 'Файл больше 8 МБ — уменьшите фото.', 'file');
   try {
     return await req.formData();

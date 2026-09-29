@@ -108,6 +108,7 @@ describe('чек-лист и экран «Смена»', () => {
     expect((await sh.currentShift(fl))!.num).toBe(b.num);
     await hire(c.num, fl2, emp);
     expect((await sh.currentShift(emp))!.num).toBe(c.num);   // раньше по дате
+    await query("UPDATE jobs SET date = current_date - 1 WHERE num = $1", [b.num]);
     await sh.reportDone(b.num, fl);
     expect((await sh.currentShift(emp))!.num).toBe(b.num);   // сдана — наверх
     await sh.acceptWork(b.num, emp);

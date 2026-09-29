@@ -14,14 +14,18 @@
     "cron": "node --env-file-if-exists=.env.local --import tsx scripts/cron.ts",
     "ads": "node --env-file-if-exists=.env.local --import tsx scripts/ads.ts",
     "staff": "node --env-file-if-exists=.env.local --import tsx scripts/staff.ts",
-    "load": "node --env-file-if-exists=.env.local --import tsx scripts/load.ts"
+    "load": "node --env-file-if-exists=.env.local --import tsx scripts/load.ts",
+    "lint": "eslint .",
+    "postinstall": "node scripts/copy-maplibre-worker.mjs",
+    "predev": "node scripts/copy-maplibre-worker.mjs",
+    "prebuild": "node scripts/copy-maplibre-worker.mjs"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1143.0",
-    "maplibre-gl": "^4.7.1",
+    "maplibre-gl": "^6.11.2",
     "next": "^16.3.6",
     "nodemailer": "^10.0.12",
     "pg": "^8.23.0",
@@ -37,6 +41,8 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/web-push": "^3.6.4",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.7",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vitest": "^5.0.2"

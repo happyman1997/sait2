@@ -172,6 +172,9 @@ describe('исполнитель', () => {
     await expectErr(sh.reportDone(num, fl), /только нанятый/);
     await sh.staffAction(num, ids[0], 'hire', emp);
     await sh.staffAction(num, ids[1], 'hire', emp);
+    // До дня выхода сдать нельзя — иначе срок автоприёмки начался бы до работы.
+    await expectErr(sh.reportDone(num, fl), /в день выхода/);
+    await query('UPDATE jobs SET date = LEAST(date, current_date - 1)');
     await expectErr(sh.reportDone(num, fl), /назначить старшего/);
     await sh.staffAction(num, ids[1], 'lead', emp);
     await expectErr(sh.reportDone(num, fl), /сдаёт старший/);
@@ -199,6 +202,7 @@ describe('приёмка, расчёт, отзывы, жалобы', () => {
   async function accepted() {
     const { num, ids } = await jobWithApps([fl]);
     await sh.staffAction(num, ids[0], 'hire', emp);
+    await query("UPDATE jobs SET date = LEAST(date, current_date - 1)");
     await sh.reportDone(num, fl);
     await sh.acceptWork(num, emp);
     return { num, ids };
@@ -274,6 +278,7 @@ describe('приёмка, расчёт, отзывы, жалобы', () => {
   it('автоприёмка: через 7 дней после сдачи смена закрывается и засчитывается исполнителю', async () => {
     const { num, ids } = await jobWithApps([fl]);
     await sh.staffAction(num, ids[0], 'hire', emp);
+    await query("UPDATE jobs SET date = LEAST(date, current_date - 1)");
     await sh.reportDone(num, fl);
     expect(await sh.autoAcceptDue()).toEqual([]);
     await query(`UPDATE reports SET reported_at = now() - interval '7 days 1 minute'`);

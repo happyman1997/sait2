@@ -1,7 +1,7 @@
 'use client';
 
 // Живые данные вошедшего пользователя: поток событий (SSE), список диалогов, плашка «Сообщения», окно отзыва.
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api } from '@/lib/api';
 import type { ChatThread, JobDetail } from '@/lib/jobs';
 import { useFlash } from '@/components/Toast';
@@ -64,7 +64,7 @@ export function useLive(): Ctx {
 export function useLiveEvent(fn: (e: LiveEvent) => void) {
   const { onLive } = useLive();
   const ref = useRef(fn);
-  ref.current = fn;
+  useLayoutEffect(() => { ref.current = fn; });
   useEffect(() => onLive(e => ref.current(e)), [onLive]);
 }
 

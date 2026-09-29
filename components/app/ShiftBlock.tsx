@@ -76,7 +76,9 @@ export function ShiftBlock({ job, isOwner, act, onChat, onReview, busy }: {
   const accepted = job.status === 'accepted';
   const reported = job.status === 'reported';
   const brigade = s.hired.length > 1;
-  const canReport = !isOwner && job.myStatus === 'hired' && !reported && !accepted && job.status !== 'cancelled' && (!brigade || s.iAmLead);
+  // До дня выхода сдавать нечего (сервер проверяет то же самое).
+  const early = !job.repeat && job.date > localISO();
+  const canReport = !isOwner && job.myStatus === 'hired' && !reported && !accepted && job.status !== 'cancelled' && (!brigade || s.iAmLead) && !early;
 
   const line = accepted
     ? (s.autoAccepted ? 'Смена закрыта автоматически: работодатель не ответил 7 дней — засчитана исполнителю.' : 'Работа принята · ' + new Date(s.acceptedAt!).toLocaleDateString('ru-RU'))
@@ -134,7 +136,7 @@ export function ShiftBlock({ job, isOwner, act, onChat, onReview, busy }: {
 
       {!isOwner && job.myStatus === 'hired' && !accepted && (
         <button className="btn btn-secondary btn-block" disabled={busy || !canReport} onClick={() => act('report', {}, 'Работа сдана — у работодателя 7 дней на приёмку')} style={css('margin-top: 10px; ' + BTN)}>
-          {reported ? 'Работа сдана' : 'Сдать работу'}
+          {reported ? 'Работа сдана' : early ? 'Сдать работу — с ' + dateLabel(job.date) : 'Сдать работу'}
         </button>
       )}
       {isOwner && !accepted && s.hired.length > 0 && job.status !== 'cancelled' && (

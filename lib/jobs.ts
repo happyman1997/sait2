@@ -58,7 +58,8 @@ export type JobDetail = JobSummary & {
   employer: { name: string; initials: string; orgType: string; rating: number | null; reviews: number; jobs: number; since: string };
   cancellation: { reason: string; notice: string; late: boolean; at: string } | null;
   applicantList: Applicant[] | null; // только владельцу
-  shift: ShiftInfo | null;           // только участникам смены (владелец, нанятые)
+  shift: ShiftInfo | null;
+  series: SeriesInfo | null;         // только для регулярных заказов           // только участникам смены (владелец, нанятые)
 };
 
 /** Смена глазами участника: кто нанят, сдача, приёмка, расчёт, отзывы и жалоба текущего пользователя. */
@@ -99,6 +100,42 @@ export type DisputeInfo = {
   reason: string; sum: number; text: string; response: string | null; resolution: string | null; resolvedFor: 'employer' | 'freelancer' | null;
   evidence: { ok: boolean; label: string }[]; at: string; closedAt: string | null;
 };
+
+/** Серия выходов регулярного заказа (для карточки). */
+export type SeriesInfo = {
+  rule: string;                 // «ежедневно, будни · до 9 утра»
+  onCall: boolean;              // по снегопаду — дни заранее неизвестны
+  days: { i: number; date: string | null; label: string; skipped: boolean; skippedBy: number; past: boolean }[];
+  canSkip: boolean;             // нанятый исполнитель
+  canExtend: boolean;           // работодатель, серия не закрыта
+};
+
+export const SERIES_STEP = 4;   // «Продлить серию на месяц» — плюс 4 выхода (как в прототипе)
+const WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+
+/**
+ * Даты серии по правилу повтора: будни — пн–пт, 2/2 — два дня через два, раз в неделю — каждые 7 дней,
+ * иначе ежедневно. «По снегопаду» — null: выходы по вызову.
+ */
+export function seriesDates(repeat: string, startISO: string, count: number): string[] | null {
+  if (/снегопад/.test(repeat)) return null;
+  const out: string[] = [];
+  const d = new Date(startISO + 'T12:00:00Z');
+  const weekdays = /будни/.test(repeat);
+  if (weekdays) while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() + 1);
+  for (let k = 0; out.length < count && k < 800; k++) {
+    const dow = d.getUTCDay();
+    const ok = weekdays ? dow !== 0 && dow !== 6 : /2\/2/.test(repeat) ? k % 4 < 2 : /неделю/.test(repeat) ? k % 7 === 0 : true;
+    if (ok) out.push(d.toISOString().slice(0, 10));
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return out;
+}
+
+export function seriesDayLabel(iso: string) {
+  const d = new Date(iso + 'T12:00:00Z');
+  return d.getUTCDate() + ' ' + MONTHS_GEN[d.getUTCMonth()] + ', ' + WEEKDAYS[d.getUTCDay()];
+}
 
 export const SAFETY_ITEMS = [
   { id: 'brief', label: 'инструктаж прочитан' },

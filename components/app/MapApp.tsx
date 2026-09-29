@@ -65,6 +65,8 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
   const [types, setTypes] = useState<JobTypeRow[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [offline, setOffline] = useState(false);
+  // Черновик заказа, сохранённый при закрытии формы («Продолжить / Удалить»).
+  const [kept, setKept] = useState<Kept | null>(null);
 
   const setFilters = useCallback((f: Filters) => {
     setFiltersState(f);
@@ -202,7 +204,6 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
   const [formError, setFormError] = useState('');
   const [editing, setEditing] = useState<number | null>(null);
   const [addrNote, setAddrNote] = useState('');
-  const [kept, setKept] = useState<Kept | null>(null);
   const addrSynced = useRef('');
   const [addrQuery, setAddrQuery] = useState('');
   const [addrBusy, setAddrBusy] = useState(false);
@@ -452,7 +453,7 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
   useEffect(() => { setPlace(form ? 'form' : 'map'); }, [form, setPlace]);
   useEffect(() => () => setPlace('page'), [setPlace]);
   const goHomeRef = useRef(goHome);
-  goHomeRef.current = goHome;
+  useEffect(() => { goHomeRef.current = goHome; });
   useEffect(() => {
     const h = () => goHomeRef.current();
     window.addEventListener('arena:home', h);

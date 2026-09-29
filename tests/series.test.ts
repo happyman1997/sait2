@@ -1,0 +1,107 @@
+// Этап 9: серия выходов — даты по правилу, «Не смогу» по дню, пометка за три дня подряд, продление.
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+
+process.env.DATABASE_URL = process.env.TEST_DATABASE_URL || 'postgres://arena:arena@localhost:5432/arena_test';
+
+const { pool, query, one } = await import('@/server/db');
+const { migrate } = await import('@/server/migrate');
+const jobs = await import('@/server/jobs');
+const sh = await import('@/server/shifts');
+const { AppError } = await import('@/server/errors');
+const { seriesDates, seriesDayLabel, localISO } = await import('@/lib/jobs');
+
+type U = NonNullable<Parameters<typeof jobs.listJobs>[1]>;
+const MOSCOW = { lat: 55.7558, lng: 37.6173 };
+const today = localISO();
+const plus = (iso: string, n: number) => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+
+describe('даты серии', () => {
+  it('будни, 2/2, раз в неделю, ежедневно; по снегопаду — по вызову', () => {
+    // 2026-10-02 — пятница
+    expect(seriesDates('ежедневно, будни', '2026-10-02', 3)).toEqual(['2026-10-02', '2026-10-05', '2026-10-06']);
+    expect(seriesDates('ежедневно, будни', '2026-10-03', 1)).toEqual(['2026-10-05']);
+    expect(seriesDates('график 2/2', '2026-10-01', 4)).toEqual(['2026-10-01', '2026-10-02', '2026-10-05', '2026-10-06']);
+    expect(seriesDates('раз в неделю', '2026-10-01', 3)).toEqual(['2026-10-01', '2026-10-08', '2026-10-15']);
+    expect(seriesDates('ежедневно до конца сезона', '2026-12-31', 2)).toEqual(['2026-12-31', '2027-01-01']);
+    expect(seriesDates('по снегопаду', '2026-10-01', 5)).toBeNull();
+    expect(seriesDayLabel('2026-10-05')).toBe('5 октября, пн');
+  });
+});
+
+async function mkUser(role: 'freelancer' | 'employer', login: string, phoneKey: string, name: string): Promise<U> {
+  const u = await one<{ id: string }>(
+    `INSERT INTO users (role, login, phone, phone_key, email, password_hash, name, city, base_lat, base_lng, offer_accepted_at, offer_version)
+     VALUES ($1, $2, '+7' || $3, $3, 'x@x.ru', 'x', $4, 'Москва', $5, $6, now(), 't') RETURNING id`,
+    [role, login, phoneKey, name, MOSCOW.lat, MOSCOW.lng]);
+  return { id: u!.id, role, city: 'Москва', base_lat: MOSCOW.lat, base_lng: MOSCOW.lng } as U;
+}
+const form = (over: Record<string, unknown> = {}) => ({
+  ...MOSCOW, address: 'Москва, ул. Тверская, 18', district: 'Москва', type: 'snow', desc: 'Двор 320 м²', crew: '1', pay: '3000',
+  unit: 'за смену', payType: 'перевод на карту', dateISO: plus(today, 2), access: ['домофон'], tools: 'нужен свой инвентарь',
+  regular: true, repeat: 'ежедневно до конца сезона', ...over
+});
+async function expectErr(p: Promise<unknown>, text: RegExp) {
+  try { await p; } catch (e) { expect(e).toBeInstanceOf(AppError); expect((e as Error).message).toMatch(text); return; }
+  throw new Error('ожидалась ошибка');
+}
+
+let emp: U, fl: U;
+beforeAll(async () => {
+  await pool().query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
+  await migrate(pool(), undefined, () => {});
+});
+beforeEach(async () => {
+  await query('TRUNCATE jobs, rate_limits CASCADE');
+  await query('DELETE FROM users');
+  emp = await mkUser('employer', 'aigul_t', '9161111111', 'Айгуль Тлеубаева');
+  fl = await mkUser('freelancer', 'daniyar_s', '9160000000', 'Данияр Сапаров');
+});
+afterAll(async () => { await pool().end(); });
+
+describe('серия в заказе', () => {
+  it('карточка: 5 дней по правилу; нанятый снимает день и возвращает; работодатель видит, сколько сняли', async () => {
+    const j = await jobs.createJob(form(), emp, today);
+    const guest = await jobs.getJob(j.num, null);
+    expect(guest.series!.days.map(d => d.date)).toEqual([0, 1, 2, 3, 4].map(i => plus(today, 2 + i)));
+    expect(guest.series).toMatchObject({ canSkip: false, canExtend: false, onCall: false });
+    await jobs.applyToJob(j.num, { reqConfirmed: true }, fl, today);
+    const app = (await jobs.getJob(j.num, emp)).applicantList![0].id;
+    await sh.staffAction(j.num, app, 'hire', emp);
+    const day = plus(today, 3);
+    const d = await sh.toggleSeriesDay(j.num, { day }, fl);
+    expect(d.series!.days.find(x => x.date === day)!.skipped).toBe(true);
+    expect((await jobs.getJob(j.num, emp)).series!.days.find(x => x.date === day)!.skippedBy).toBe(1);
+    expect((await one<{ text: string }>(`SELECT text FROM events WHERE user_id = $1 AND kind = 'withdrawal'`, [emp.id]))!.text).toMatch(/не сможет выйти/);
+    const back = await sh.toggleSeriesDay(j.num, { day }, fl);
+    expect(back.series!.days.find(x => x.date === day)!.skipped).toBe(false);
+    await expectErr(sh.toggleSeriesDay(j.num, { day: plus(today, 30) }, fl), /нет/);
+    await expectErr(sh.toggleSeriesDay(j.num, { day }, emp), /нанятый/);
+  });
+
+  it('три снятых дня подряд — пометка в профиле, один раз', async () => {
+    const j = await jobs.createJob(form(), emp, today);
+    await jobs.applyToJob(j.num, { reqConfirmed: true }, fl, today);
+    await sh.staffAction(j.num, (await jobs.getJob(j.num, emp)).applicantList![0].id, 'hire', emp);
+    for (const k of [2, 3]) await sh.toggleSeriesDay(j.num, { day: plus(today, k) }, fl);
+    expect((await one<{ n: number }>(`SELECT count(*)::int AS n FROM user_marks WHERE user_id = $1`, [fl.id]))!.n).toBe(0);
+    await sh.toggleSeriesDay(j.num, { day: plus(today, 4) }, fl);
+    await sh.toggleSeriesDay(j.num, { day: plus(today, 5) }, fl);
+    expect((await one<{ n: number }>(`SELECT count(*)::int AS n FROM user_marks WHERE user_id = $1 AND kind = 'late_withdrawal'`, [fl.id]))!.n).toBe(1);
+  });
+
+  it('продление: +4 выхода, нанятым — предложение; разовый и «по снегопаду» — без снятия дней', async () => {
+    const j = await jobs.createJob(form(), emp, today);
+    await jobs.applyToJob(j.num, { reqConfirmed: true }, fl, today);
+    await sh.staffAction(j.num, (await jobs.getJob(j.num, emp)).applicantList![0].id, 'hire', emp);
+    await expectErr(sh.extendSeries(j.num, fl), /работодатель/);
+    const d = await sh.extendSeries(j.num, emp);
+    expect(d.series!.days).toHaveLength(9);
+    expect((await one<{ text: string }>(`SELECT text FROM events WHERE user_id = $1 AND text LIKE 'Серия%'`, [fl.id]))!.text).toMatch(/продлена/);
+    const once = await jobs.createJob(form({ regular: false, repeat: '' }), emp, today);
+    expect((await jobs.getJob(once.num, emp)).series).toBeNull();
+    const snow = await jobs.createJob(form({ repeat: 'по снегопаду' }), emp, today);
+    const s = (await jobs.getJob(snow.num, emp)).series!;
+    expect(s.onCall).toBe(true);
+    expect(s.days[0].label).toMatch(/вызов 1/);
+  });
+});

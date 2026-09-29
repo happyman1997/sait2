@@ -158,6 +158,8 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
 
       <div style={css('margin-top: 16px; font-size: 14px; line-height: 1.55; color: color-mix(in srgb, var(--color-text) 75%, transparent); text-wrap: pretty; white-space: pre-line')}>{job.description}</div>
 
+      {job.series && <SeriesBlock job={job} act={act} busy={busy} />}
+
       <button className="btn btn-ghost" onClick={() => setMore(m => !m)} style={css('margin-top: 12px; height: 32px; font-size: 13px; padding: 0 8px; margin-left: -8px')}>{more ? 'Скрыть условия заказа' : 'Все условия заказа →'}</button>
       {more && (
         <div className="blueprint" style={css('margin-top: 8px; padding: 0')}>
@@ -313,6 +315,56 @@ function PersonModal({ job, onClose }: { job: JobDetail; onClose: () => void }) 
           <div style={css('font-size: 12.5px; line-height: 1.4; margin-top: 14px; color: color-mix(in srgb, var(--color-text) 60%, transparent)')}>Телефон открывается после найма — в чате и карточке смены.</div>
           <button className="btn btn-secondary btn-block" onClick={onClose} style={css('margin-top: 12px; height: 40px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Закрыть</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Серия выходов (как в прототипе): каждый день — отдельная смена; нанятый может снять день, работодатель — продлить серию. */
+function SeriesBlock({ job, act, busy }: { job: JobDetail; act: Act; busy: boolean }) {
+  const s = job.series!;
+  const [all, setAll] = useState(false);
+  const days = all ? s.days : s.days.slice(0, 5);
+  const iAmIn = job.myStatus === 'hired';
+  return (
+    <div className="blueprint" style={css('margin-top: 14px; padding: 12px 13px')}>
+      <Corners />
+      <div style={css('display: flex; justify-content: space-between; gap: 10px; align-items: baseline; flex-wrap: wrap')}>
+        <span style={css(LABEL)}>Серия выходов</span>
+        <span style={css('font-size: 13px; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>{s.rule}</span>
+      </div>
+      <div style={css('font-size: 13px; line-height: 1.45; margin-top: 6px; color: color-mix(in srgb, var(--color-text) 72%, transparent)')}>
+        {s.onCall
+          ? 'Выходы по вызову после снегопада — работодатель напишет в чат, когда выходить.'
+          : 'Заказ держит не один выход, а серию: каждый день — отдельная смена. Отказ от одного дня не снимает остальные.'}
+      </div>
+      <div style={css('display: grid; gap: 5px; margin-top: 9px')}>
+        {days.map(d => {
+          const status = d.skipped ? 'снят' : job.mine ? (d.skippedBy ? 'не выйдут: ' + d.skippedBy : job.hired ? 'исполнитель есть' : 'нет исполнителя') : iAmIn ? 'за вами' : 'открыт';
+          return (
+            <div key={d.i} style={css('display: flex; align-items: center; gap: 10px; padding: 7px 9px; border: 1px solid ' + (d.skipped ? 'color-mix(in srgb, var(--color-text) 14%, transparent)' : 'var(--color-divider)') + '; opacity: ' + (d.skipped || d.past ? '.55' : '1'))}>
+              <span style={css('font-family: var(--font-heading); font-size: 12px; letter-spacing: .14em; color: color-mix(in srgb, var(--color-text) 62%, transparent)')}>{String(d.i + 1).padStart(2, '0')}</span>
+              <span style={css('flex: 1; min-width: 0; font-family: var(--font-heading); font-size: 14px; text-transform: uppercase; letter-spacing: .02em')}>{d.label}</span>
+              <span style={css('font-size: 12.5px; color: ' + (job.mine && d.skippedBy ? 'var(--color-accent-900)' : 'color-mix(in srgb, var(--color-text) 64%, transparent)'))}>{d.past ? 'прошёл' : status}</span>
+              {s.canSkip && !d.past && d.date && (
+                <button className="btn btn-ghost" disabled={busy} onClick={() => act('series/skip', { day: d.date }, d.skipped ? 'Выход возвращён в серию' : 'Выход снят — остальные дни серии за вами')}
+                  style={css('height: 26px; font-size: 12.5px; padding: 0 6px; flex: none')}>{d.skipped ? 'Вернуть' : 'Не смогу'}</button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {s.days.length > 5 && (
+        <button className="btn btn-ghost" onClick={() => setAll(a => !a)} style={css('margin-top: 6px; height: 28px; font-size: 12.5px; padding: 0 6px')}>{all ? 'Свернуть' : 'Все выходы — ' + s.days.length}</button>
+      )}
+      {s.canExtend && (
+        <button className="btn btn-secondary btn-block" disabled={busy} onClick={() => act('series/extend', {}, 'Серия продлена — добавлено 4 выхода')}
+          style={css('margin-top: 10px; height: 40px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Продлить серию на месяц</button>
+      )}
+      <div style={css('font-size: 12.5px; line-height: 1.4; margin-top: 8px; color: color-mix(in srgb, var(--color-text) 64%, transparent)')}>
+        {job.mine
+          ? 'Продление зовёт тех же исполнителей первыми — новый набор объявляется только на пустые дни.'
+          : 'Снятый день возвращается в поиск. Больше двух снятых дней подряд — пометка в профиле.'}
       </div>
     </div>
   );

@@ -2,15 +2,15 @@
 // Отметки выхода/геометки и споров нет (решение заказчика). Деньги идут напрямую между сторонами.
 import { CREW_ANY } from '@/lib/catalog';
 import {
-  SAFETY_ITEMS,
+  SAFETY_ITEMS, dateLabel, seriesDates, seriesDayLabel, SERIES_STEP,
   AUTO_ACCEPT_DAYS, COMPLAINT_KINDS, daysAhead, HIRE_GREETING, jobNum, LEAVE_REASONS, REPORT_MESSAGE, REVIEW_EDIT_MIN,
   type AppStatus, type ChatMessage, type ChatThread, type JobDetail, type JobStatus, type MyJob
 } from '@/lib/jobs';
 import { badWordIn, findBadField } from '@/lib/moderation';
 import { one, pool, query, tx, type Db } from './db';
 import { AppError, ModerationError } from './errors';
-import { addEvents, mailSupport } from './events';
-import { clientToday, getJob, initialsOf, shortName } from './jobs';
+import { addEvents, localClock, mailSupport } from './events';
+import { clientToday, getJob, initialsOf, invalidateSearch, shortName } from './jobs';
 import { publish } from './live';
 import { limitOrThrow } from './rate-limit';
 import type { SessionUser } from './session';
@@ -53,7 +53,7 @@ async function userName(id: string, db: Db) {
   return shortName((await one<{ name: string }>('SELECT name FROM users WHERE id = $1', [id], db))?.name || '');
 }
 
-async function systemMessage(db: Db, jobId: string, num: number, freelancerId: string, authorId: string, role: 'employer' | 'freelancer', text: string) {
+async function systemMessage(db: Db, jobId: string, _num: number, freelancerId: string, authorId: string, role: 'employer' | 'freelancer', text: string) {
   await query('INSERT INTO messages (job_id, freelancer_id, author_id, author_role, text) VALUES ($1, $2, $3, $4, $5)', [jobId, freelancerId, authorId, role, text], db);
 }
 
@@ -63,6 +63,7 @@ async function refreshStaffing(j: JobRow, db: Db) {
   const n = (await one<{ n: number }>('SELECT count(*)::int AS n FROM hires WHERE job_id = $1', [j.id], db))!.n;
   const next: JobStatus = j.crew < CREW_ANY && n >= j.crew ? 'staffed' : 'open';
   if (next !== j.status) await query('UPDATE jobs SET status = $2, updated_at = now() WHERE id = $1', [j.id, next], db);
+  invalidateSearch();
 }
 
 // ───────────────────────── Работодатель: отклики ─────────────────────────
@@ -182,12 +183,15 @@ export async function reportDone(num: number, viewer: Viewer): Promise<JobDetail
     if (j.status === 'cancelled') throw new AppError(409, 'Смена отменена — сдавать нечего.');
     if (j.status === 'reported') throw new AppError(409, 'Работа уже сдана — ждём приёмки.');
     if (j.status === 'accepted') throw new AppError(409, 'Работа уже принята.');
+    // До дня выхода сдавать нечего: иначе 7-дневный срок автоприёмки начался бы до самой работы.
+    if (!j.repeat && j.date > localClock().day) throw new AppError(409, 'Сдать работу можно в день выхода или позже — ' + dateLabel(j.date) + '.');
     if (hired.length > 1 && !me.is_lead) {
       const lead = hired.find(h => h.is_lead);
       throw new AppError(409, lead ? 'Работу за бригаду сдаёт старший.' : 'В бригаде работу сдаёт старший — попросите работодателя назначить старшего.');
     }
     await query('INSERT INTO reports (job_id, reported_by) VALUES ($1, $2)', [j.id, u.id], db);
     await query(`UPDATE jobs SET status = 'reported', updated_at = now() WHERE id = $1`, [j.id], db);
+    invalidateSearch();
     await systemMessage(db, j.id, num, u.id, u.id, 'freelancer', REPORT_MESSAGE);
     await addEvents([{ userId: j.employer_id, kind: 'report', text: 'Работа сдана · заказ № ' + jobNum(num) + ' «' + j.title + '». Примите её в течение ' + AUTO_ACCEPT_DAYS + ' дней — иначе смена закроется автоматически.', jobId: j.id, num, deliver: true }], db);
     await publish([j.employer_id, ...hired.map(h => h.freelancer_id)], { t: 'job', num }, db);
@@ -205,6 +209,7 @@ async function acceptLocked(j: JobRow, auto: boolean, db: Db) {
   if (!hired.length) throw new AppError(409, 'На смену никто не нанят — принимать нечего.');
   await query('INSERT INTO acceptances (job_id, auto) VALUES ($1, $2)', [j.id, auto], db);
   await query(`UPDATE jobs SET status = 'accepted', updated_at = now() WHERE id = $1`, [j.id], db);
+  invalidateSearch();
   await query('INSERT INTO settlements (job_id) VALUES ($1) ON CONFLICT DO NOTHING', [j.id], db);
   const rest = await openApplicants(j.id, db);
   await query(`UPDATE applications SET status = 'rejected', decided_at = now(), updated_at = now() WHERE job_id = $1 AND status = 'sent'`, [j.id], db);
@@ -268,6 +273,7 @@ export async function moveDate(num: number, raw: unknown, viewer: Viewer, todayR
     if (j.status === 'cancelled' || j.status === 'accepted') throw new AppError(409, 'Смена закрыта или отменена — переносить нельзя.');
     if (j.date === date) throw new AppError(422, 'Это та же дата.', 'date');
     await query('UPDATE jobs SET date = $2, urgent = $3, updated_at = now() WHERE id = $1', [j.id, date, ahead <= 1], db);
+    invalidateSearch();
     const people = [...(await hiredOf(j.id, db)).map(h => h.freelancer_id), ...(await openApplicants(j.id, db))];
     const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
     const label = parseInt(date.slice(8), 10) + ' ' + MONTHS[parseInt(date.slice(5, 7), 10) - 1];
@@ -458,14 +464,18 @@ export async function sendMessage(num: number, freelancerId: string, raw: unknow
 export async function listChats(viewer: Viewer): Promise<ChatThread[]> {
   const u = needUser(viewer);
   const r = await query<{ num: string; thread: string; title: string; who: string; last: string | null; last_author: string | null; last_at: Date | null; unread: number; status: JobStatus }>(
-    `WITH threads AS (
-       SELECT j.id AS job_id, j.num, j.title, j.status, j.employer_id, h.freelancer_id
-         FROM hires h JOIN jobs j ON j.id = h.job_id
-        WHERE j.employer_id = $1 OR h.freelancer_id = $1
+    // Четыре ветки вместо «employer = $1 OR freelancer = $1» по соединению: так каждая идёт по своему индексу,
+    // а не перебирает все наймы и сообщения площадки.
+    `WITH pairs AS (
+       SELECT h.job_id, h.freelancer_id FROM hires h JOIN jobs j ON j.id = h.job_id WHERE j.employer_id = $1
        UNION
-       SELECT DISTINCT j.id, j.num, j.title, j.status, j.employer_id, m.freelancer_id
-         FROM messages m JOIN jobs j ON j.id = m.job_id
-        WHERE j.employer_id = $1 OR m.freelancer_id = $1
+       SELECT h.job_id, h.freelancer_id FROM hires h WHERE h.freelancer_id = $1
+       UNION
+       SELECT DISTINCT m.job_id, m.freelancer_id FROM messages m JOIN jobs j ON j.id = m.job_id WHERE j.employer_id = $1
+       UNION
+       SELECT DISTINCT m.job_id, m.freelancer_id FROM messages m WHERE m.freelancer_id = $1
+     ), threads AS (
+       SELECT j.id AS job_id, j.num, j.title, j.status, j.employer_id, p.freelancer_id FROM pairs p JOIN jobs j ON j.id = p.job_id
      )
      SELECT t.num, t.freelancer_id AS thread, t.title, t.status,
             (SELECT name FROM users WHERE id = CASE WHEN t.employer_id = $1 THEN t.freelancer_id ELSE t.employer_id END) AS who,
@@ -639,4 +649,67 @@ export async function currentShift(viewer: Viewer): Promise<JobDetail | null> {
         ORDER BY CASE j.status WHEN 'reported' THEN 0 WHEN 'accepted' THEN 2 ELSE 1 END, j.date, j.num
         LIMIT 1`, [u.id]);
   return r ? getJob(Number(r.num), viewer) : null;
+}
+
+// ───────────────────────── Серия выходов ─────────────────────────
+
+/** «Не смогу» / «Вернуть» для одного дня серии: только нанятый, только будущий день. Три снятых дня подряд — пометка. */
+export async function toggleSeriesDay(num: number, raw: unknown, viewer: Viewer): Promise<JobDetail> {
+  const u = needUser(viewer);
+  const day = raw && typeof raw === 'object' && typeof (raw as Record<string, unknown>).day === 'string' ? (raw as Record<string, string>).day : '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new AppError(422, 'Укажите день серии.', 'day');
+  await tx(async (db) => {
+    const j = await lockJob(num, db);
+    const row = await one<{ series_len: number }>('SELECT series_len FROM jobs WHERE id = $1', [j.id], db);
+    if (!j.repeat) throw new AppError(409, 'Это разовый заказ — серии нет.');
+    const dates = seriesDates(j.repeat, j.date, row!.series_len);
+    if (!dates) throw new AppError(409, 'Выходы по снегопаду — по вызову, заранее снимать нечего.');
+    if (!dates.includes(day)) throw new AppError(422, 'Такого дня в серии нет.', 'day');
+    if (!(await one('SELECT 1 FROM hires WHERE job_id = $1 AND freelancer_id = $2', [j.id, u.id], db))) throw new AppError(403, 'Снять день может только нанятый исполнитель.');
+    if (j.status === 'cancelled' || j.status === 'accepted') throw new AppError(409, 'Серия закрыта.');
+    if (day < localClock().day) throw new AppError(409, 'Этот день уже прошёл.');
+    const removed = await query('DELETE FROM series_skips WHERE job_id = $1 AND freelancer_id = $2 AND day = $3', [j.id, u.id, day], db);
+    const skipping = !removed.rowCount;
+    if (skipping) await query('INSERT INTO series_skips (job_id, freelancer_id, day) VALUES ($1, $2, $3)', [j.id, u.id, day], db);
+    const name = await userName(u.id, db);
+    const ahead = daysAhead(day, localClock().day) ?? 99;
+    await addEvents([{
+      userId: j.employer_id, kind: 'withdrawal', jobId: j.id, num, deliver: skipping, urgent: skipping && ahead <= 1,
+      text: skipping
+        ? name + ' не сможет выйти ' + seriesDayLabel(day) + ' · серия заказа № ' + jobNum(num) + '. Остальные дни — за ним.'
+        : name + ' снова выходит ' + seriesDayLabel(day) + ' · серия заказа № ' + jobNum(num)
+    }], db);
+    if (skipping) {
+      // Больше двух снятых дней подряд — пометка в профиле (один раз на серию).
+      const mine = new Set((await query<{ day: string }>(`SELECT to_char(day, 'YYYY-MM-DD') AS day FROM series_skips WHERE job_id = $1 AND freelancer_id = $2`, [j.id, u.id], db)).rows.map(x => x.day));
+      let run = 0, worst = 0;
+      for (const d of dates) { run = mine.has(d) ? run + 1 : 0; worst = Math.max(worst, run); }
+      if (worst >= 3 && !(await one(`SELECT 1 FROM user_marks WHERE user_id = $1 AND job_id = $2 AND kind = 'late_withdrawal'`, [u.id, j.id], db))) {
+        await query(`INSERT INTO user_marks (user_id, kind, reason, job_id, until) VALUES ($1, 'late_withdrawal', $2, $3, now() + make_interval(days => $4))`,
+          [u.id, 'Три выхода серии подряд сняты · заказ № ' + jobNum(num), j.id, LATE_MARK_DAYS], db);
+      }
+    }
+    await publish([j.employer_id, u.id], { t: 'job', num }, db);
+  });
+  return getJob(num, viewer);
+}
+
+/** «Продлить серию на месяц»: плюс SERIES_STEP выходов; нанятым — предложение продолжить на тех же условиях. */
+export async function extendSeries(num: number, viewer: Viewer): Promise<JobDetail> {
+  await tx(async (db) => {
+    const j = await lockJob(num, db);
+    needOwner(j, viewer);
+    if (!j.repeat) throw new AppError(409, 'Это разовый заказ — продлевать нечего.');
+    if (j.status === 'cancelled' || j.status === 'accepted') throw new AppError(409, 'Серия закрыта.');
+    const r = await query('UPDATE jobs SET series_len = series_len + $2, updated_at = now() WHERE id = $1 AND series_len + $2 <= 60', [j.id, SERIES_STEP], db);
+    if (!r.rowCount) throw new AppError(409, 'Серия уже максимальной длины.');
+    const hired = await hiredOf(j.id, db);
+    await addEvents(hired.map(h => ({
+      userId: h.freelancer_id, kind: 'job', jobId: j.id, num, deliver: true,
+      text: 'Серия заказа № ' + jobNum(num) + ' «' + j.title + '» продлена ещё на ' + SERIES_STEP + ' выхода на тех же условиях. Если какой-то день не подходит — отметьте «Не смогу».'
+    })), db);
+    await publish(hired.map(h => h.freelancer_id), { t: 'job', num }, db);
+  });
+  invalidateSearch();
+  return getJob(num, viewer);
 }

@@ -63,6 +63,7 @@ describe('споры по расчёту', () => {
   it('открывается после сдачи работы, с доказательствами; второй незакрытый — нельзя', async () => {
     const { num } = await hiredShift();
     await expectErr(dsp.openDispute(num, claim, fl), /после сдачи/);
+    await query("UPDATE jobs SET date = LEAST(date, current_date - 1)");
     await sh.reportDone(num, fl);
     await sh.acceptWork(num, emp);
     await expectErr(dsp.openDispute(num, { ...claim, reason: 'исполнитель требует больше договорённого' }, fl), /что произошло/);
@@ -87,6 +88,7 @@ describe('споры по расчёту', () => {
 
   it('работодатель отправил оплату — спор закрыт, расчёт отмечен', async () => {
     const { num } = await hiredShift();
+    await query("UPDATE jobs SET date = LEAST(date, current_date - 1)");
     await sh.reportDone(num, fl);
     await sh.acceptWork(num, emp);
     const id = (await dsp.openDispute(num, claim, fl)).shift!.disputes[0].id;
@@ -100,6 +102,7 @@ describe('споры по расчёту', () => {
 
   it('пояснение — на разбор поддержке; решение ставит пометку проигравшей стороне', async () => {
     const { num, app } = await hiredShift();
+    await query("UPDATE jobs SET date = LEAST(date, current_date - 1)");
     await sh.reportDone(num, fl);
     await sh.acceptWork(num, emp);
     const id = (await dsp.openDispute(num, { reason: 'исполнитель требует больше договорённого', sum: 9000, text: 'Договаривались на 6000, просит 9000', target: app }, emp)).shift!.disputes[0].id;
@@ -118,6 +121,7 @@ describe('споры по расчёту', () => {
 
   it('инициатор снимает спор; исполнитель «деньги пришли» — отметка получения', async () => {
     const { num } = await hiredShift();
+    await query("UPDATE jobs SET date = LEAST(date, current_date - 1)");
     await sh.reportDone(num, fl);
     const id = (await dsp.openDispute(num, { ...claim, reason: 'работу не приняли без причины' }, fl)).shift!.disputes[0].id;
     await expectErr(dsp.actDispute(num, id, { action: 'withdraw' }, emp), /открыл/);

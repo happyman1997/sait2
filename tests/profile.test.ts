@@ -121,6 +121,7 @@ describe('профиль', () => {
     await jobs.applyToJob(j.num, { reqConfirmed: true }, fl, today);
     const app = (await jobs.getJob(j.num, emp)).applicantList![0].id;
     await sh.staffAction(j.num, app, 'hire', emp);
+    await query("UPDATE jobs SET date = LEAST(date, current_date - 1)");
     await sh.reportDone(j.num, fl);
     await sh.acceptWork(j.num, emp);
     const target = (await jobs.getJob(j.num, emp)).shift!.reviewTargets[0].target;
