@@ -75,13 +75,18 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
   }, []);
 
+  // Ответы могут прийти не по порядку (быстрый ввод в поиске) — применяем только последний запрос.
+  const loadSeq = useRef(0);
   const loadJobs = useCallback(async () => {
+    const seq = ++loadSeq.current;
     try {
       const r = await api<{ jobs: JobSummary[]; base: { lat: number; lng: number; label: string } }>('/api/jobs?' + qs(filters, null));
+      if (seq !== loadSeq.current) return;
       setJobs(r.jobs);
       setBase(r.base);
       setLoaded(true);
     } catch (e) {
+      if (seq !== loadSeq.current) return;
       if (e instanceof ApiError && e.body.moderation) { showModeration('Поиск', e.body.moderation.category, filters.q); setFiltersState(f => ({ ...f, q: '' })); return; }
       flash(e instanceof ApiError ? e.message : 'Не удалось загрузить заказы');
     }
@@ -151,7 +156,12 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
   }, [detail, flash]);
 
   // Отложенный отклик после регистрации/входа: условие работодателя автооткликом не обходим.
+  // Параметр apply=1 убираем сразу — перезагрузка страницы не должна повторять отклик.
   const autoDone = useRef(false);
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('apply')) { url.searchParams.delete('apply'); window.history.replaceState(null, '', url); }
+  }, []);
   useEffect(() => {
     if (!autoApply || autoDone.current || !detail || role !== 'freelancer') return;
     autoDone.current = true;
@@ -200,21 +210,19 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
   }, []);
 
   const closeForm = useCallback((keep: boolean) => {
-    setFormState(f => {
-      if (f && keep && !editing && formHasContent(f)) {
-        const k = { form: f, step: formStep };
-        writeLS(DRAFT_KEY, k);
-        setKept(k);
-      }
-      return null;
-    });
+    if (form && keep && !editing && formHasContent(form)) {
+      const k = { form, step: formStep };
+      writeLS(DRAFT_KEY, k);
+      setKept(k);
+    }
+    setFormState(null);
     // Закрыли правку без сохранения — возвращаем карточку заказа.
     if (editing) setSelected(editing);
     setEditing(null);
     setFormErrs({});
     setFormError('');
     setAddrNote('');
-  }, [editing, formStep]);
+  }, [form, editing, formStep]);
 
   const reverse = useCallback(async (p: LatLng) => {
     setAddrNote('Определяем адрес точки…');

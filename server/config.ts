@@ -21,5 +21,7 @@ export const config = {
   // Nominatim-совместимый геокодер. Публичный nominatim.openstreetmap.org — только для разработки (лимит 1 запрос/с).
   geocoderUrl: () => env('GEOCODER_URL', 'https://nominatim.openstreetmap.org'),
   geocoderUserAgent: () => env('GEOCODER_USER_AGENT', 'arena-raboty/0.1 (dev)'),
+  // Сколько доверенных прокси стоит перед приложением (для IP в X-Forwarded-For). 0 — не доверять заголовку.
+  trustProxyHops: () => Math.max(0, parseInt(env('TRUST_PROXY_HOPS', '1'), 10) || 0),
   offerVersion: '2026-09'
 };

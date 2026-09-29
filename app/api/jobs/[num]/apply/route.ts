@@ -1,4 +1,4 @@
-import { assertSameOrigin, currentUser, readJson, route } from '@/server/http';
+import { assertSameOrigin, currentUser, parseNum, readJson, route } from '@/server/http';
 import { applyToJob } from '@/server/jobs';
 
 export async function POST(req: Request, ctx: { params: Promise<{ num: string }> }) {
@@ -6,6 +6,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ num: string }>
   return route(async () => {
     await assertSameOrigin(req);
     const b = await readJson(req);
-    return { job: await applyToJob(parseInt(num, 10), b, await currentUser(), b.today) };
+    return { job: await applyToJob(parseNum(num), b, await currentUser(), b.today) };
   })(req);
 }

@@ -17,6 +17,17 @@ export async function hit(key: string, limit: number, windowSec: number, db: Db 
   return { ok: count <= limit, retryAfter: Math.max(1, Math.ceil((started + windowSec * 1000 - Date.now()) / 1000)) };
 }
 
+/** Проверка без списания: окно ещё не истекло и лимит уже выбран. */
+export async function peek(key: string, limit: number, windowSec: number, db: Db = pool()): Promise<{ ok: boolean; retryAfter: number }> {
+  const row = await one<{ count: number; left: number }>(
+    `SELECT count, ceil(extract(epoch FROM window_start + make_interval(secs => $2) - now()))::int AS left
+       FROM rate_limits WHERE key = $1 AND window_start >= now() - make_interval(secs => $2)`,
+    [key, windowSec],
+    db
+  );
+  return { ok: !row || row.count < limit, retryAfter: Math.max(1, row?.left ?? 1) };
+}
+
 export async function limitOrThrow(key: string, limit: number, windowSec: number, message: string, db?: Db) {
   const r = await hit(key, limit, windowSec, db);
   if (!r.ok) throw new AppError(429, message, undefined, { retryAfter: r.retryAfter });

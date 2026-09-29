@@ -149,6 +149,20 @@ describe('регистрация', () => {
     await expectErr(auth.verifySignup(s.challengeId, '7777', true, ctx), undefined, /устарела/);
   });
 
+  it('параллельные попытки не обходят лимит в 3 кода', async () => {
+    const s = await auth.startSignup(freelancer(), ctx);
+    const wrong = ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009', '0010'];
+    const res = await Promise.allSettled(wrong.map(c => auth.verifySignup(s.challengeId, c, true, ctx)));
+    expect(res.every(r => r.status === 'rejected')).toBe(true);
+    const row = await one<{ attempts: number }>('SELECT attempts FROM auth_challenges WHERE id = $1', [s.challengeId]);
+    expect(row!.attempts).toBe(3);
+    await expectErr(auth.verifySignup(s.challengeId, '4821', true, ctx), 'code', /Попытки исчерпаны/);
+  });
+
+  it('мусорный id подтверждения — 400, а не ошибка базы', async () => {
+    await expectErr(auth.verifySignup('-'.repeat(36), '4821', true, ctx), undefined, /не найдена/);
+  });
+
   it('повторная отправка не раньше чем через 60 секунд', async () => {
     const s = await auth.startSignup(freelancer(), ctx);
     await expectErr(auth.resendCode(s.challengeId, 'sms', 'signup', ctx), 'code', /через \d+ с/);
@@ -192,6 +206,12 @@ describe('вход', () => {
     expect(e.status).toBe(429);
   });
 
+  it('успешные входы не тратят лимит попыток', async () => {
+    for (let i = 0; i < 12; i++) await auth.login('daniyar_s', 'secret1', ctx);
+    for (let i = 0; i < 9; i++) await expectErr(auth.login('daniyar_s', 'wrong-pass', ctx), 'password');
+    expect((await auth.login('daniyar_s', 'secret1', ctx)).user.login).toBe('daniyar_s');
+  });
+
   it('заблокированный аккаунт не входит', async () => {
     await query(`UPDATE users SET status = 'blocked' WHERE login = 'daniyar_s'`);
     const e = await expectErr(auth.login('daniyar_s', 'secret1', ctx), undefined, /заблокирован/);
@@ -224,6 +244,18 @@ describe('восстановление пароля', () => {
     expect(s.challengeId).toMatch(/[0-9a-f-]{36}/);
     expect(sent).toHaveLength(0);
     await expectErr(auth.verifyRecover(s.challengeId, '4821'), 'code', /не совпал/);
+  });
+});
+
+describe('IP клиента за прокси', () => {
+  it('берём адрес, добавленный нашим прокси, а не подставленный клиентом', async () => {
+    const { clientIp } = await import('@/server/http');
+    const h = new Headers({ 'x-forwarded-for': '6.6.6.6, 10.1.2.3' });
+    expect(clientIp(h, 1)).toBe('10.1.2.3');
+    expect(clientIp(h, 2)).toBe('6.6.6.6');
+    expect(clientIp(h, 0)).toBeNull();
+    expect(clientIp(new Headers({ 'x-real-ip': '10.0.0.9' }), 1)).toBe('10.0.0.9');
+    expect(clientIp(new Headers({ 'x-forwarded-for': 'garbage;drop' }), 1)).toBeNull();
   });
 });
 

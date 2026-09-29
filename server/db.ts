@@ -6,7 +6,10 @@ const g = globalThis as unknown as { __arenaPool?: Pool };
 
 export function pool(): Pool {
   if (!g.__arenaPool) {
-    g.__arenaPool = new Pool({ connectionString: config.databaseUrl(), max: 10 });
+    const p = new Pool({ connectionString: config.databaseUrl(), max: 10, idleTimeoutMillis: 30_000 });
+    // Обрыв простаивающего соединения не должен ронять процесс — пул переподключится сам.
+    p.on('error', (e) => console.error('[db] idle client error:', e.message));
+    g.__arenaPool = p;
   }
   return g.__arenaPool;
 }

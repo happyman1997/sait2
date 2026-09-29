@@ -4,11 +4,27 @@ import { config } from './config';
 import { AppError } from './errors';
 import { SESSION_COOKIE, sessionUser, type Ctx } from './session';
 
+/**
+ * IP клиента. Первое значение X-Forwarded-For задаёт сам клиент — ему верить нельзя (обход лимитов).
+ * Берём адрес, добавленный нашим прокси: TRUST_PROXY_HOPS-й справа (по умолчанию 1 — один nginx/балансировщик).
+ */
+export function clientIp(h: Headers, hops = config.trustProxyHops()): string | null {
+  const ok = (v: string | null | undefined) => (v && /^[0-9a-f.:]{3,45}$/i.test(v) ? v : null);
+  if (hops <= 0) return null;
+  const xff = (h.get('x-forwarded-for') || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (xff.length >= hops) return ok(xff[xff.length - hops]);
+  return ok(h.get('x-real-ip'));
+}
+
 export async function requestCtx(): Promise<Ctx> {
   const h = await headers();
-  const fwd = h.get('x-forwarded-for')?.split(',')[0]?.trim();
-  const ip = fwd || h.get('x-real-ip') || null;
-  return { ip: ip && /^[0-9a-f.:]+$/i.test(ip) ? ip : null, userAgent: h.get('user-agent') };
+  return { ip: clientIp(h), userAgent: h.get('user-agent') };
+}
+
+/** Номер заказа из пути: только цифры. */
+export function parseNum(raw: string): number {
+  if (!/^\d{1,15}$/.test(raw)) throw new AppError(404, 'Заказ не найден.');
+  return Number(raw);
 }
 
 export async function readJson(req: Request): Promise<Record<string, unknown>> {

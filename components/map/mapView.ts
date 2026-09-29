@@ -79,6 +79,7 @@ export class SeasonMapView {
   private flyPaint: ReturnType<typeof setInterval> | undefined;
   private settle: ReturnType<typeof setInterval> | undefined;
   private destroyed = false;
+  private raf = 0;
 
   pins: Pin[] = [];
   draft: LatLng | null = null;
@@ -96,8 +97,32 @@ export class SeasonMapView {
     this.overlay = document.createElement('div');
     this.overlay.style.cssText = 'position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:5';
     root.appendChild(this.overlay);
+    // Один обработчик на слой меток вместо обработчика на каждую плашку при каждой перерисовке.
+    this.overlay.addEventListener('click', (ev) => this.onOverlayClick(ev));
     injectSkin();
     this.boot();
+  }
+
+  private onOverlayClick(ev: MouseEvent) {
+    const el = (ev.target as HTMLElement).closest<HTMLElement>('[data-kind]');
+    if (!el || !this.overlay.contains(el)) return;
+    const kind = el.dataset.kind;
+    if (kind === 'pin') { ev.stopPropagation(); this.cb.onPinClick?.(+el.dataset.id!); }
+    else if (kind === 'stackmore') {
+      ev.stopPropagation();
+      this.cb.onStackClick?.(String(el.dataset.ids || '').split(',').filter(Boolean).map(Number));
+    } else if (kind === 'cluster') {
+      ev.stopPropagation();
+      const pts = el.dataset.id!.split('|').map(s => s.split(':'));
+      const lat = pts.reduce((a, p) => a + +p[1], 0) / pts.length, lng = pts.reduce((a, p) => a + +p[2], 0) / pts.length;
+      this.flyTo(lat, lng, Math.min((this.map?.getZoom() || 3) + 3, 12));
+    }
+  }
+
+  /** Перерисовка оверлея не чаще раза за кадр: move/zoom/resize приходят пачками. */
+  private schedulePaint() {
+    if (this.raf || this.destroyed) return;
+    this.raf = requestAnimationFrame(() => { this.raf = 0; this.paint(); });
   }
 
   setCallbacks(cb: MapCallbacks) { this.cb = cb; }
@@ -116,7 +141,7 @@ export class SeasonMapView {
     if (p.radiusKm !== undefined) this.radiusKm = p.radiusKm;
     if (radiusChanged) this.drawRadius();
     if (pinsChanged && this.map && !this.touched) this.fitData();
-    this.paint();
+    this.schedulePaint();
   }
 
   flyTo(lat: number, lng: number, zoom = 8) {
@@ -133,6 +158,7 @@ export class SeasonMapView {
 
   destroy() {
     this.destroyed = true;
+    cancelAnimationFrame(this.raf);
     this.ro?.disconnect();
     clearInterval(this.flyPaint);
     clearInterval(this.settle);
@@ -175,7 +201,8 @@ export class SeasonMapView {
     map.on('load', start);
     setTimeout(start, 900);
     this.paint();
-    ['move', 'zoom', 'moveend', 'resize'].forEach(ev => map.on(ev, () => this.paint()));
+    ['move', 'zoom', 'resize'].forEach(ev => map.on(ev, () => this.schedulePaint()));
+    map.on('moveend', () => this.paint());
 
     map.on('click', (ev) => this.cb.onMapClick?.({ lat: ev.lngLat.lat, lng: ev.lngLat.lng }));
     // Автоподгонка кадра работает, пока пользователь сам не тронул карту.
@@ -341,10 +368,14 @@ export class SeasonMapView {
     const near = this.map.getZoom() >= 7;
     const groups = near ? this.coincident(pins) : this.cluster(pins);
     const dense = pins.length > 14 && !near;
+    // Метки далеко за краем кадра не создаём — на всю Россию это сотни лишних DOM-узлов на кадр.
+    const hostRect = this.host.getBoundingClientRect();
+    const M = 160;
+    const inView = (pt: [number, number]) => pt[0] > -M && pt[1] > -M && pt[0] < hostRect.width + M && pt[1] < hostRect.height + M;
 
     const renderPin = (p: Pin, stackIdx: number, stackN: number) => {
       const pt = this.pt(p.lat, p.lng);
-      if (!pt) return;
+      if (!pt || !inView(pt)) return;
       const isHot = String(p.id) === hot;
       if (dense && !isHot && !p.active && !p.urgent) {
         html.push('<div data-id="' + esc(p.id) + '" data-kind="pin" title="' + esc(p.title) + '" style="position:absolute;left:' +
@@ -400,7 +431,7 @@ export class SeasonMapView {
       }
       const c = this.centroidLL(group);
       const pt = this.pt(c.lat, c.lng);
-      if (!pt) return;
+      if (!pt || !inView(pt)) return;
       const n = group.length;
       const urgentN = group.filter(p => p.urgent).length;
       const big = n >= 15 ? 19 : n >= 5 ? 17 : 15;
@@ -437,23 +468,6 @@ export class SeasonMapView {
 
     this.overlay.innerHTML = html.join('');
     this.deoverlap();
-    this.overlay.querySelectorAll<HTMLElement>('[data-kind="pin"]').forEach(el => {
-      el.addEventListener('click', (ev) => { ev.stopPropagation(); this.cb.onPinClick?.(+el.dataset.id!); });
-    });
-    this.overlay.querySelectorAll<HTMLElement>('[data-kind="stackmore"]').forEach(el => {
-      el.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        this.cb.onStackClick?.(String(el.dataset.ids || '').split(',').filter(Boolean).map(Number));
-      });
-    });
-    this.overlay.querySelectorAll<HTMLElement>('[data-kind="cluster"]').forEach(el => {
-      el.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        const pts = el.dataset.id!.split('|').map(s => s.split(':'));
-        const lat = pts.reduce((a, p) => a + +p[1], 0) / pts.length, lng = pts.reduce((a, p) => a + +p[2], 0) / pts.length;
-        this.flyTo(lat, lng, Math.min((this.map?.getZoom() || 3) + 3, 12));
-      });
-    });
   }
 
   // Развод плашек по фактическим прямоугольникам (перенесено из прототипа без изменений логики).

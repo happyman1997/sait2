@@ -10,7 +10,7 @@ import { config } from './config';
 import { one, pool, query, tx, type Db } from './db';
 import { AppError, ModerationError } from './errors';
 import { dummyHash, hashPassword, verifyPassword } from './password';
-import { limitOrThrow } from './rate-limit';
+import { hit, limitOrThrow, peek } from './rate-limit';
 import { createSession, deleteUserSessions, type Ctx } from './session';
 import { codeMatches, codeSender, hashCode, type Channel } from './sms';
 
@@ -106,8 +106,10 @@ export async function startSignup(raw: unknown, ctx: Ctx, db: Db = pool()): Prom
   return { challengeId: row!.id, channel: 'sms', sentTo: formatPhone(phone), resendIn: RESEND_SEC, expiresInSec: CODE_TTL_MIN * 60, ...devCode(code) };
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 async function loadChallenge(id: unknown, purpose: 'signup' | 'recover', db: Db, lock = false): Promise<ChallengeRow> {
-  if (typeof id !== 'string' || !/^[0-9a-f-]{36}$/i.test(id)) throw new AppError(400, 'Сессия подтверждения не найдена — начните заново.');
+  if (typeof id !== 'string' || !UUID_RE.test(id)) throw new AppError(400, 'Сессия подтверждения не найдена — начните заново.');
   const row = await one<ChallengeRow>(`SELECT * FROM auth_challenges WHERE id = $1 AND purpose = $2${lock ? ' FOR UPDATE' : ''}`, [id, purpose], db);
   if (!row || row.consumed_at) throw new AppError(410, 'Сессия подтверждения устарела — начните заново.');
   return row;
@@ -140,15 +142,26 @@ export async function resendCode(challengeId: unknown, channelRaw: unknown, purp
   };
 }
 
-/** Проверка кода: 3 попытки на код, срок 5 минут. Неудачная попытка сохраняется даже при ошибке. */
+/**
+ * Проверка кода: 3 попытки на код, срок 5 минут.
+ * Попытка списывается атомарно (UPDATE … WHERE attempts < 3) до сравнения — параллельными запросами лимит не обойти.
+ */
 async function checkCode(ch: ChallengeRow, code: unknown, db: Db) {
   const c = typeof code === 'string' ? code.replace(/\D/g, '') : '';
   if (ch.attempts >= MAX_ATTEMPTS) throw new AppError(422, 'Попытки исчерпаны — запросите новый код', 'code', { attemptsLeft: 0 });
   if (c.length < 4) throw new AppError(422, 'Введите все четыре цифры', 'code');
   if (ch.expires_at.getTime() < Date.now()) throw new AppError(422, 'Код устарел — запросите новый', 'code');
+  const used = await one<{ attempts: number }>(
+    `UPDATE auth_challenges SET attempts = attempts + 1
+      WHERE id = $1 AND attempts < $2 AND consumed_at IS NULL AND code_hash IS NOT DISTINCT FROM $3
+      RETURNING attempts`,
+    [ch.id, MAX_ATTEMPTS, ch.code_hash],
+    db
+  );
+  // Нет строки: попытки кончились параллельно или код успели перевыпустить — сравнивать не с чем.
+  if (!used) throw new AppError(422, 'Попытки исчерпаны — запросите новый код', 'code', { attemptsLeft: 0 });
   if (!codeMatches(ch.id, c, ch.code_hash)) {
-    await query('UPDATE auth_challenges SET attempts = attempts + 1 WHERE id = $1', [ch.id], db);
-    const left = MAX_ATTEMPTS - 1 - ch.attempts;
+    const left = MAX_ATTEMPTS - used.attempts;
     throw new AppError(422, left > 0 ? 'Код не совпал — осталось попыток: ' + left : 'Попытки исчерпаны — запросите новый код', 'code', { attemptsLeft: left });
   }
 }
@@ -231,8 +244,11 @@ export async function login(identifier: unknown, password: unknown, ctx: Ctx) {
   const pass = typeof password === 'string' ? password : '';
   if (pass.length < 6) throw new AppError(422, 'Пароль — не короче 6 символов.', 'password');
 
-  const idKey = id.kind === 'phone' ? 'p:' + id.key : 'l:' + id.login.toLowerCase();
-  await limitOrThrow(`login:id:${idKey}`, 10, 900, 'Слишком много попыток входа — подождите 15 минут или восстановите пароль.');
+  // Лимит на аккаунт тратят только неудачные попытки: успешный вход владельца бюджет не съедает.
+  const idKey = 'login:id:' + (id.kind === 'phone' ? 'p:' + id.key : 'l:' + id.login.toLowerCase());
+  const TOO_MANY = 'Слишком много попыток входа — подождите 15 минут или восстановите пароль.';
+  const gate = await peek(idKey, 10, 900);
+  if (!gate.ok) throw new AppError(429, TOO_MANY, undefined, { retryAfter: gate.retryAfter });
   if (ctx.ip) await limitOrThrow(`login:ip:${ctx.ip}`, 60, 900, 'Слишком много попыток входа — подождите 15 минут.');
 
   const user = await one<Parameters<typeof publicUser>[0] & { password_hash: string; status: string }>(
@@ -242,9 +258,11 @@ export async function login(identifier: unknown, password: unknown, ctx: Ctx) {
   );
   if (!user) {
     await verifyPassword(pass, await dummyHash());
+    await hit(idKey, 10, 900);
     throw new AppError(404, 'Аккаунт с таким ' + (id.kind === 'phone' ? 'номером' : 'логином') + ' не найден. Проверьте написание или зарегистрируйтесь.', 'identifier');
   }
   if (!(await verifyPassword(pass, user.password_hash))) {
+    await hit(idKey, 10, 900);
     throw new AppError(401, 'Неверный пароль. Проверьте раскладку или восстановите доступ.', 'password');
   }
   if (user.status === 'blocked') throw new AppError(403, 'Аккаунт заблокирован за нарушение правил площадки. Напишите в поддержку.');
@@ -335,17 +353,21 @@ export async function loadProfile(userId: string, role: Role) {
 
 // ───────────────────────── Счётчики на экране входа ─────────────────────────
 
-/** Снимок раз в сутки: внутри дня цифры не меняются. */
+/** Снимок раз в сутки: внутри дня цифры не меняются. Пересчёт пользователей — один раз за день, дальше чтение по ключу. */
 export async function platformStats(db: Db = pool()) {
-  const today = await one<{ day: Date; freelancers: number; employers: number }>(
-    `INSERT INTO daily_stats (day, freelancers, employers)
-     SELECT current_date, count(*) FILTER (WHERE role = 'freelancer'), count(*) FILTER (WHERE role = 'employer') FROM users
-     ON CONFLICT (day) DO UPDATE SET day = EXCLUDED.day WHERE false
-     RETURNING day, freelancers, employers`,
-    [],
-    db
-  );
-  const row = today ?? (await one<{ day: Date; freelancers: number; employers: number }>(
-    'SELECT day, freelancers, employers FROM daily_stats WHERE day = current_date', [], db));
-  return { freelancers: row?.freelancers ?? 0, employers: row?.employers ?? 0, day: (row?.day ?? new Date()).toISOString().slice(0, 10) };
+  type Row = { day: Date; freelancers: number; employers: number };
+  let row = await one<Row>('SELECT day, freelancers, employers FROM daily_stats WHERE day = current_date', [], db);
+  if (!row) {
+    row = await one<Row>(
+      `INSERT INTO daily_stats (day, freelancers, employers)
+       SELECT current_date, count(*) FILTER (WHERE role = 'freelancer'), count(*) FILTER (WHERE role = 'employer') FROM users
+       ON CONFLICT (day) DO NOTHING
+       RETURNING day, freelancers, employers`,
+      [],
+      db
+    ) ?? await one<Row>('SELECT day, freelancers, employers FROM daily_stats WHERE day = current_date', [], db);
+  }
+  const d = row?.day ?? new Date();
+  const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  return { freelancers: row?.freelancers ?? 0, employers: row?.employers ?? 0, day: iso };
 }

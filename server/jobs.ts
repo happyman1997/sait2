@@ -86,21 +86,28 @@ export async function listJobs(p: ListParams, viewer: Viewer, db: Db = pool()) {
   }
   const types = (p.types || []).filter(t => /^[a-z0-9_]{1,40}$/.test(t)).slice(0, 50);
   const km = p.km && p.km > 0 ? Math.min(p.km, 20000) : null;
-  const like = q ? '%' + q.replace(/[\\%_]/g, m => '\\' + m) + '%' : null;
+  const like = q ? '%' + q.toLowerCase().replace(/[\\%_]/g, m => '\\' + m) + '%' : null;
   const params: unknown[] = [viewer?.id ?? null, base.lat, base.lng, p.today, types.length ? types : null, Math.max(0, p.minPay || 0), km, p.when === 'soon', like];
+  // Внутри — 500 ближайших к базе подходящих заказов (KNN по GiST-индексу jobs_geo_idx),
+  // снаружи — счётчики откликов/найма только для них и порядок списка: срочные, затем по дате.
   const r = await query<SummaryRow>(
-    `SELECT ${SUMMARY_COLS}
-       FROM jobs j JOIN job_types t ON t.id = j.type_id
-      WHERE j.status IN ('open', 'staffed')
-        AND (j.date >= $4::date OR j.repeat IS NOT NULL)
-        AND ($5::text[] IS NULL OR j.type_id = ANY($5))
-        AND j.pay >= $6
-        AND ($7::float8 IS NULL OR (earth_box(ll_to_earth($2, $3), $7 * 1000) @> ll_to_earth(j.lat, j.lng)
-                                    AND earth_distance(ll_to_earth($2, $3), ll_to_earth(j.lat, j.lng)) <= $7 * 1000))
-        AND (NOT $8 OR j.date BETWEEN $4::date AND $4::date + 1)
-        AND ($9::text IS NULL OR (j.title || ' ' || j.address || ' ' || t.label || ' ' || coalesce(j.district, '')) ILIKE $9)
-      ORDER BY j.urgent DESC, j.date, j.created_at DESC
-      LIMIT 500`,
+    `WITH near AS (
+       SELECT j.id
+         FROM jobs j
+        WHERE j.status IN ('open', 'staffed')
+          AND (j.date >= $4::date OR j.repeat IS NOT NULL)
+          AND ($5::text[] IS NULL OR j.type_id = ANY($5))
+          AND j.pay >= $6
+          AND ($7::float8 IS NULL OR (earth_box(ll_to_earth($2, $3), $7 * 1000) @> ll_to_earth(j.lat, j.lng)
+                                      AND earth_distance(ll_to_earth($2, $3), ll_to_earth(j.lat, j.lng)) <= $7 * 1000))
+          AND (NOT $8 OR j.date BETWEEN $4::date AND $4::date + 1)
+          AND ($9::text IS NULL OR j.search LIKE $9 OR j.type_id IN (SELECT id FROM job_types WHERE lower(label) LIKE $9))
+        ORDER BY ll_to_earth(j.lat, j.lng) <-> ll_to_earth($2, $3)
+        LIMIT 500
+     )
+     SELECT ${SUMMARY_COLS}
+       FROM near JOIN jobs j ON j.id = near.id JOIN job_types t ON t.id = j.type_id
+      ORDER BY j.urgent DESC, j.date, j.created_at DESC`,
     params,
     db
   );
