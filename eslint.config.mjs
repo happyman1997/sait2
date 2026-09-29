@@ -4,7 +4,7 @@ import ts from 'eslint-config-next/typescript';
 const config = [
   ...next,
   ...ts,
-  { ignores: ['.next/**', 'node_modules/**', 'design/**', 'data/**', 'next-env.d.ts', 'public/sw.js'] },
+  { ignores: ['.next/**', 'node_modules/**', 'design/**', 'data/**', 'next-env.d.ts', 'public/sw.js', 'public/maplibre/**'] },
   {
     rules: {
       // Фото — пользовательские (аватары, фото смены) с защищённого маршрута; next/image здесь не даёт выигрыша.

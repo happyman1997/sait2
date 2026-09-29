@@ -1,6 +1,7 @@
 // Кабинет поддержки: очередь жалоб, поиск пользователей, блокировка, журнал действий сотрудников.
 // Доступ — только у сотрудников (users.is_staff; выдаётся командой `npm run staff -- add <логин>`).
 import { jobNum } from '@/lib/jobs';
+import { config } from './config';
 import { one, query, tx, type Db } from './db';
 import { AppError } from './errors';
 import { addEvents } from './events';
@@ -36,36 +37,57 @@ export type ComplaintRow = {
   author: { id: string; name: string; login: string; role: string };
   target: { id: string; name: string; login: string; role: string; marks: number; complaints: number } | null;
   resolution: string | null; resolvedAt: string | null;
+  assignee: { id: string; name: string } | null; deadline: string; overdue: boolean;
 };
+
+// ───────────────────────── SLA ─────────────────────────
+
+/** Обещанный ответ — «в течение 3 рабочих дней»: срок считается по будням в часовом поясе площадки. */
+export const SLA_BUSINESS_DAYS = 3;
+export function slaDeadline(created: Date, days = SLA_BUSINESS_DAYS, tz = config.timeZone()): Date {
+  const weekday = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' });
+  const d = new Date(created);
+  let left = days;
+  while (left > 0) {
+    d.setTime(d.getTime() + 86400_000);
+    const w = weekday.format(d);
+    if (w !== 'Sat' && w !== 'Sun') left--;
+  }
+  return d;
+}
 
 /** Жалоба исполнителя без адресата — на работодателя заказа. */
 const TARGET = 'coalesce(c.target_id, CASE WHEN a.role = \'freelancer\' THEN j.employer_id END)';
 
-export async function listComplaints(viewer: U, status: unknown): Promise<ComplaintRow[]> {
-  await needStaff(viewer);
+export async function listComplaints(viewer: U, status: unknown, mine?: boolean): Promise<ComplaintRow[]> {
+  const staffId = await needStaff(viewer);
   const st = status === 'confirmed' || status === 'rejected' || status === 'all' ? status : 'open';
   const r = await query<{
     id: string; status: ComplaintRow['status']; reason: string; text: string; created_at: Date; num: string; title: string; job_status: string;
     a_id: string; a_name: string; a_login: string; a_role: string; t_id: string | null; t_name: string | null; t_login: string | null; t_role: string | null;
-    t_marks: number; t_complaints: number; resolution: string | null; resolved_at: Date | null;
+    t_marks: number; t_complaints: number; resolution: string | null; resolved_at: Date | null; assigned_to: string | null; assignee: string | null;
   }>(
     `SELECT c.id, c.status, c.reason, c.text, c.created_at, j.num, j.title, j.status AS job_status,
             a.id AS a_id, a.name AS a_name, a.login AS a_login, a.role AS a_role,
             t.id AS t_id, t.name AS t_name, t.login AS t_login, t.role AS t_role,
             (SELECT count(*) FROM user_marks m WHERE m.user_id = t.id AND coalesce(m.until, m.created_at + interval '90 days') > now())::int AS t_marks,
             (SELECT count(*) FROM complaints c2 WHERE coalesce(c2.target_id, (SELECT employer_id FROM jobs WHERE id = c2.job_id)) = t.id)::int AS t_complaints,
-            c.resolution, c.resolved_at
+            c.resolution, c.resolved_at, c.assigned_to, s.name AS assignee
        FROM complaints c JOIN jobs j ON j.id = c.job_id JOIN users a ON a.id = c.author_id
        LEFT JOIN users t ON t.id = ${TARGET}
-      WHERE ($1 = 'all' OR c.status = $1)
+       LEFT JOIN users s ON s.id = c.assigned_to
+      WHERE ($1 = 'all' OR c.status = $1) AND (NOT $2 OR c.assigned_to = $3)
       ORDER BY CASE WHEN c.status = 'open' THEN c.created_at END, c.resolved_at DESC NULLS LAST
-      LIMIT 100`, [st]);
+      LIMIT 100`, [st, mine === true, staffId]);
   return r.rows.map(c => ({
     id: c.id, status: c.status, reason: c.reason, text: c.text, at: c.created_at.toISOString(),
     num: Number(c.num), title: c.title, jobStatus: c.job_status,
     author: { id: c.a_id, name: c.a_name, login: c.a_login, role: c.a_role },
     target: c.t_id ? { id: c.t_id, name: c.t_name!, login: c.t_login!, role: c.t_role!, marks: c.t_marks, complaints: c.t_complaints } : null,
-    resolution: c.resolution, resolvedAt: c.resolved_at ? c.resolved_at.toISOString() : null
+    resolution: c.resolution, resolvedAt: c.resolved_at ? c.resolved_at.toISOString() : null,
+    assignee: c.assigned_to ? { id: c.assigned_to, name: c.assignee! } : null,
+    deadline: slaDeadline(c.created_at).toISOString(),
+    overdue: c.status === 'open' && slaDeadline(c.created_at) < new Date()
   }));
 }
 
@@ -188,3 +210,57 @@ export async function setBlocked(viewer: U, userId: string, raw: unknown) {
   return { ok: true, cancelled };
 }
 
+
+// ───────────────────────── Назначение и шаблоны ─────────────────────────
+
+/** «Взять себе» / «Снять с себя» / передать другому сотруднику. */
+export async function assign(viewer: U, kind: unknown, id: string, raw: unknown) {
+  const staff = await needStaff(viewer);
+  if (kind !== 'complaint' && kind !== 'dispute') throw new AppError(404, 'Страница не найдена.');
+  if (!UUID_RE.test(id)) throw new AppError(404, 'Обращение не найдено.');
+  const to = (raw as Record<string, unknown> | null)?.to;
+  const target = to === null ? null : typeof to === 'string' && UUID_RE.test(to) ? to : staff;
+  if (target && !(await one('SELECT 1 FROM users WHERE id = $1 AND is_staff', [target]))) throw new AppError(422, 'Назначить можно только сотрудника поддержки.');
+  const table = kind === 'complaint' ? 'complaints' : 'disputes';
+  const open = kind === 'complaint' ? "status = 'open'" : "status IN ('open', 'review')";
+  const r = await query(`UPDATE ${table} SET assigned_to = $2 WHERE id = $1 AND ${open}`, [id, target]);
+  if (!r.rowCount) throw new AppError(409, 'Обращение уже закрыто.');
+  await query('INSERT INTO staff_actions (staff_id, action, note) VALUES ($1, $2, $3)', [staff, 'assign_' + kind, id + ' → ' + (target ?? 'никому')]);
+  return { ok: true };
+}
+
+export async function listStaff(viewer: U) {
+  await needStaff(viewer);
+  return (await query<{ id: string; name: string }>(`SELECT id, name FROM users WHERE is_staff AND status = 'active' ORDER BY name`)).rows;
+}
+
+export type Template = { id: string; kind: 'complaint' | 'dispute' | 'any'; title: string; body: string };
+
+export async function listTemplates(viewer: U): Promise<Template[]> {
+  await needStaff(viewer);
+  return (await query<Template>('SELECT id, kind, title, body FROM support_templates ORDER BY kind, title')).rows;
+}
+
+export async function saveTemplate(viewer: U, raw: unknown, id?: string): Promise<Template> {
+  const staff = await needStaff(viewer);
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const kind = r.kind === 'complaint' || r.kind === 'dispute' ? r.kind : 'any';
+  const title = typeof r.title === 'string' ? r.title.trim().slice(0, 80) : '';
+  const body = typeof r.body === 'string' ? r.body.trim().slice(0, 1000) : '';
+  if (!title) throw new AppError(422, 'Назовите шаблон.', 'title');
+  if (body.length < 5) throw new AppError(422, 'Напишите текст шаблона.', 'body');
+  if (id) {
+    if (!UUID_RE.test(id)) throw new AppError(404, 'Шаблон не найден.');
+    const u = await one<Template>('UPDATE support_templates SET kind = $2, title = $3, body = $4 WHERE id = $1 RETURNING id, kind, title, body', [id, kind, title, body]);
+    if (!u) throw new AppError(404, 'Шаблон не найден.');
+    return u;
+  }
+  return (await one<Template>('INSERT INTO support_templates (kind, title, body, created_by) VALUES ($1, $2, $3, $4) RETURNING id, kind, title, body', [kind, title, body, staff]))!;
+}
+
+export async function deleteTemplate(viewer: U, id: string) {
+  await needStaff(viewer);
+  if (!UUID_RE.test(id)) throw new AppError(404, 'Шаблон не найден.');
+  await query('DELETE FROM support_templates WHERE id = $1', [id]);
+  return { ok: true };
+}

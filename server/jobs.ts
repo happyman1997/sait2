@@ -266,11 +266,15 @@ async function loadJob(num: number, viewer: Viewer, db: Db): Promise<JobDetail> 
 async function loadSeries(r: { id: string; repeat: string | null; repeat_note: string | null; date: string; series_len: number; status: string },
   viewer: Viewer, owner: boolean, hired: boolean, db: Db): Promise<SeriesInfo> {
   const dates = seriesDates(r.repeat!, r.date, r.series_len);
-  const skips = viewer && (owner || hired)
-    ? (await query<{ day: string; n: number; mine: boolean }>(
-      `SELECT to_char(day, 'YYYY-MM-DD') AS day, count(*)::int AS n, bool_or(freelancer_id = $2) AS mine
-         FROM series_skips WHERE job_id = $1 GROUP BY day`, [r.id, viewer.id], db)).rows
-    : [];
+  // Сколько сняли день и сколько взяли на замену — видно всем (свободные места); кто именно — только работодателю.
+  const [skips, subs] = dates ? await Promise.all([
+    query<{ day: string; n: number; mine: boolean }>(
+      `SELECT to_char(day, 'YYYY-MM-DD') AS day, count(*)::int AS n, coalesce(bool_or(freelancer_id = $2), false) AS mine
+         FROM series_skips WHERE job_id = $1 GROUP BY day`, [r.id, viewer?.id ?? null], db).then(x => x.rows),
+    query<{ day: string; freelancer_id: string; name: string; status: 'sent' | 'hired' | 'rejected' }>(
+      `SELECT to_char(s.day, 'YYYY-MM-DD') AS day, s.freelancer_id, u.name, s.status
+         FROM series_subs s JOIN users u ON u.id = s.freelancer_id WHERE s.job_id = $1 ORDER BY s.created_at`, [r.id], db).then(x => x.rows)
+  ]) : [[], []];
   const today = localClock().day;
   const live = r.status !== 'cancelled' && r.status !== 'accepted';
   return {
@@ -279,12 +283,18 @@ async function loadSeries(r: { id: string; repeat: string | null; repeat_note: s
     days: Array.from({ length: r.series_len }, (_, i) => {
       const date = dates ? dates[i] : null;
       const sk = date ? skips.find(x => x.day === date) : undefined;
+      const daySubs = date ? subs.filter(x => x.day === date) : [];
+      const mine = viewer ? daySubs.find(x => x.freelancer_id === viewer.id) : undefined;
       return {
         i, date, label: date ? seriesDayLabel(date) : 'вызов ' + (i + 1) + ' · после снегопада',
-        skipped: !!sk?.mine, skippedBy: owner ? sk?.n ?? 0 : 0, past: !!date && date < today
+        skipped: !!(hired && sk?.mine), skippedBy: owner ? sk?.n ?? 0 : 0, past: !!date && date < today,
+        free: Math.max(0, (sk?.n ?? 0) - daySubs.filter(x => x.status === 'hired').length),
+        mySub: mine?.status ?? null,
+        subs: owner ? daySubs.map(x => ({ id: x.freelancer_id, name: shortName(x.name), status: x.status })) : []
       };
     }),
     canSkip: hired && live && !!dates,
+    canSub: !!viewer && viewer.role === 'freelancer' && !hired && !owner && live && !!dates,
     canExtend: owner && live && r.series_len + SERIES_STEP <= 60
   };
 }

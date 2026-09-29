@@ -340,15 +340,45 @@ function SeriesBlock({ job, act, busy }: { job: JobDetail; act: Act; busy: boole
       </div>
       <div style={css('display: grid; gap: 5px; margin-top: 9px')}>
         {days.map(d => {
-          const status = d.skipped ? 'снят' : job.mine ? (d.skippedBy ? 'не выйдут: ' + d.skippedBy : job.hired ? 'исполнитель есть' : 'нет исполнителя') : iAmIn ? 'за вами' : 'открыт';
+          const status = d.past ? 'прошёл'
+            : d.skipped ? 'снят'
+            : job.mine ? (d.skippedBy ? 'не выйдут: ' + d.skippedBy + (d.free ? ' · свободно ' + d.free : ' · замена есть') : job.hired ? 'исполнитель есть' : 'нет исполнителя')
+            : iAmIn ? 'за вами'
+            : d.mySub === 'hired' ? 'вы на замене'
+            : d.mySub === 'sent' ? 'отклик на замену отправлен'
+            : d.mySub === 'rejected' ? 'выбран другой исполнитель'
+            : d.free ? 'свободно мест: ' + d.free : 'открыт';
           return (
-            <div key={d.i} style={css('display: flex; align-items: center; gap: 10px; padding: 7px 9px; border: 1px solid ' + (d.skipped ? 'color-mix(in srgb, var(--color-text) 14%, transparent)' : 'var(--color-divider)') + '; opacity: ' + (d.skipped || d.past ? '.55' : '1'))}>
-              <span style={css('font-family: var(--font-heading); font-size: 12px; letter-spacing: .14em; color: color-mix(in srgb, var(--color-text) 62%, transparent)')}>{String(d.i + 1).padStart(2, '0')}</span>
-              <span style={css('flex: 1; min-width: 0; font-family: var(--font-heading); font-size: 14px; text-transform: uppercase; letter-spacing: .02em')}>{d.label}</span>
-              <span style={css('font-size: 12.5px; color: ' + (job.mine && d.skippedBy ? 'var(--color-accent-900)' : 'color-mix(in srgb, var(--color-text) 64%, transparent)'))}>{d.past ? 'прошёл' : status}</span>
-              {s.canSkip && !d.past && d.date && (
-                <button className="btn btn-ghost" disabled={busy} onClick={() => act('series/skip', { day: d.date }, d.skipped ? 'Выход возвращён в серию' : 'Выход снят — остальные дни серии за вами')}
-                  style={css('height: 26px; font-size: 12.5px; padding: 0 6px; flex: none')}>{d.skipped ? 'Вернуть' : 'Не смогу'}</button>
+            <div key={d.i} style={css('padding: 7px 9px; border: 1px solid ' + (d.skipped ? 'color-mix(in srgb, var(--color-text) 14%, transparent)' : d.free && !job.mine && !iAmIn && !d.past ? 'var(--color-accent)' : 'var(--color-divider)') + '; opacity: ' + (d.skipped || d.past ? '.55' : '1'))}>
+              <div style={css('display: flex; align-items: center; gap: 10px')}>
+                <span style={css('font-family: var(--font-heading); font-size: 12px; letter-spacing: .14em; color: color-mix(in srgb, var(--color-text) 62%, transparent)')}>{String(d.i + 1).padStart(2, '0')}</span>
+                <span style={css('flex: 1; min-width: 0; font-family: var(--font-heading); font-size: 14px; text-transform: uppercase; letter-spacing: .02em')}>{d.label}</span>
+                <span style={css('font-size: 12.5px; text-align: right; color: ' + ((job.mine && d.free) || (!job.mine && d.free && !iAmIn) ? 'var(--color-accent-900)' : 'color-mix(in srgb, var(--color-text) 64%, transparent)'))}>{status}</span>
+                {s.canSkip && !d.past && d.date && (
+                  <button className="btn btn-ghost" disabled={busy} onClick={() => act('series/skip', { day: d.date }, d.skipped ? 'Выход возвращён в серию' : 'Выход снят — остальные дни серии за вами')}
+                    style={css('height: 26px; font-size: 12.5px; padding: 0 6px; flex: none')}>{d.skipped ? 'Вернуть' : 'Не смогу'}</button>
+                )}
+                {s.canSub && !d.past && d.date && (d.mySub === 'sent' || (!d.mySub && d.free > 0)) && (
+                  <button className="btn btn-ghost" disabled={busy} onClick={() => act('series/sub', { day: d.date }, d.mySub === 'sent' ? 'Отклик на замену отозван' : 'Отклик на замену отправлен работодателю')}
+                    style={css('height: 26px; font-size: 12.5px; padding: 0 6px; flex: none')}>{d.mySub === 'sent' ? 'Отозвать' : 'Выйти в этот день'}</button>
+                )}
+              </div>
+              {job.mine && d.subs.length > 0 && (
+                <div style={css('display: grid; gap: 4px; margin-top: 6px; padding-left: 26px')}>
+                  {d.subs.map(x => (
+                    <div key={x.id} style={css('display: flex; align-items: center; gap: 8px; font-size: 13px')}>
+                      <span style={css('flex: 1; min-width: 0')}>{x.name + ' — ' + (x.status === 'hired' ? 'на замене' : x.status === 'rejected' ? 'отказано' : 'готов выйти')}</span>
+                      {x.status === 'sent' && !d.past && d.free > 0 && (
+                        <button className="btn btn-secondary" disabled={busy} onClick={() => act('series/sub/decide', { day: d.date, freelancer: x.id, action: 'hire' }, x.name + ' выходит на замену — открыт чат')}
+                          style={css('height: 26px; font-size: 12px; padding: 0 8px')}>Взять на день</button>
+                      )}
+                      {x.status === 'sent' && !d.past && (
+                        <button className="btn btn-ghost" disabled={busy} onClick={() => act('series/sub/decide', { day: d.date, freelancer: x.id, action: 'reject' }, 'Отказ отправлен')}
+                          style={css('height: 26px; font-size: 12px; padding: 0 6px')}>Отказать</button>
+                      )}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           );
@@ -363,8 +393,10 @@ function SeriesBlock({ job, act, busy }: { job: JobDetail; act: Act; busy: boole
       )}
       <div style={css('font-size: 12.5px; line-height: 1.4; margin-top: 8px; color: color-mix(in srgb, var(--color-text) 64%, transparent)')}>
         {job.mine
-          ? 'Продление зовёт тех же исполнителей первыми — новый набор объявляется только на пустые дни.'
-          : 'Снятый день возвращается в поиск. Больше двух снятых дней подряд — пометка в профиле.'}
+          ? 'Снятый день открыт для замены: откликнувшиеся появятся под днём. Продление зовёт тех же исполнителей первыми.'
+          : iAmIn ? 'Снятый день возвращается в поиск. Больше двух снятых дней подряд — пометка в профиле.'
+          : s.canSub ? 'Свободный день можно взять на замену — отдельно от всей серии.'
+          : 'Свободные дни берут на замену исполнители, вошедшие в аккаунт.'}
       </div>
     </div>
   );

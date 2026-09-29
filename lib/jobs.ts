@@ -105,8 +105,14 @@ export type DisputeInfo = {
 export type SeriesInfo = {
   rule: string;                 // «ежедневно, будни · до 9 утра»
   onCall: boolean;              // по снегопаду — дни заранее неизвестны
-  days: { i: number; date: string | null; label: string; skipped: boolean; skippedBy: number; past: boolean }[];
+  days: {
+    i: number; date: string | null; label: string; skipped: boolean; skippedBy: number; past: boolean;
+    free: number;                                   // мест на день: снявшие минус взятые на замену
+    mySub: 'sent' | 'hired' | 'rejected' | null;    // мой отклик на замену (исполнитель не из смены)
+    subs: { id: string; name: string; status: 'sent' | 'hired' | 'rejected' }[];  // отклики на замену (работодателю)
+  }[];
   canSkip: boolean;             // нанятый исполнитель
+  canSub: boolean;              // исполнитель не из смены может выйти на замену в свободный день
   canExtend: boolean;           // работодатель, серия не закрыта
 };
 

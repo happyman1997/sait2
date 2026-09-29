@@ -8,6 +8,7 @@ import { addEvents, mailSupport } from './events';
 import { getJob, shortName } from './jobs';
 import { publish } from './live';
 import { limitOrThrow } from './rate-limit';
+import { slaDeadline } from './support';
 import type { SessionUser } from './session';
 
 type U = Pick<SessionUser, 'id' | 'role'>;
@@ -172,26 +173,33 @@ export async function jobDisputes(jobId: string, employerId: string, viewerId: s
 
 // ───────────────────────── Поддержка ─────────────────────────
 
-export type SupportDispute = DisputeInfo & { jobNum: number; title: string; employer: string; freelancer: string };
+export type SupportDispute = DisputeInfo & {
+  jobNum: number; title: string; employer: string; freelancer: string;
+  assignee: { id: string; name: string } | null; deadline: string; overdue: boolean;
+};
 
-export async function listDisputes(status: unknown): Promise<SupportDispute[]> {
+export async function listDisputes(status: unknown, mineOf?: string): Promise<SupportDispute[]> {
   const st = status === 'closed' ? 'closed' : 'open';
   const r = await query<{
     id: string; num: number; status: DisputeInfo['status']; opened_by: 'employer' | 'freelancer'; reason: string; sum: number; text: string;
     response: string | null; resolution: string | null; resolved_for: DisputeInfo['resolvedFor']; evidence: DisputeInfo['evidence'];
-    created_at: Date; closed_at: Date | null; job_num: string; title: string; emp: string; fl: string;
+    created_at: Date; closed_at: Date | null; job_num: string; title: string; emp: string; fl: string; assigned_to: string | null; assignee: string | null;
   }>(
     `SELECT d.id, d.num, d.status, d.opened_by, d.reason, d.sum, d.text, d.response, d.resolution, d.resolved_for, d.evidence, d.created_at, d.closed_at,
-            j.num AS job_num, j.title, e.name || ' · ' || e.login AS emp, f.name || ' · ' || f.login AS fl
+            j.num AS job_num, j.title, e.name || ' · ' || e.login AS emp, f.name || ' · ' || f.login AS fl, d.assigned_to, s.name AS assignee
        FROM disputes d JOIN jobs j ON j.id = d.job_id JOIN users e ON e.id = j.employer_id JOIN users f ON f.id = d.freelancer_id
-      WHERE ($1 = 'open') = (d.status IN ('open', 'review'))
+       LEFT JOIN users s ON s.id = d.assigned_to
+      WHERE ($1 = 'open') = (d.status IN ('open', 'review')) AND ($2::uuid IS NULL OR d.assigned_to = $2)
       ORDER BY CASE WHEN d.status = 'review' THEN 0 ELSE 1 END, CASE WHEN $1 = 'open' THEN d.created_at END, d.closed_at DESC NULLS LAST
-      LIMIT 100`, [st]);
+      LIMIT 100`, [st, mineOf ?? null]);
   return r.rows.map(d => ({
     id: d.id, num: disputeNum(d.num), status: d.status, openedBy: d.opened_by, mine: false, other: '', appId: null,
     reason: d.reason, sum: d.sum, text: d.text, response: d.response, resolution: d.resolution, resolvedFor: d.resolved_for,
     evidence: d.evidence, at: d.created_at.toISOString(), closedAt: d.closed_at ? d.closed_at.toISOString() : null,
-    jobNum: Number(d.job_num), title: d.title, employer: d.emp, freelancer: d.fl
+    jobNum: Number(d.job_num), title: d.title, employer: d.emp, freelancer: d.fl,
+    assignee: d.assigned_to ? { id: d.assigned_to, name: d.assignee! } : null,
+    deadline: slaDeadline(d.created_at).toISOString(),
+    overdue: (d.status === 'open' || d.status === 'review') && slaDeadline(d.created_at) < new Date()
   }));
 }
 

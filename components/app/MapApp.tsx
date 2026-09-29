@@ -467,7 +467,7 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
 
   const refreshDetail = useCallback(async (num: number) => {
     try { patchJob((await api<{ job: JobDetail }>('/api/jobs/' + num)).job); } catch { /* заказ могли удалить */ }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
   const listReloadT = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useLiveEvent((e) => {
     if (e.t !== 'job') return;

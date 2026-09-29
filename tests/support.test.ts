@@ -138,3 +138,40 @@ describe('пользователи и блокировка', () => {
     await expectErr(sup.setBlocked(staff, staff.id, { blocked: true, note: 'проверка' }), /Себя/);
   });
 });
+
+describe('работа поддержки: срок, назначение, шаблоны', () => {
+  it('срок ответа — 3 рабочих дня (выходные не считаются)', () => {
+    // пятница 12:00 МСК → среда 12:00 МСК
+    expect(sup.slaDeadline(new Date('2026-10-02T09:00:00Z')).toISOString()).toBe('2026-10-07T09:00:00.000Z');
+    // понедельник → четверг
+    expect(sup.slaDeadline(new Date('2026-10-05T09:00:00Z')).toISOString()).toBe('2026-10-08T09:00:00.000Z');
+  });
+
+  it('«взять себе», фильтр «мои», просрочка; назначить можно только сотрудника', async () => {
+    const num = await acceptedShift();
+    await sh.fileComplaint(num, { reason: 'не рассчитались', text: 'Перевод так и не пришёл' }, fl);
+    const [c] = await sup.listComplaints(staff, 'open');
+    expect(c.assignee).toBeNull();
+    expect(c.overdue).toBe(false);
+    await sup.assign(staff, 'complaint', c.id, {});
+    expect((await sup.listComplaints(staff, 'open', true))[0].assignee).toMatchObject({ id: staff.id, name: 'Поддержка' });
+    await expectErr(sup.assign(staff, 'complaint', c.id, { to: fl.id }), /сотрудника/);
+    await query(`UPDATE complaints SET created_at = now() - interval '8 days'`);
+    expect((await sup.listComplaints(staff, 'open'))[0].overdue).toBe(true);
+    await sup.assign(staff, 'complaint', c.id, { to: null });
+    expect(await sup.listComplaints(staff, 'open', true)).toEqual([]);
+    await expectErr(sup.assign(staff, 'ticket', c.id, {}), /не найдена/);
+  });
+
+  it('шаблоны ответов: создать, изменить, удалить', async () => {
+    const t = await sup.saveTemplate(staff, { kind: 'complaint', title: 'Нет доказательств', body: 'Проверили переписку и фото — подтверждений нет.' });
+    await sup.saveTemplate(staff, { title: 'Общий', body: 'Спасибо за обращение.' });
+    expect((await sup.listTemplates(staff)).map(x => x.kind)).toEqual(['any', 'complaint']);
+    expect((await sup.saveTemplate(staff, { kind: 'complaint', title: 'Нет доказательств', body: 'Новый текст шаблона' }, t.id)).body).toBe('Новый текст шаблона');
+    await expectErr(sup.saveTemplate(staff, { title: '', body: 'x' }), /Назовите/);
+    await sup.deleteTemplate(staff, t.id);
+    expect(await sup.listTemplates(staff)).toHaveLength(1);
+    await expectErr(sup.listTemplates(fl), /не найдена/);
+  });
+});
+

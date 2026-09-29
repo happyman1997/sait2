@@ -104,4 +104,33 @@ describe('серия в заказе', () => {
     expect(s.onCall).toBe(true);
     expect(s.days[0].label).toMatch(/вызов 1/);
   });
+
+  it('замена на день: свободное место после «Не смогу», отклик, найм на день, чат; вернуть занятый день нельзя', async () => {
+    const other = await mkUser('freelancer', 'olga_k', '9163333333', 'Ольга Кузнецова');
+    const j = await jobs.createJob(form(), emp, today);
+    await jobs.applyToJob(j.num, { reqConfirmed: true }, fl, today);
+    await sh.staffAction(j.num, (await jobs.getJob(j.num, emp)).applicantList![0].id, 'hire', emp);
+    const day = plus(today, 3);
+    await expectErr(sh.offerSubstitute(j.num, { day }, other), /свободных мест нет/);
+    await sh.toggleSeriesDay(j.num, { day }, fl);
+    // Свободное место видно даже гостю.
+    expect((await jobs.getJob(j.num, null)).series!.days.find(d => d.date === day)!.free).toBe(1);
+    const mine = await sh.offerSubstitute(j.num, { day }, other);
+    expect(mine.series!.canSub).toBe(true);
+    expect(mine.series!.days.find(d => d.date === day)!.mySub).toBe('sent');
+    await expectErr(sh.offerSubstitute(j.num, { day }, fl), /уже в этой серии/);
+    const empView = (await jobs.getJob(j.num, emp)).series!.days.find(d => d.date === day)!;
+    expect(empView.subs).toEqual([{ id: other.id, name: 'Ольга К.', status: 'sent' }]);
+    await expectErr(sh.decideSubstitute(j.num, { day, freelancer: other.id, action: 'hire' }, fl), /работодатель/);
+    const after = await sh.decideSubstitute(j.num, { day, freelancer: other.id, action: 'hire' }, emp);
+    expect(after.series!.days.find(d => d.date === day)!.free).toBe(0);
+    // Взятому на замену открыт чат, писать можно.
+    const msg = await sh.sendMessage(j.num, other.id, { text: 'Буду к 8:00' }, other);
+    expect(msg.mine).toBe(true);
+    expect((await one<{ text: string }>(`SELECT text FROM events WHERE user_id = $1 AND kind = 'hire'`, [other.id]))!.text).toMatch(/замену/);
+    await expectErr(sh.toggleSeriesDay(j.num, { day }, fl), /уже взял замену/);
+    const third = await mkUser('freelancer', 'ivan_p', '9164444444', 'Иван Петров');
+    await expectErr(sh.offerSubstitute(j.num, { day }, third), /свободных мест нет/);
+  });
 });
+

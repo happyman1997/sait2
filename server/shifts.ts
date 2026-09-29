@@ -414,7 +414,8 @@ async function threadFor(num: number, freelancerId: string, u: U, db: Db): Promi
   if (!UUID_RE.test(freelancerId)) throw new AppError(404, 'Диалог не найден.');
   const j = await one<{ id: string; employer_id: string; status: JobStatus; title: string; hired: boolean; msgs: number }>(
     `SELECT j.id, j.employer_id, j.status, j.title,
-            EXISTS (SELECT 1 FROM hires h WHERE h.job_id = j.id AND h.freelancer_id = $2) AS hired,
+            (EXISTS (SELECT 1 FROM hires h WHERE h.job_id = j.id AND h.freelancer_id = $2)
+             OR EXISTS (SELECT 1 FROM series_subs ss WHERE ss.job_id = j.id AND ss.freelancer_id = $2 AND ss.status = 'hired')) AS hired,
             (SELECT count(*) FROM messages m WHERE m.job_id = j.id AND m.freelancer_id = $2)::int AS msgs
        FROM jobs j WHERE j.num = $1`,
     [num, freelancerId], db);
@@ -668,6 +669,14 @@ export async function toggleSeriesDay(num: number, raw: unknown, viewer: Viewer)
     if (!(await one('SELECT 1 FROM hires WHERE job_id = $1 AND freelancer_id = $2', [j.id, u.id], db))) throw new AppError(403, 'Снять день может только нанятый исполнитель.');
     if (j.status === 'cancelled' || j.status === 'accepted') throw new AppError(409, 'Серия закрыта.');
     if (day < localClock().day) throw new AppError(409, 'Этот день уже прошёл.');
+    const had = await one('SELECT 1 FROM series_skips WHERE job_id = $1 AND freelancer_id = $2 AND day = $3', [j.id, u.id, day], db);
+    if (had) {
+      // Вернуть день нельзя, если его место уже занял исполнитель на замену.
+      const c = (await one<{ skips: number; subs: number }>(
+        `SELECT (SELECT count(*) FROM series_skips WHERE job_id = $1 AND day = $2)::int AS skips,
+                (SELECT count(*) FROM series_subs WHERE job_id = $1 AND day = $2 AND status = 'hired')::int AS subs`, [j.id, day], db))!;
+      if (c.subs >= c.skips) throw new AppError(409, 'На этот день работодатель уже взял замену — день остаётся за ней.');
+    }
     const removed = await query('DELETE FROM series_skips WHERE job_id = $1 AND freelancer_id = $2 AND day = $3', [j.id, u.id, day], db);
     const skipping = !removed.rowCount;
     if (skipping) await query('INSERT INTO series_skips (job_id, freelancer_id, day) VALUES ($1, $2, $3)', [j.id, u.id, day], db);
@@ -691,6 +700,83 @@ export async function toggleSeriesDay(num: number, raw: unknown, viewer: Viewer)
     }
     await publish([j.employer_id, u.id], { t: 'job', num }, db);
   });
+  invalidateSearch();
+  return getJob(num, viewer);
+}
+
+/** Свободные места на день серии (снявшие минус взятые на замену) — под блокировкой заказа. */
+async function freeOnDay(jobId: string, day: string, db: Db) {
+  return (await one<{ n: number }>(
+    `SELECT ((SELECT count(*) FROM series_skips WHERE job_id = $1 AND day = $2)
+           - (SELECT count(*) FROM series_subs WHERE job_id = $1 AND day = $2 AND status = 'hired'))::int AS n`, [jobId, day], db))!.n;
+}
+
+/** Серия: проверка дня и заказа для замены. */
+async function seriesDay(num: number, day: unknown, db: Db) {
+  if (typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new AppError(422, 'Укажите день серии.', 'day');
+  const j = await lockJob(num, db);
+  const row = await one<{ series_len: number }>('SELECT series_len FROM jobs WHERE id = $1', [j.id], db);
+  const dates = j.repeat ? seriesDates(j.repeat, j.date, row!.series_len) : null;
+  if (!dates || !dates.includes(day)) throw new AppError(422, 'Такого дня в серии нет.', 'day');
+  if (j.status === 'cancelled' || j.status === 'accepted') throw new AppError(409, 'Серия закрыта.');
+  if (day < localClock().day) throw new AppError(409, 'Этот день уже прошёл.');
+  return { j, day };
+}
+
+/** «Выйти в этот день» / «Отозвать»: исполнитель не из смены откликается на свободный день серии. */
+export async function offerSubstitute(num: number, raw: unknown, viewer: Viewer): Promise<JobDetail> {
+  const u = needUser(viewer);
+  if (u.role !== 'freelancer') throw new AppError(403, 'Выйти на замену может только исполнитель.');
+  await limitOrThrow(`sub:${u.id}`, 30, 3600, 'Слишком много откликов за час — передохните и продолжите позже.');
+  await tx(async (db) => {
+    const { j, day } = await seriesDay(num, (raw as Record<string, unknown> | null)?.day, db);
+    if (await one('SELECT 1 FROM hires WHERE job_id = $1 AND freelancer_id = $2', [j.id, u.id], db)) throw new AppError(409, 'Вы уже в этой серии — снимайте и возвращайте свои дни.');
+    const cur = await one<{ status: string }>('SELECT status FROM series_subs WHERE job_id = $1 AND day = $2 AND freelancer_id = $3', [j.id, day, u.id], db);
+    const name = await userName(u.id, db);
+    if (cur?.status === 'sent') {
+      await query('DELETE FROM series_subs WHERE job_id = $1 AND day = $2 AND freelancer_id = $3', [j.id, day, u.id], db);
+    } else if (cur) {
+      throw new AppError(409, cur.status === 'hired' ? 'Вы уже выходите в этот день.' : 'Работодатель выбрал другого исполнителя на этот день.');
+    } else {
+      if ((await freeOnDay(j.id, day, db)) <= 0) throw new AppError(409, 'На этот день свободных мест нет.');
+      await query('INSERT INTO series_subs (job_id, day, freelancer_id) VALUES ($1, $2, $3)', [j.id, day, u.id], db);
+      await addEvents([{
+        userId: j.employer_id, kind: 'application', jobId: j.id, num, deliver: true,
+        text: name + ' готов выйти на замену ' + seriesDayLabel(day) + ' · серия заказа № ' + jobNum(num) + '. Решите в карточке заказа.'
+      }], db);
+    }
+    await publish([j.employer_id], { t: 'job', num }, db);
+  });
+  return getJob(num, viewer);
+}
+
+/** Работодатель берёт исполнителя на замену в конкретный день (или отказывает). Взятому открывается чат. */
+export async function decideSubstitute(num: number, raw: unknown, viewer: Viewer): Promise<JobDetail> {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const fid = typeof r.freelancer === 'string' && UUID_RE.test(r.freelancer) ? r.freelancer : '';
+  const action = r.action === 'hire' || r.action === 'reject' ? r.action : null;
+  if (!fid || !action) throw new AppError(422, 'Выберите исполнителя и решение.');
+  await tx(async (db) => {
+    const { j, day } = await seriesDay(num, r.day, db);
+    const me = needOwner(j, viewer);
+    const cur = await one<{ status: string }>('SELECT status FROM series_subs WHERE job_id = $1 AND day = $2 AND freelancer_id = $3 FOR UPDATE', [j.id, day, fid], db);
+    if (!cur) throw new AppError(404, 'Отклик на замену не найден.');
+    if (cur.status !== 'sent') throw new AppError(409, 'По этому отклику уже есть решение.');
+    const label = seriesDayLabel(day) + ' · серия заказа № ' + jobNum(num) + ' «' + j.title + '»';
+    if (action === 'hire') {
+      if ((await freeOnDay(j.id, day, db)) <= 0) throw new AppError(409, 'На этот день место уже занято.');
+      await query(`UPDATE series_subs SET status = 'hired', decided_at = now() WHERE job_id = $1 AND day = $2 AND freelancer_id = $3`, [j.id, day, fid], db);
+      await systemMessage(db, j.id, num, fid, me.id, 'employer', 'Вы выходите на замену ' + seriesDayLabel(day) + '. Подтвердите, пожалуйста, время выхода.');
+      await addEvents([{ userId: fid, kind: 'hire', jobId: j.id, num, deliver: true, urgent: (daysAhead(day, localClock().day) ?? 9) <= 1,
+        text: 'Вас взяли на замену ' + label + '. Открыт чат с работодателем.' }], db);
+      await publish([fid, me.id], { t: 'message', num, thread: fid }, db);
+    } else {
+      await query(`UPDATE series_subs SET status = 'rejected', decided_at = now() WHERE job_id = $1 AND day = $2 AND freelancer_id = $3`, [j.id, day, fid], db);
+      await addEvents([{ userId: fid, kind: 'application', jobId: j.id, num, text: 'Работодатель выбрал другого исполнителя на ' + label }], db);
+    }
+    await publish([fid], { t: 'job', num }, db);
+  });
+  invalidateSearch();
   return getJob(num, viewer);
 }
 

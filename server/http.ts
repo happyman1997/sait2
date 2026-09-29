@@ -94,6 +94,14 @@ async function handle<T>(fn: (req: Request) => Promise<T | NextResponse>, req: R
       if (e.status === 429 && e.extra?.retryAfter) res.headers.set('Retry-After', String(e.extra.retryAfter));
       return res;
     }
+    // Ошибки Postgres, которые означают не сбой, а состояние данных или нагрузку.
+    const code = (e as { code?: string }).code;
+    if (code === '23505') return NextResponse.json({ error: { message: 'Такая запись уже есть — обновите страницу.' } }, { status: 409 });
+    if (code === '40001' || code === '40P01') return NextResponse.json({ error: { message: 'Одновременное изменение — повторите действие.' } }, { status: 409 });
+    if (code === '57014') {
+      console.error('[db] statement timeout', req.url);
+      return NextResponse.json({ error: { message: 'Сервер сейчас перегружен — попробуйте через минуту.' } }, { status: 503, headers: { 'Retry-After': '30' } });
+    }
     console.error(e);
     return NextResponse.json({ error: { message: 'Что-то пошло не так на сервере — попробуйте ещё раз.' } }, { status: 500 });
   }

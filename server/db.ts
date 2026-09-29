@@ -9,7 +9,9 @@ export function pool(): Pool {
     // Размер пула и предел длительности запроса — из окружения; зависший запрос не держит соединение вечно.
     const p = new Pool({
       connectionString: config.databaseUrl(), max: config.dbPoolMax(), idleTimeoutMillis: 30_000, connectionTimeoutMillis: 10_000,
-      statement_timeout: config.dbStatementTimeoutMs()
+      statement_timeout: config.dbStatementTimeoutMs(),
+      // current_date и границы суток в SQL — в часовом поясе площадки, как и в коде (localClock).
+      options: '-c timezone=' + config.timeZone()
     });
     // Обрыв простаивающего соединения не должен ронять процесс — пул переподключится сам.
     p.on('error', (e) => console.error('[db] idle client error:', e.message));
