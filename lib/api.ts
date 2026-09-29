@@ -15,12 +15,12 @@ export class ApiError extends Error {
   get field() { return this.body.field; }
 }
 
-export async function api<T = unknown>(url: string, body?: unknown): Promise<T> {
+export async function api<T = unknown>(url: string, body?: unknown, method: 'POST' | 'PATCH' = 'POST'): Promise<T> {
   let res: Response;
   try {
     res = await fetch(url, body === undefined
       ? { credentials: 'same-origin' }
-      : { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      : { method, credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   } catch {
     throw new ApiError(0, { message: 'Нет связи с сервером — проверьте интернет и повторите.' });
   }

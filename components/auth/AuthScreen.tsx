@@ -51,7 +51,7 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
 
 const fmtNum = (v: number) => String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 
-export function AuthScreen({ initialMode, initialRole, stats }: { initialMode: AuthMode; initialRole: Role; stats: Stats }) {
+export function AuthScreen({ initialMode, initialRole, stats, pending }: { initialMode: AuthMode; initialRole: Role; stats: Stats; pending?: { num: number; title: string } | null }) {
   const router = useRouter();
   const flash = useFlash();
   const narrow = useNarrow();
@@ -134,6 +134,12 @@ export function AuthScreen({ initialMode, initialRole, stats }: { initialMode: A
       window.history.replaceState(null, '', url);
     }
   }, [mode]);
+
+  // После входа доводим до конца действие, которое его потребовало: отложенный отклик.
+  const done = (role?: Role) => {
+    router.replace(pending ? '/?job=' + pending.num + (role !== 'employer' ? '&apply=1' : '') : '/');
+    router.refresh();
+  };
 
   const showError = useCallback((msg: string) => { setStepError(msg); setErrTick(t => t + 1); }, []);
 
@@ -239,8 +245,7 @@ export function AuthScreen({ initialMode, initialRole, stats }: { initialMode: A
     try {
       await api('/api/auth/signup/verify', { challengeId: challenge?.challengeId, code, offerAccepted });
       flash('Аккаунт создан');
-      router.replace('/');
-      router.refresh();
+      done(role);
     } catch (e) {
       if (e instanceof ApiError && e.field === 'code') {
         setCode('');
@@ -316,10 +321,10 @@ export function AuthScreen({ initialMode, initialRole, stats }: { initialMode: A
     if (pass.length < 6) { showError('Пароль — не короче 6 символов.'); return; }
     setBusy(true);
     try {
-      await api('/api/auth/login', { identifier: contact, password: pass });
+      const r = await api<{ user: { role: Role } }>('/api/auth/login', { identifier: contact, password: pass });
       setStepError('');
-      router.replace('/');
-      router.refresh();
+      if (pending && r.user.role === 'employer') flash('Откликаться может только исполнитель');
+      done(r.user.role);
     } catch (e) {
       showError(e instanceof ApiError ? e.message : 'Что-то пошло не так — попробуйте ещё раз.');
     } finally { setBusy(false); }
@@ -367,8 +372,7 @@ export function AuthScreen({ initialMode, initialRole, stats }: { initialMode: A
       try {
         await api('/api/auth/recover/complete', { challengeId: challenge?.challengeId, password: recoverPass, password2: recoverPass2 });
         flash('Пароль обновлён');
-        router.replace('/');
-        router.refresh();
+        done();
       } catch (e) {
         if (e instanceof ApiError && e.status === 410) { setRecoverStep(1); setChallenge(null); }
         showError(e instanceof ApiError ? e.message : 'Что-то пошло не так — попробуйте ещё раз.');
@@ -428,7 +432,13 @@ export function AuthScreen({ initialMode, initialRole, stats }: { initialMode: A
         {/* Форма */}
         <div style={css('overflow-y: auto; overflow-x: hidden; padding: clamp(12px, 3vw, 40px) clamp(10px, 3vw, 46px); padding-bottom: max(clamp(12px, 3vw, 40px), env(safe-area-inset-bottom)); display: flex; align-items: safe center; background: var(--color-neutral-300); min-width: 0; box-sizing: border-box')}>
           <div style={css('width: 100%; max-width: 860px; margin: 0 auto; box-sizing: border-box; min-width: 0; padding: clamp(18px, 4vw, 50px) clamp(16px, 4vw, 50px) clamp(18px, 4vw, 46px); background: var(--color-bg); border: 1px solid var(--color-neutral-500); box-shadow: 0 18px 50px rgba(31, 45, 58, .16)')}>
-            <Link href="/" className="btn btn-secondary" style={css('margin-bottom: 20px; height: 44px; font-size: 15px; letter-spacing: .06em; text-transform: uppercase; padding: 0 20px')}>← Вернуться на карту</Link>
+            <Link href={pending ? '/?job=' + pending.num : '/'} className="btn btn-secondary" style={css('margin-bottom: 20px; height: 44px; font-size: 15px; letter-spacing: .06em; text-transform: uppercase; padding: 0 20px')}>← Вернуться на карту</Link>
+
+            {pending && (
+              <div style={css('margin-bottom: 18px; padding: 12px 14px; background: color-mix(in srgb, var(--color-accent) 10%, transparent); font-size: 14px; line-height: 1.5; color: var(--color-accent-900)')}>
+                Чтобы откликнуться на «{pending.title}», нужен профиль исполнителя
+              </div>
+            )}
 
             {mode !== 'recover' && (
               <div role="tablist" style={css('display: flex; gap: 4px; padding: 4px; background: color-mix(in srgb, var(--color-text) 6%, transparent); margin-bottom: 22px')}>

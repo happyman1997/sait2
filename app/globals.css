@@ -340,3 +340,6 @@ button:not(:disabled):active { transform: translateY(1px); }
 ::placeholder { color: color-mix(in srgb, var(--color-text) 45%, transparent); }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--color-divider); }
+
+/* Наведение на строки списков (в прототипе — style-hover) */
+.job-row:hover { border-color: var(--color-accent) !important; }
