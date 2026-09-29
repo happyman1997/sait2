@@ -6,7 +6,11 @@ const g = globalThis as unknown as { __arenaPool?: Pool };
 
 export function pool(): Pool {
   if (!g.__arenaPool) {
-    const p = new Pool({ connectionString: config.databaseUrl(), max: 10, idleTimeoutMillis: 30_000 });
+    // Размер пула и предел длительности запроса — из окружения; зависший запрос не держит соединение вечно.
+    const p = new Pool({
+      connectionString: config.databaseUrl(), max: config.dbPoolMax(), idleTimeoutMillis: 30_000, connectionTimeoutMillis: 10_000,
+      statement_timeout: config.dbStatementTimeoutMs()
+    });
     // Обрыв простаивающего соединения не должен ронять процесс — пул переподключится сам.
     p.on('error', (e) => console.error('[db] idle client error:', e.message));
     g.__arenaPool = p;

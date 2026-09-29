@@ -1,7 +1,10 @@
+import zlib from 'node:zlib';
+import { promisify } from 'node:util';
 import { cookies, headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { config } from './config';
 import { AppError } from './errors';
+import { observe } from './metrics';
 import { SESSION_COOKIE, sessionUser, type Ctx } from './session';
 
 /**
@@ -41,19 +44,45 @@ export async function readJson(req: Request): Promise<Record<string, unknown>> {
 /** Обёртка маршрута: AppError → JSON { error: { message, field, ... } }. */
 export function route<T>(fn: (req: Request) => Promise<T | NextResponse>) {
   return async (req: Request) => {
-    try {
-      const out = await fn(req);
-      return out instanceof NextResponse ? out : NextResponse.json(out);
-    } catch (e) {
-      if (e instanceof AppError) {
-        const res = NextResponse.json({ error: { message: e.message, field: e.field, ...e.extra } }, { status: e.status });
-        if (e.status === 429 && e.extra?.retryAfter) res.headers.set('Retry-After', String(e.extra.retryAfter));
-        return res;
-      }
-      console.error(e);
-      return NextResponse.json({ error: { message: 'Что-то пошло не так на сервере — попробуйте ещё раз.' } }, { status: 500 });
-    }
+    const t0 = performance.now();
+    const res = await handle(fn, req);
+    observe(res.status, (performance.now() - t0) / 1000);
+    return res;
   };
+}
+
+const gzip = promisify(zlib.gzip);
+const COMPRESS_MIN = 2048;
+
+/**
+ * JSON-ответ; крупный (поиск по карте — до 500 заказов, ~270 КБ) сжимается gzip, если клиент умеет.
+ * Сжатие идёт в пуле потоков libuv и не держит цикл событий. За nginx с gzip можно выключить: COMPRESS_JSON=0.
+ */
+async function json(out: unknown, req: Request): Promise<NextResponse> {
+  const body = JSON.stringify(out);
+  const accepts = /\bgzip\b/.test(req.headers.get('accept-encoding') || '');
+  if (body.length < COMPRESS_MIN || !accepts || !config.compressJson()) {
+    return new NextResponse(body, { headers: { 'Content-Type': 'application/json' } });
+  }
+  const buf = await gzip(body, { level: 5 });
+  return new NextResponse(new Uint8Array(buf), {
+    headers: { 'Content-Type': 'application/json', 'Content-Encoding': 'gzip', 'Vary': 'Accept-Encoding' }
+  });
+}
+
+async function handle<T>(fn: (req: Request) => Promise<T | NextResponse>, req: Request): Promise<NextResponse> {
+  try {
+    const out = await fn(req);
+    return out instanceof NextResponse ? out : await json(out, req);
+  } catch (e) {
+    if (e instanceof AppError) {
+      const res = NextResponse.json({ error: { message: e.message, field: e.field, ...e.extra } }, { status: e.status });
+      if (e.status === 429 && e.extra?.retryAfter) res.headers.set('Retry-After', String(e.extra.retryAfter));
+      return res;
+    }
+    console.error(e);
+    return NextResponse.json({ error: { message: 'Что-то пошло не так на сервере — попробуйте ещё раз.' } }, { status: 500 });
+  }
 }
 
 export function setSessionCookie(res: NextResponse, token: string, expiresAt: Date) {

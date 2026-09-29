@@ -42,5 +42,10 @@ export const config = {
   s3Region: () => env('S3_REGION', 'ru-central1'),
   s3AccessKey: () => env('S3_ACCESS_KEY'),
   s3SecretKey: () => env('S3_SECRET_KEY'),
+  compressJson: () => env('COMPRESS_JSON', '1') === '1',
+  dbPoolMax: () => Math.max(2, parseInt(env('DB_POOL_MAX', '10'), 10) || 10),
+  dbStatementTimeoutMs: () => Math.max(1000, parseInt(env('DB_STATEMENT_TIMEOUT_MS', '15000'), 10) || 15000),
+  // Токен для /api/metrics (Prometheus). Пусто — метрики закрыты.
+  metricsToken: () => env('METRICS_TOKEN', ''),
   offerVersion: '2026-09'
 };

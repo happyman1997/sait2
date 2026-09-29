@@ -78,3 +78,10 @@ export async function publishMany(items: { userIds: (string | null | undefined)[
   if (!all.length) return;
   await db.query('SELECT pg_notify($1, p) FROM unnest($2::text[]) AS p', [LIVE_CHANNEL, all]);
 }
+
+/** Сколько пользователей и потоков подписано на этом инстансе (для метрик). */
+export function liveStats() {
+  let sinks = 0;
+  for (const set of hub.subs.values()) sinks += set.size;
+  return { users: hub.subs.size, streams: sinks };
+}

@@ -29,7 +29,10 @@ export async function api<T = unknown>(url: string, body?: unknown, method: 'POS
   } catch {
     throw new ApiError(0, { message: 'Нет связи с сервером — проверьте интернет и повторите.' });
   }
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(res.status, data.error || { message: 'Ошибка сервера — попробуйте ещё раз.' });
+  // Успех засчитываем только по JSON-ответу: HTML-страница (прокси, перезапуск сервера) — не подтверждение действия.
+  const isJson = (res.headers.get('content-type') || '').includes('application/json');
+  const data = isJson ? await res.json().catch(() => null) : null;
+  if (!res.ok) throw new ApiError(res.status, data?.error || { message: 'Ошибка сервера — попробуйте ещё раз.' });
+  if (data === null) throw new ApiError(res.status, { message: 'Сервер ответил неожиданно — обновите страницу и проверьте, сохранилось ли действие.' });
   return data as T;
 }

@@ -13,7 +13,8 @@
     "db:seed": "node --env-file-if-exists=.env.local --import tsx scripts/seed.ts",
     "cron": "node --env-file-if-exists=.env.local --import tsx scripts/cron.ts",
     "ads": "node --env-file-if-exists=.env.local --import tsx scripts/ads.ts",
-    "staff": "node --env-file-if-exists=.env.local --import tsx scripts/staff.ts"
+    "staff": "node --env-file-if-exists=.env.local --import tsx scripts/staff.ts",
+    "load": "node --env-file-if-exists=.env.local --import tsx scripts/load.ts"
   },
   "engines": {
     "node": ">=20"

@@ -58,6 +58,10 @@ export async function getProfile(viewer: U | null) {
         WHERE r.target_id = $1 ORDER BY r.created_at DESC LIMIT 10`, [u.id]),
     getSettings(u)
   ]);
+  // Незакрытые споры по расчёту видны в профиле обеих сторон (как в прототипе).
+  const disputes = await query<{ num: number; reason: string; job_num: string; created_at: Date }>(
+    `SELECT d.num, d.reason, j.num AS job_num, d.created_at FROM disputes d JOIN jobs j ON j.id = d.job_id
+      WHERE d.status IN ('open', 'review') AND (d.freelancer_id = $1 OR j.employer_id = $1) ORDER BY d.created_at DESC`, [u.id]);
   const MARK: Record<string, string> = {
     late_cancel: 'Поздняя отмена смены', late_withdrawal: 'Поздний отказ от смены', no_show: 'Неявка на смену',
     complaint: 'Жалоба подтверждена', demoted: 'Понижение в выдаче', blocked: 'Блокировка'
@@ -72,11 +76,14 @@ export async function getProfile(viewer: U | null) {
       settle: h.employer_marked && h.freelancer_marked ? 'расчёт подтверждён' : h.employer_marked || h.freelancer_marked ? 'расчёт отмечен одной стороной' : 'расчёт не отмечен',
       auto: h.auto
     })),
-    marks: marks.rows.map(m => ({
+    marks: [...disputes.rows.map(d => ({
+      label: 'Незакрытый спор по расчёту СП-' + d.num,
+      value: d.reason + ' · заказ № ' + String(d.job_num).padStart(2, '0') + ' · с ' + d.created_at.toLocaleDateString('ru-RU')
+    })), ...marks.rows.map(m => ({
       label: MARK[m.kind] || m.kind,
       value: (m.reason ? m.reason + ' · ' : '') + new Date(m.created_at).toLocaleDateString('ru-RU') + ' · видна до ' +
         new Date(m.until ?? m.created_at.getTime() + 90 * 86400000).toLocaleDateString('ru-RU')
-    })),
+    }))],
     reviews: reviews.rows.map(r => ({ rating: r.rating, text: r.text, at: r.created_at.toISOString(), author: shortName(r.author), title: r.title })),
     settings
   };
@@ -221,7 +228,7 @@ export async function saveSettings(viewer: U | null, raw: unknown): Promise<Sett
 
 const KIND_LABEL: Record<string, string> = {
   account: 'Аккаунт', job: 'Заказ', application: 'Отклик', hire: 'Найм', cancel: 'Отмена', withdrawal: 'Отказ', no_show: 'Не вышел',
-  report: 'Работа сдана', accept: 'Приёмка', move: 'Перенос', settle: 'Расчёт', review: 'Отзыв', complaint: 'Жалоба', nearby: 'Рядом'
+  report: 'Работа сдана', accept: 'Приёмка', move: 'Перенос', settle: 'Расчёт', review: 'Отзыв', complaint: 'Жалоба', nearby: 'Рядом', dispute: 'Спор'
 };
 
 export async function listEvents(viewer: U | null, limit = 30) {

@@ -79,8 +79,25 @@ export type ShiftInfo = {
   withdrawal: { reason: string; notice: string; late: boolean; at: string } | null;  // мой отказ от смены
   noShow: boolean;                   // меня отметили «Не вышел»
   photos: { id: string; kind: 'before' | 'after'; url: string; mine: boolean }[];
+  /** Споры по расчёту: работодатель видит все по заказу, исполнитель — свой. */
+  disputes: DisputeInfo[];
+  /** Можно открыть спор (смена сдана/принята, у пары нет незакрытого спора). */
+  canDispute: boolean;
   /** Чек-лист «Перед выходом»: работодатель видит всех нанятых, исполнитель — свой. */
   safety: { name: string; items: string[]; me: boolean }[];
+};
+
+/** Спор по расчёту: причины для каждой стороны (прототип, DISPUTE_REASONS). */
+export const DISPUTE_REASONS = {
+  freelancer: ['оплата не пришла в срок', 'заплатили меньше договорённого', 'работу не приняли без причины'],
+  employer: ['исполнитель требует больше договорённого', 'работа выполнена не полностью']
+} as const;
+
+export type DisputeInfo = {
+  id: string; num: string; status: 'open' | 'review' | 'paid' | 'withdrawn' | 'resolved';
+  openedBy: 'employer' | 'freelancer'; mine: boolean; other: string; appId: string | null;
+  reason: string; sum: number; text: string; response: string | null; resolution: string | null; resolvedFor: 'employer' | 'freelancer' | null;
+  evidence: { ok: boolean; label: string }[]; at: string; closedAt: string | null;
 };
 
 export const SAFETY_ITEMS = [

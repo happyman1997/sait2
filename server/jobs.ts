@@ -9,6 +9,7 @@ import { badWordIn, findBadField } from '@/lib/moderation';
 import { one, pool, query, tx, type Db } from './db';
 import { AppError, ModerationError } from './errors';
 import { addEvents } from './events';
+import { jobDisputes } from './disputes';
 import { jobPhotos } from './files';
 import { publish } from './live';
 import { limitOrThrow } from './rate-limit';
@@ -59,7 +60,7 @@ const SUMMARY_COLS = `
   (SELECT count(*) FROM hires h WHERE h.job_id = j.id)::int AS hired,
   (SELECT count(*) FROM applications a WHERE a.job_id = j.id AND a.status IN ('sent', 'hired'))::int AS applicants,
   (SELECT a.status FROM applications a WHERE a.job_id = j.id AND a.freelancer_id = $1) AS my_status,
-  earth_distance(ll_to_earth($2, $3), ll_to_earth(j.lat, j.lng)) / 1000 AS distance_km`;
+  earth_distance(ll_to_earth($2, $3), j.pt) / 1000 AS distance_km`;
 
 type SummaryRow = {
   id: string; num: string; title: string; type_id: string; type_label: string; address: string; district: string | null;
@@ -91,25 +92,26 @@ export async function listJobs(p: ListParams, viewer: Viewer, db: Db = pool()) {
   const km = p.km && p.km > 0 ? Math.min(p.km, 20000) : null;
   const like = q ? '%' + q.toLowerCase().replace(/[\\%_]/g, m => '\\' + m) + '%' : null;
   const params: unknown[] = [viewer?.id ?? null, base.lat, base.lng, p.today, types.length ? types : null, Math.max(0, p.minPay || 0), km, p.when === 'soon', like];
-  // Внутри — 500 ближайших к базе подходящих заказов (KNN по GiST-индексу jobs_geo_idx),
-  // снаружи — счётчики откликов/найма только для них и порядок списка: срочные, затем по дате.
+  // Внутри — 500 ближайших к базе подходящих заказов: KNN по GiST-индексу jobs_pt_idx останавливается на 500-м.
+  // Радиус — снаружи: всё, что внутри радиуса, ближе всего, что за ним, поэтому отбор среди 500 ближайших точен,
+  // а индекс не приходится проходить по всему кругу (на плотной карте это в разы быстрее).
+  // Снаружи же — счётчики откликов/найма только для отобранных и порядок списка: срочные, затем по дате.
   const r = await query<SummaryRow>(
     `WITH near AS (
-       SELECT j.id
+       SELECT j.id, j.pt
          FROM jobs j
         WHERE j.status IN ('open', 'staffed')
           AND (j.date >= $4::date OR j.repeat IS NOT NULL)
           AND ($5::text[] IS NULL OR j.type_id = ANY($5))
           AND j.pay >= $6
-          AND ($7::float8 IS NULL OR (earth_box(ll_to_earth($2, $3), $7 * 1000) @> ll_to_earth(j.lat, j.lng)
-                                      AND earth_distance(ll_to_earth($2, $3), ll_to_earth(j.lat, j.lng)) <= $7 * 1000))
           AND (NOT $8 OR j.date BETWEEN $4::date AND $4::date + 1)
           AND ($9::text IS NULL OR j.search LIKE $9 OR j.type_id IN (SELECT id FROM job_types WHERE lower(label) LIKE $9))
-        ORDER BY ll_to_earth(j.lat, j.lng) <-> ll_to_earth($2, $3)
+        ORDER BY j.pt <-> ll_to_earth($2, $3)
         LIMIT 500
      )
      SELECT ${SUMMARY_COLS}
        FROM near JOIN jobs j ON j.id = near.id JOIN job_types t ON t.id = j.type_id
+      WHERE $7::float8 IS NULL OR earth_distance(ll_to_earth($2, $3), near.pt) <= $7 * 1000
       ORDER BY j.urgent DESC, j.date, j.created_at DESC`,
     params,
     db
@@ -234,7 +236,7 @@ export async function getJob(num: number, viewer: Viewer, db: Db = pool()): Prom
 type HiredRow = { freelancer_id: string; is_lead: boolean; name: string; app_id: string | null };
 
 async function loadShift(jobId: string, employerId: string, empName: string, hired: HiredRow[], viewer: NonNullable<Viewer>, owner: boolean, db: Db): Promise<ShiftInfo> {
-  const [rep, acc, settle, reviews, complaint, withdrawal, noShow, msgs, photos, safety] = await Promise.all([
+  const [rep, acc, settle, reviews, complaint, withdrawal, noShow, msgs, photos, safety, disputes] = await Promise.all([
     one<{ reported_at: Date }>('SELECT reported_at FROM reports WHERE job_id = $1', [jobId], db),
     one<{ accepted_at: Date; auto: boolean }>('SELECT accepted_at, auto FROM acceptances WHERE job_id = $1', [jobId], db),
     one<{ employer_marked: boolean; freelancer_marked: boolean }>('SELECT employer_marked, freelancer_marked FROM settlements WHERE job_id = $1', [jobId], db),
@@ -247,8 +249,10 @@ async function loadShift(jobId: string, employerId: string, empName: string, hir
     owner ? Promise.resolve(null) : one<{ n: number }>('SELECT count(*)::int AS n FROM messages WHERE job_id = $1 AND freelancer_id = $2', [jobId, viewer.id], db),
     owner || hired.some(h => h.freelancer_id === viewer.id) ? jobPhotos(jobId, viewer.id, db) : Promise.resolve([]),
     query<{ freelancer_id: string; items: string[] }>(
-      'SELECT freelancer_id, items FROM safety_checks WHERE job_id = $1 AND ($2 OR freelancer_id = $3)', [jobId, owner, viewer.id], db)
+      'SELECT freelancer_id, items FROM safety_checks WHERE job_id = $1 AND ($2 OR freelancer_id = $3)', [jobId, owner, viewer.id], db),
+    owner || hired.some(h => h.freelancer_id === viewer.id) ? jobDisputes(jobId, employerId, viewer.id, db) : Promise.resolve([])
   ]);
+  const openFor = new Set(disputes.filter(d => d.status === 'open' || d.status === 'review').map(d => d.appId ?? 'me'));
   const lead = hired.find(h => h.is_lead);
   const meHired = hired.find(h => h.freelancer_id === viewer.id);
   const nameOf = (id: string) => (id === employerId ? empName : shortName(hired.find(h => h.freelancer_id === id)?.name || ''));
@@ -273,6 +277,9 @@ async function loadShift(jobId: string, employerId: string, empName: string, hir
     withdrawal: withdrawal ? { reason: withdrawal.reason, notice: withdrawal.notice, late: withdrawal.late, at: withdrawal.at.toISOString() } : null,
     noShow: !!noShow,
     photos,
+    disputes,
+    // Спор — после сдачи работы; у каждой пары «работодатель ↔ исполнитель» не больше одного незакрытого.
+    canDispute: (!!rep || !!acc) && (owner ? hired.some(h => h.app_id && !openFor.has(h.app_id)) : !!meHired && !openFor.has('me')),
     safety: hired.filter(h => owner || h.freelancer_id === viewer.id).map(h => ({
       name: shortName(h.name), me: h.freelancer_id === viewer.id,
       items: safety.rows.find(r => r.freelancer_id === h.freelancer_id)?.items ?? []

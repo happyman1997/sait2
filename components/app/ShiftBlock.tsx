@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { css } from '@/lib/css';
 import { uploadForm } from '@/lib/image';
-import { COMPLAINT_KINDS, crewOf, dateLabel, LEAVE_REASONS, localISO, money, plural, type JobDetail } from '@/lib/jobs';
+import { COMPLAINT_KINDS, crewOf, dateLabel, DISPUTE_REASONS, LEAVE_REASONS, localISO, money, plural, type DisputeInfo, type JobDetail } from '@/lib/jobs';
 import { Corners, LABEL } from './ui';
 
 export type Act = (path: string, body: unknown, ok: string, method?: 'POST' | 'DELETE') => Promise<boolean>;
@@ -158,6 +158,8 @@ export function ShiftBlock({ job, isOwner, act, onChat, onReview, busy }: {
         </div>
       )}
 
+      <Disputes job={job} isOwner={isOwner} act={act} busy={busy} />
+
       {accepted && s.reviewTargets.map(t => {
         const mine = s.myReviews.find(r => r.target === t.target);
         return (
@@ -308,5 +310,131 @@ function ShiftPhotos({ job, act, busy }: { job: JobDetail; act: Act; busy: boole
       {col('before', 'Фото до')}
       {col('after', 'Фото после')}
     </div>
+  );
+}
+
+const DISPUTE_STATUS: Record<DisputeInfo['status'], string> = {
+  open: 'на разборе', review: 'разбор поддержки', paid: 'закрыт: оплата отправлена', withdrawn: 'закрыт: снят инициатором', resolved: 'решён поддержкой'
+};
+
+/** Споры по расчёту (как в прототипе): открыть с доказательствами, ответить, снять; спорное решает поддержка. */
+function Disputes({ job, isOwner, act, busy }: { job: JobDetail; isOwner: boolean; act: Act; busy: boolean }) {
+  const s = job.shift!;
+  const side = isOwner ? 'employer' : 'freelancer';
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState<string>(DISPUTE_REASONS[side][0]);
+  const [sum, setSum] = useState(String(job.pay));
+  const [text, setText] = useState('');
+  const free = s.hired.filter(h => h.appId && !s.disputes.some(d => d.appId === h.appId && (d.status === 'open' || d.status === 'review')));
+  const [target, setTarget] = useState(free[0]?.appId || '');
+  const [explainFor, setExplainFor] = useState<string | null>(null);
+  const [explain, setExplain] = useState('');
+  if (!s.disputes.length && !s.canDispute) return null;
+
+  const submit = async () => {
+    if (await act('dispute', { reason, sum, text, target: isOwner ? target || free[0]?.appId : undefined }, 'Спор передан в поддержку')) { setOpen(false); setText(''); }
+  };
+  return (
+    <>
+      {s.disputes.map(d => {
+        const live = d.status === 'open' || d.status === 'review';
+        const iOpened = d.mine;
+        return (
+          <div key={d.id} className="blueprint" style={css('margin-top: 12px; padding: 11px 12px; ' + (live ? 'border-color: var(--color-accent)' : ''))}>
+            <Corners />
+            <div style={css('display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap')}>
+              <span style={css('font-family: var(--font-heading); font-size: 12.5px; letter-spacing: .2em; text-transform: uppercase; color: var(--color-accent-900)')}>{'Спор ' + d.num}</span>
+              <span className={live ? 'tag tag-accent' : 'tag tag-outline'}>{DISPUTE_STATUS[d.status] + (d.resolvedFor ? ' · в пользу ' + (d.resolvedFor === 'employer' ? 'работодателя' : 'исполнителя') : '')}</span>
+            </div>
+            <div style={css('font-size: 14px; line-height: 1.5; margin-top: 6px')}>
+              {(d.openedBy === 'employer' ? 'Открыт работодателем ' : 'Открыт исполнителем ') + new Date(d.at).toLocaleDateString('ru-RU') + ' · ' + d.reason + ' · ' +
+                d.sum.toLocaleString('ru-RU') + ' ₽' + (isOwner ? ' · ' + d.other : '') + '. ' + d.text}
+            </div>
+            {d.response && <div style={css('font-size: 13.5px; line-height: 1.45; margin-top: 6px')}><span style={css(MUTED)}>Ответ второй стороны: </span>{d.response}</div>}
+            {d.resolution && <div style={css('font-size: 13.5px; line-height: 1.45; margin-top: 6px; color: var(--color-accent-900)')}>{'Решение поддержки: ' + d.resolution}</div>}
+            {live && (
+              <div style={css('font-size: 13px; line-height: 1.45; margin-top: 6px; color: var(--color-accent-900)')}>
+                {'Поддержка отвечает в течение 3 рабочих дней. ' + (iOpened
+                  ? (d.openedBy === 'freelancer' ? 'Работодатель может закрыть спор раньше — оплатив или дав пояснение.' : 'Исполнитель может дать пояснение раньше, вы — снять спор по договорённости.')
+                  : 'Ответьте раньше — это ускорит разбор.') + ' Незакрытый спор виден в профиле обеих сторон.'}
+              </div>
+            )}
+            <div style={css('display: grid; gap: 3px; margin-top: 8px')}>
+              {d.evidence.map((e, i) => (
+                <div key={i} style={css('display: flex; gap: 8px; font-size: 13px; line-height: 1.4')}>
+                  <span style={css('flex: none; width: 14px; color: ' + (e.ok ? 'var(--color-accent-700)' : 'color-mix(in srgb, var(--color-text) 50%, transparent)'))}>{e.ok ? '✓' : '—'}</span>
+                  <span>{e.label}</span>
+                </div>
+              ))}
+            </div>
+            {live && d.status === 'open' && !iOpened && explainFor !== d.id && (
+              <div style={css('display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px')}>
+                {isOwner && d.openedBy === 'freelancer' && (
+                  <button className="btn btn-secondary" disabled={busy} onClick={() => act('dispute/' + d.id, { action: 'paid' }, 'Спор закрыт — оплата отправлена')} style={css('height: 40px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Оплата отправлена — закрыть спор</button>
+                )}
+                <button className="btn btn-ghost" onClick={() => { setExplainFor(d.id); setExplain(''); }} style={css('height: 38px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Не согласен, дать пояснение</button>
+              </div>
+            )}
+            {explainFor === d.id && (
+              <div style={css('margin-top: 10px')}>
+                <textarea className="input" rows={3} value={explain} onChange={e => setExplain(e.target.value)} aria-label="Пояснение" maxLength={2000}
+                  placeholder="Что произошло с вашей стороны — прочитает поддержка" style={css('width: 100%; box-sizing: border-box; min-height: 70px; padding: 8px 10px; resize: vertical')} />
+                <div style={css('display: flex; gap: 8px; margin-top: 8px')}>
+                  <button className="btn btn-primary" disabled={busy} onClick={async () => { if (await act('dispute/' + d.id, { action: 'explain', text: explain }, 'Пояснение отправлено — решение примет поддержка')) setExplainFor(null); }}
+                    style={css('height: 38px; font-size: 13px')}>Отправить пояснение</button>
+                  <button className="btn btn-ghost" onClick={() => setExplainFor(null)} style={css('height: 38px; font-size: 13px')}>Отмена</button>
+                </div>
+              </div>
+            )}
+            {live && iOpened && (
+              <button className="btn btn-secondary btn-block" disabled={busy} onClick={() => act('dispute/' + d.id, { action: 'withdraw' }, 'Спор снят')}
+                style={css('margin-top: 12px; height: 40px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>
+                {d.openedBy === 'employer' ? 'Вопрос закрыт — снять спор' : 'Деньги пришли — снять спор'}
+              </button>
+            )}
+          </div>
+        );
+      })}
+
+      {s.canDispute && !open && (
+        <button className="btn btn-ghost btn-block" onClick={() => { setOpen(true); setTarget(free[0]?.appId || ''); }} style={css('margin-top: 8px; height: 40px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>
+          {isOwner ? 'Открыть спор по расчёту' : 'Оплата не пришла — открыть спор'}
+        </button>
+      )}
+      {open && (
+        <div className="blueprint" style={css('margin-top: 12px; padding: 12px')}>
+          <Corners />
+          <div style={css(LABEL)}>Спор об оплате</div>
+          {isOwner && free.length > 1 && (
+            <div className="field" style={css('margin-top: 10px')}>
+              <label htmlFor="dsp-target">С кем спор</label>
+              <select id="dsp-target" className="input" value={target} onChange={e => setTarget(e.target.value)}>
+                {free.map(h => <option key={h.appId!} value={h.appId!}>{h.name}</option>)}
+              </select>
+            </div>
+          )}
+          <div className="field" style={css('margin-top: 10px')}>
+            <label htmlFor="dsp-reason">Что произошло</label>
+            <select id="dsp-reason" className="input" value={reason} onChange={e => setReason(e.target.value)}>
+              {DISPUTE_REASONS[side].map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          <div className="field" style={css('margin-top: 10px')}>
+            <label htmlFor="dsp-sum">Сумма, о которой спор, ₽</label>
+            <input id="dsp-sum" className="input" inputMode="numeric" value={sum} onChange={e => setSum(e.target.value.replace(/[^\d ]/g, ''))} placeholder={String(job.pay)} />
+          </div>
+          <div className="field" style={css('margin-top: 10px')}>
+            <label htmlFor="dsp-text">Что уточнить</label>
+            <textarea id="dsp-text" className="input" rows={3} value={text} onChange={e => setText(e.target.value)} maxLength={2000}
+              placeholder="Работа принята в 14:20, денег нет третий день, на звонки не отвечают" style={css('min-height: 70px; padding: 8px 10px; resize: vertical')} />
+          </div>
+          <div style={css('font-size: 13px; line-height: 1.45; margin-top: 8px; ' + MUTED)}>В спор уйдут: фото до и после, переписка по заказу, отметки о приёмке и расчёте, условия заказа ({money(job.pay, job.unit)}, {job.payType || 'способ оплаты не указан'}).</div>
+          <div style={css('display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap')}>
+            <button className="btn btn-primary" disabled={busy} onClick={submit} style={css('height: 42px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Передать в поддержку</button>
+            <button className="btn btn-ghost" onClick={() => setOpen(false)} style={css('height: 42px; font-size: 13px')}>Отмена</button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

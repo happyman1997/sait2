@@ -27,17 +27,19 @@ const TAB = (on: boolean) => css('cursor: pointer; padding: 8px 14px; font-famil
   (on ? 'var(--color-accent)' : 'var(--color-divider)') + '; background: ' + (on ? 'var(--color-accent)' : 'transparent') + '; color: ' + (on ? '#fff' : 'inherit'));
 
 export function SupportPage() {
-  const [tab, setTab] = useState<'complaints' | 'users' | 'ads'>('complaints');
+  const [tab, setTab] = useState<'complaints' | 'disputes' | 'users' | 'ads'>('complaints');
   return (
     <div style={css('flex: 1; min-height: 0; overflow: auto; padding: 22px max(clamp(16px, 2.4vw, 40px), calc((100% - 1100px) / 2)) 48px')}>
       <div style={css(LABEL)}>Кабинет поддержки</div>
       <h1 style={css('margin: 4px 0 16px; font-size: clamp(26px, 2.6vw, 34px); text-transform: uppercase; letter-spacing: .01em')}>Поддержка</h1>
       <div role="tablist" style={css('display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 18px')}>
         <button role="tab" aria-selected={tab === 'complaints'} onClick={() => setTab('complaints')} style={TAB(tab === 'complaints')}>Жалобы</button>
+        <button role="tab" aria-selected={tab === 'disputes'} onClick={() => setTab('disputes')} style={TAB(tab === 'disputes')}>Споры</button>
         <button role="tab" aria-selected={tab === 'users'} onClick={() => setTab('users')} style={TAB(tab === 'users')}>Пользователи</button>
         <button role="tab" aria-selected={tab === 'ads'} onClick={() => setTab('ads')} style={TAB(tab === 'ads')}>Реклама</button>
       </div>
       {tab === 'complaints' && <Complaints />}
+      {tab === 'disputes' && <Disputes />}
       {tab === 'users' && <Users />}
       {tab === 'ads' && <AdsReport />}
     </div>
@@ -233,6 +235,80 @@ function AdsReport() {
         </tbody>
       </table>
       {rows?.length === 0 && <div style={css('margin-top: 10px; ' + MUTED)}>Креативов нет — добавляются командой `npm run ads -- add`.</div>}
+    </>
+  );
+}
+
+type Dispute = {
+  id: string; num: string; status: 'open' | 'review' | 'paid' | 'withdrawn' | 'resolved'; openedBy: 'employer' | 'freelancer';
+  reason: string; sum: number; text: string; response: string | null; resolution: string | null; resolvedFor: 'employer' | 'freelancer' | null;
+  evidence: { ok: boolean; label: string }[]; at: string; closedAt: string | null; jobNum: number; title: string; employer: string; freelancer: string;
+};
+const DSTATUS: Record<Dispute['status'], string> = { open: 'ждёт ответа стороны', review: 'нужно решение', paid: 'оплачено', withdrawn: 'снят', resolved: 'решён' };
+
+function Disputes() {
+  const flash = useFlash();
+  const [status, setStatus] = useState<'open' | 'closed'>('open');
+  const [list, setList] = useState<Dispute[] | null>(null);
+  const [note, setNote] = useState<Record<string, string>>({});
+  const [err, setErr] = useState<Record<string, string>>({});
+  const load = useCallback(() => {
+    setList(null);
+    api<{ disputes: Dispute[] }>('/api/support/disputes?status=' + status).then(r => setList(r.disputes)).catch(() => setList([]));
+  }, [status]);
+  useEffect(load, [load]);
+  const decide = async (d: Dispute, side: 'employer' | 'freelancer') => {
+    setErr(e => ({ ...e, [d.id]: '' }));
+    try {
+      await api('/api/support/disputes/' + d.id, { for: side, note: note[d.id] || '' });
+      flash('Спор ' + d.num + ' решён — стороны уведомлены');
+      load();
+    } catch (e) { setErr(x => ({ ...x, [d.id]: e instanceof ApiError ? e.message : 'Не удалось сохранить' })); }
+  };
+  return (
+    <>
+      <div style={css('display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px')}>
+        <Chip active={status === 'open'} onClick={() => setStatus('open')}>Незакрытые</Chip>
+        <Chip active={status === 'closed'} onClick={() => setStatus('closed')}>Закрытые</Chip>
+      </div>
+      {list === null && <div style={css(MUTED)}>Загружаем…</div>}
+      {list?.length === 0 && <div style={css(MUTED)}>{status === 'open' ? 'Незакрытых споров нет.' : 'Пусто.'}</div>}
+      <div style={css('display: grid; gap: 12px')}>
+        {list?.map(d => (
+          <div key={d.id} className="blueprint" style={css('padding: 14px 15px')}>
+            <Corners />
+            <div style={css('display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap')}>
+              <span style={css('font-family: var(--font-heading); font-size: 18px; text-transform: uppercase')}>{d.num + ' · ' + d.reason}</span>
+              <span className={d.status === 'review' ? 'tag tag-accent' : 'tag tag-outline'}>{DSTATUS[d.status]}</span>
+              <span style={{ flex: 1 }} />
+              <Link href={'/?job=' + d.jobNum} style={css('font-size: 13px')}>{'Заказ № ' + jobNum(d.jobNum) + ' · ' + d.title}</Link>
+            </div>
+            <div style={css('font-size: 13.5px; margin-top: 6px; ' + MUTED)}>
+              {'Работодатель: ' + d.employer + ' · Исполнитель: ' + d.freelancer + ' · открыл ' + (d.openedBy === 'employer' ? 'работодатель' : 'исполнитель') + ' ' + when(d.at) + ' · ' + d.sum.toLocaleString('ru-RU') + ' ₽'}
+            </div>
+            <div style={css('font-size: 14px; line-height: 1.5; margin-top: 8px')}>{d.text}</div>
+            {d.response && <div style={css('font-size: 14px; line-height: 1.5; margin-top: 6px')}><span style={css(MUTED)}>Ответ: </span>{d.response}</div>}
+            <div style={css('display: grid; gap: 2px; margin-top: 8px; font-size: 13px')}>
+              {d.evidence.map((e, i) => <div key={i}>{(e.ok ? '✓ ' : '— ') + e.label}</div>)}
+            </div>
+            {d.resolution && <div style={css('font-size: 13.5px; margin-top: 8px')}>{'Решение (' + (d.resolvedFor === 'employer' ? 'в пользу работодателя' : 'в пользу исполнителя') + '): ' + d.resolution}</div>}
+            {(d.status === 'open' || d.status === 'review') && (
+              <>
+                <div className="field" style={css('margin-top: 10px')}>
+                  <label htmlFor={'dn-' + d.id}>Решение — увидят обе стороны; проигравшей — пометка на 90 дней</label>
+                  <textarea id={'dn-' + d.id} className="input" rows={2} value={note[d.id] || ''} onChange={e => setNote(n => ({ ...n, [d.id]: e.target.value }))} maxLength={1000}
+                    style={css('min-height: 56px; padding: 8px 10px; resize: vertical')} />
+                </div>
+                {err[d.id] && <div role="alert" style={css(FIELD_ERR)}>{err[d.id]}</div>}
+                <div style={css('display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap')}>
+                  <button className="btn btn-secondary" onClick={() => decide(d, 'freelancer')} style={css('height: 38px; font-size: 13px')}>В пользу исполнителя</button>
+                  <button className="btn btn-secondary" onClick={() => decide(d, 'employer')} style={css('height: 38px; font-size: 13px')}>В пользу работодателя</button>
+                </div>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
     </>
   );
 }
