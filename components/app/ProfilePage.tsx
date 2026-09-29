@@ -2,12 +2,14 @@
 
 // Профиль по прототипу: карточка (фото, имя, роль · город, теги), «Вход и контакты», «Организация» / «Свой инвентарь»,
 // «История смен», «Пометки площадки», «Отзывы», «Договор». Справа — сводка.
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ACCESS, GEAR, JOB_TYPES, OBJECT_KINDS, ORG_TYPES, TOOLS } from '@/lib/catalog';
 import { api, ApiError } from '@/lib/api';
 import { css } from '@/lib/css';
 import { uploadForm } from '@/lib/image';
+import { disablePush } from '@/lib/push-client';
 import { dateLabel, money, plural } from '@/lib/jobs';
 import { formatPhone } from '@/lib/validation';
 import { useFlash } from '@/components/Toast';
@@ -53,7 +55,7 @@ function errOf(e: unknown, fallback: string) {
 export function ProfilePage() {
   const router = useRouter();
   const flash = useFlash();
-  const { setRail } = useLive();
+  const { setRail, me } = useLive();
   const [p, setP] = useState<Profile | null>(null);
   const [loadErr, setLoadErr] = useState('');
   const [err, setErr] = useState<{ field: string; message: string } | null>(null);
@@ -105,8 +107,13 @@ export function ProfilePage() {
       <div style={css('display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 22px')}>
         <button className="btn btn-ghost" onClick={() => (window.history.length > 1 ? router.back() : router.push('/'))} style={css('height: 34px; font-size: 13.5px; padding: 0 10px 0 6px; display: inline-flex; align-items: center; gap: 6px')}>← Назад</button>
         <span style={{ flex: 1 }} />
+        {me?.isStaff && <Link href="/support" className="btn btn-ghost" style={css('height: 34px; font-size: 12.5px; letter-spacing: .1em; text-transform: uppercase; padding: 0 12px; display: inline-flex; align-items: center; text-decoration: none')}>Поддержка</Link>}
         <button className="btn btn-ghost" onClick={() => setRail('settings')} style={css('height: 34px; font-size: 12.5px; letter-spacing: .1em; text-transform: uppercase; padding: 0 12px')}>Настройки</button>
-        <button className="btn btn-ghost" onClick={async () => { await api('/api/auth/logout', {}).catch(() => {}); router.push('/'); router.refresh(); }}
+        <button className="btn btn-ghost" onClick={async () => {
+          // Подписка на пуш принадлежит браузеру — снимаем её, чтобы уведомления не приходили следующему человеку на этом устройстве.
+          await disablePush().catch(() => {});
+          await api('/api/auth/logout', {}).catch(() => {}); router.push('/'); router.refresh();
+        }}
           style={css('height: 34px; font-size: 12.5px; letter-spacing: .1em; text-transform: uppercase; padding: 0 12px')}>Выйти</button>
       </div>
 

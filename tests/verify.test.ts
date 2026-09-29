@@ -116,6 +116,12 @@ describe('подтверждение e-mail', () => {
     expect((await prof.getProfile(fl)).user.emailVerified).toBe(true);
   });
 
+  it('сохранение профиля с тем же адресом не шлёт повторных писем', async () => {
+    await prof.updateProfile(fl, { login: 'daniyar_new', email: fl.email });
+    await ev.processOutbox();
+    expect(mails).toHaveLength(0);
+  });
+
   it('смена адреса сбрасывает подтверждение; старая ссылка не подтверждает новый адрес', async () => {
     await verify.sendEmailVerification(fl);
     await ev.processOutbox();

@@ -19,6 +19,7 @@ export type SessionUser = {
   base_label: string | null;
   avatar_url: string | null;
   status: 'active' | 'blocked';
+  is_staff: boolean;
   created_at: Date;
   session_id: string;
 };
@@ -40,7 +41,7 @@ export async function createSession(userId: string, ctx: Ctx, db: Db = pool()): 
 export async function sessionUser(token: string | undefined | null, db: Db = pool()): Promise<SessionUser | null> {
   if (!token || token.length > 100) return null;
   const row = await one<SessionUser & { last_seen_at: Date }>(
-    `SELECT u.id, u.role, u.login, u.phone, u.email, u.name, u.city, u.base_lat, u.base_lng, u.base_label, u.avatar_url, u.status, u.created_at,
+    `SELECT u.id, u.role, u.login, u.phone, u.email, u.name, u.city, u.base_lat, u.base_lng, u.base_label, u.avatar_url, u.status, u.is_staff, u.created_at,
             s.id AS session_id, s.last_seen_at
        FROM sessions s JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = $1 AND s.expires_at > now()`,

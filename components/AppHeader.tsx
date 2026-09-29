@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { css } from '@/lib/css';
 import { initialsOf } from './app/ui';
 
-export type HeaderUser = { name: string; role: 'freelancer' | 'employer'; city: string; avatarUrl?: string | null } | null;
+export type HeaderUser = { name: string; role: 'freelancer' | 'employer'; city: string; avatarUrl?: string | null; isStaff?: boolean } | null;
 
 const TAB = (active: boolean) => css('flex: none; white-space: nowrap; cursor: pointer; transition: background .15s, color .15s; background: ' +
   (active ? 'var(--color-accent)' : 'transparent') + '; border: 1px solid ' + (active ? 'var(--color-accent)' : 'transparent') +
@@ -24,6 +24,7 @@ export function AppHeader({ me, onHome, unread = 0, onChat, chatActive = false, 
   const tabs = !me ? [] : me.role === 'employer'
     ? [{ href: '/', label: 'Карта' }, { href: '/mine', label: 'Мои заказы' }, { href: '/apps', label: 'Отклики' }]
     : [{ href: '/', label: 'Карта' }, { href: '/mine', label: 'Мои смены' }];
+  if (me?.isStaff) tabs.push({ href: '/support', label: 'Поддержка' });
 
   return (
     <div className={'nav dark-bar' + (wideOnly ? ' only-wide' : '')} style={css('display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: clamp(11px, 1.6vw, 18px) max(clamp(14px, 2vw, 24px), calc((100% - 1440px) / 2)); min-height: clamp(70px, 10vw, 112px); flex: none; background: var(--ink); color: #f2efec')}>

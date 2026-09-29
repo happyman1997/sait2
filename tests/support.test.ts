@@ -1,0 +1,139 @@
+// Этап 7: кабинет поддержки — жалобы, блокировка, журнал действий.
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+
+process.env.DATABASE_URL = process.env.TEST_DATABASE_URL || 'postgres://arena:arena@localhost:5432/arena_test';
+
+const { pool, query, one } = await import('@/server/db');
+const { migrate } = await import('@/server/migrate');
+const jobs = await import('@/server/jobs');
+const sh = await import('@/server/shifts');
+const sup = await import('@/server/support');
+const { sessionUser, createSession } = await import('@/server/session');
+const { AppError } = await import('@/server/errors');
+const { localISO } = await import('@/lib/jobs');
+
+type SU = NonNullable<Awaited<ReturnType<typeof sessionUser>>>;
+const today = localISO();
+const plusDays = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return localISO(d); };
+const MOSCOW = { lat: 55.7558, lng: 37.6173 };
+
+async function mkUser(role: 'freelancer' | 'employer', login: string, phoneKey: string, name: string, staff = false): Promise<SU> {
+  const u = await one<{ id: string }>(
+    `INSERT INTO users (role, login, phone, phone_key, email, password_hash, name, city, base_lat, base_lng, offer_accepted_at, offer_version, is_staff)
+     VALUES ($1, $2, '+7' || $3, $3, $2 || '@x.ru', 'x', $4, 'Москва', $5, $6, now(), 't', $7) RETURNING id`,
+    [role, login, phoneKey, name, MOSCOW.lat, MOSCOW.lng, staff]);
+  await query('INSERT INTO notification_settings (user_id) VALUES ($1)', [u!.id]);
+  const { token } = await createSession(u!.id, {});
+  return (await sessionUser(token))!;
+}
+const form = (over: Record<string, unknown> = {}) => ({
+  ...MOSCOW, address: 'Москва, ул. Тверская, 18', district: 'Москва', type: 'snow', desc: 'Двор 320 м²', crew: '1', pay: '6000',
+  unit: 'за заказ', payType: 'перевод на карту', dateISO: plusDays(3), access: ['домофон'], tools: 'нужен свой инвентарь', ...over
+});
+async function expectErr(p: Promise<unknown>, text: RegExp, status?: number) {
+  try { await p; } catch (e) {
+    expect(e).toBeInstanceOf(AppError); expect((e as Error).message).toMatch(text);
+    if (status) expect((e as InstanceType<typeof AppError>).status).toBe(status);
+    return;
+  }
+  throw new Error('ожидалась ошибка');
+}
+/** Смена от отклика до приёмки. */
+async function acceptedShift() {
+  const j = await jobs.createJob(form(), emp, today);
+  await jobs.applyToJob(j.num, { reqConfirmed: true }, fl, today);
+  const app = (await jobs.getJob(j.num, emp)).applicantList![0].id;
+  await sh.staffAction(j.num, app, 'hire', emp);
+  await sh.reportDone(j.num, fl);
+  await sh.acceptWork(j.num, emp);
+  return j.num;
+}
+
+let emp: SU, fl: SU, staff: SU;
+
+beforeAll(async () => {
+  await pool().query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
+  await migrate(pool(), undefined, () => {});
+});
+beforeEach(async () => {
+  await query('TRUNCATE jobs, rate_limits, notification_outbox CASCADE');
+  await query('DELETE FROM users');
+  emp = await mkUser('employer', 'aigul_t', '9161111111', 'Айгуль Тлеубаева');
+  fl = await mkUser('freelancer', 'daniyar_s', '9160000000', 'Данияр Сапаров');
+  staff = await mkUser('employer', 'support_1', '9169999999', 'Поддержка', true);
+});
+afterAll(async () => { await pool().end(); });
+
+describe('доступ', () => {
+  it('раздел виден только сотрудникам — остальным 404', async () => {
+    await expectErr(sup.listComplaints(fl, 'open'), /не найдена/, 404);
+    await expectErr(sup.findUsers(null, 'da'), /войти/, 401);
+    expect(await sup.isStaff(staff)).toBe(true);
+    expect(await sup.isStaff(emp)).toBe(false);
+  });
+});
+
+describe('жалобы', () => {
+  it('жалоба исполнителя без адресата — на работодателя; подтверждение ставит пометку и уведомляет обе стороны', async () => {
+    const num = await acceptedShift();
+    await sh.fileComplaint(num, { reason: 'не рассчитались', text: 'Обещали перевод, прошла неделя' }, fl);
+    const list = await sup.listComplaints(staff, 'open');
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ reason: 'не рассчитались', num, author: { login: 'daniyar_s' }, target: { login: 'aigul_t', marks: 0 } });
+    await expectErr(sup.resolveComplaint(staff, list[0].id, { decision: 'confirmed', note: '' }), /пару слов/);
+    await sup.resolveComplaint(staff, list[0].id, { decision: 'confirmed', note: 'Работодатель не ответил на запрос поддержки' });
+    await expectErr(sup.resolveComplaint(staff, list[0].id, { decision: 'rejected', note: 'повторно' }), /уже есть решение/);
+    expect(await sup.listComplaints(staff, 'open')).toEqual([]);
+    expect((await sup.listComplaints(staff, 'confirmed'))[0]).toMatchObject({ status: 'confirmed', target: { marks: 1 } });
+    const mark = await one<{ kind: string }>(`SELECT kind FROM user_marks WHERE user_id = $1`, [emp.id]);
+    expect(mark!.kind).toBe('complaint');
+    const evs = await query<{ user_id: string; text: string }>(`SELECT user_id, text FROM events WHERE kind = 'complaint' AND text LIKE '%подтвер%'`);
+    expect(evs.rows.map(e => e.user_id).sort()).toEqual([emp.id, fl.id].sort());
+    const log = await one<{ action: string }>('SELECT action FROM staff_actions');
+    expect(log!.action).toBe('complaint_confirmed');
+  });
+
+  it('отклонение — без пометки, автор узнаёт решение', async () => {
+    const num = await acceptedShift();
+    await sh.fileComplaint(num, { reason: 'грубое общение', text: 'Кричал при сдаче работы' }, fl);
+    const [c] = await sup.listComplaints(staff, 'open');
+    await sup.resolveComplaint(staff, c.id, { decision: 'rejected', note: 'В переписке грубости нет' });
+    expect((await one<{ n: number }>('SELECT count(*)::int AS n FROM user_marks'))!.n).toBe(0);
+    expect((await one<{ text: string }>(`SELECT text FROM events WHERE user_id = $1 AND kind = 'complaint' ORDER BY created_at DESC LIMIT 1`, [fl.id]))!.text).toMatch(/отклонена/);
+  });
+});
+
+describe('пользователи и блокировка', () => {
+  it('поиск по логину, имени и телефону', async () => {
+    expect((await sup.findUsers(staff, 'aigul')).map(u => u.login)).toEqual(['aigul_t']);
+    expect((await sup.findUsers(staff, 'Сапаров')).map(u => u.login)).toEqual(['daniyar_s']);
+    expect((await sup.findUsers(staff, '+7 916 000-00-00')).map(u => u.login)).toEqual(['daniyar_s']);
+    expect(await sup.findUsers(staff, 'a')).toEqual([]);
+  });
+
+  it('блокировка работодателя: вход закрыт, открытые заказы сняты, откликнувшиеся предупреждены; разблокировка', async () => {
+    const j = await jobs.createJob(form(), emp, today);
+    await jobs.applyToJob(j.num, { reqConfirmed: true }, fl, today);
+    const token = (await createSession(emp.id, {})).token;
+    await expectErr(sup.setBlocked(staff, emp.id, { blocked: true, note: '' }), /причину/);
+    const r = await sup.setBlocked(staff, emp.id, { blocked: true, note: 'Мошенничество с оплатой' });
+    expect(r).toEqual({ ok: true, cancelled: 1 });
+    expect(await sessionUser(token)).toBeNull();
+    expect((await jobs.getJob(j.num, fl)).status).toBe('cancelled');
+    expect((await one<{ text: string }>(`SELECT text FROM events WHERE user_id = $1 AND kind = 'cancel'`, [fl.id]))!.text).toMatch(/снят площадкой/);
+    expect((await jobs.listJobs({ today }, fl)).jobs.find(x => x.num === j.num)).toBeUndefined();
+    await expectErr(sup.setBlocked(staff, emp.id, { blocked: true, note: 'ещё раз' }), /Уже/);
+    await sup.setBlocked(staff, emp.id, { blocked: false, note: 'Разобрались, вернули доступ' });
+    expect((await one<{ status: string }>('SELECT status FROM users WHERE id = $1', [emp.id]))!.status).toBe('active');
+    const [u] = await sup.findUsers(staff, 'aigul');
+    expect(u.actions.map(a => a.action)).toEqual(['unblock', 'block']);
+  });
+
+  it('блокировка исполнителя снимает ожидающие отклики; себя и сотрудника не заблокировать', async () => {
+    const j = await jobs.createJob(form(), emp, today);
+    await jobs.applyToJob(j.num, { reqConfirmed: true }, fl, today);
+    await sup.setBlocked(staff, fl.id, { blocked: true, note: 'Фейковый аккаунт' });
+    expect((await jobs.getJob(j.num, emp)).applicantList).toEqual([]);
+    await expectErr(sup.setBlocked(staff, staff.id, { blocked: true, note: 'проверка' }), /Себя/);
+  });
+});

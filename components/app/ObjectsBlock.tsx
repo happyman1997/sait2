@@ -65,8 +65,15 @@ export function ObjectCardPanel({ object, onClose, onSaved, onDeleted, onOpenJob
   const save = async () => {
     setBusy(true); setErr(null);
     try {
+      // Адрес поменяли — переставляем точку объекта; не нашли — точка остаётся, адрес сохраняем как вписали.
+      let point: { lat?: number; lng?: number } = {};
+      if (d.address.trim() !== object.address.trim()) {
+        const g = await api<{ hits: { lat: number; lng: number }[] }>('/api/geo/search?q=' + encodeURIComponent(d.address.trim())).catch(() => ({ hits: [] }));
+        if (g.hits[0]) point = { lat: g.hits[0].lat, lng: g.hits[0].lng };
+        else flash('Новый адрес не найден на карте — точка объекта осталась прежней');
+      }
       const r = await api<{ object: ObjectCard }>('/api/me/objects/' + object.id,
-        { name: d.name, address: d.address, area: d.area, contact: d.contact, access: d.access, tools: d.tools }, 'PATCH');
+        { name: d.name, address: d.address, area: d.area, contact: d.contact, access: d.access, tools: d.tools, ...point }, 'PATCH');
       flash('Объект «' + r.object.name + '» сохранён');
       onSaved(r.object);
     } catch (e) {

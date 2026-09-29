@@ -291,6 +291,23 @@ describe('договор и уборка', () => {
     expect(other.text).not.toMatch(/Тверская/);
   });
 
+  it('файлы идут через подключаемое хранилище (S3 в продакшене)', async () => {
+    const { setStorage } = await import('@/server/storage');
+    const mem = new Map<string, Uint8Array>();
+    setStorage({
+      async put(id, data) { mem.set(id, data); }, async get(id) { return mem.get(id) ?? null; },
+      async remove(id) { mem.delete(id); }, async listOld() { return []; }
+    });
+    try {
+      const a = await files.setAvatar(fl, new Blob([PNG]));
+      const id = a.avatarUrl.split('/').pop()!;
+      expect(mem.has(id)).toBe(true);
+      expect((await files.readFile(id, null)).mime).toBe('image/png');
+      await files.clearAvatar({ ...fl, avatar_url: a.avatarUrl });
+      expect(mem.size).toBe(0);
+    } finally { setStorage(null); }
+  });
+
   it('брошенные файлы удаляются через сутки', async () => {
     const a = await files.setAvatar(fl, new Blob([PNG]));
     const id = a.avatarUrl.split('/').pop()!;

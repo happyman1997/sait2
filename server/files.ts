@@ -1,11 +1,9 @@
 // Загрузка изображений: аватары (видны всем) и фото смены «до/после» (только участникам смены).
 // Тип определяется по сигнатуре файла, а не по расширению или Content-Type клиента.
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { config } from './config';
 import { one, pool, query, tx, type Db } from './db';
 import { AppError } from './errors';
 import { publish } from './live';
+import { getStorage } from './storage';
 import { limitOrThrow } from './rate-limit';
 import type { SessionUser } from './session';
 
@@ -21,8 +19,6 @@ export function sniff(b: Uint8Array): Mime | null {
   return null;
 }
 
-const dir = () => path.resolve(config.uploadDir());
-const fileOf = (id: string) => path.join(dir(), id);
 
 async function store(ownerId: string, kind: 'avatar' | 'photo', file: unknown, jobId: string | null) {
   if (!(file instanceof Blob)) throw new AppError(422, 'Прикрепите изображение.', 'file');
@@ -33,14 +29,18 @@ async function store(ownerId: string, kind: 'avatar' | 'photo', file: unknown, j
   if (!mime) throw new AppError(415, 'Подходят только фото JPEG, PNG или WebP.', 'file');
   const row = await one<{ id: string }>('INSERT INTO files (owner_id, kind, mime, size, job_id) VALUES ($1, $2, $3, $4, $5) RETURNING id',
     [ownerId, kind, mime, buf.length, jobId]);
-  await fs.mkdir(dir(), { recursive: true });
-  await fs.writeFile(fileOf(row!.id), buf);
+  try {
+    await getStorage().put(row!.id, buf, mime);
+  } catch (e) {
+    await query('DELETE FROM files WHERE id = $1', [row!.id]);
+    throw e;
+  }
   return row!.id;
 }
 
 async function removeFile(id: string) {
   await query('DELETE FROM files WHERE id = $1', [id]);
-  await fs.rm(fileOf(id), { force: true });
+  await getStorage().remove(id);
 }
 
 export async function setAvatar(u: Pick<SessionUser, 'id' | 'avatar_url'>, file: unknown) {
@@ -71,11 +71,9 @@ export async function readFile(id: string, viewer: Pick<SessionUser, 'id'> | nul
   const f = await one<{ kind: string; mime: Mime; job_id: string | null }>('SELECT kind, mime, job_id FROM files WHERE id = $1', [id]);
   if (!f) throw new AppError(404, 'Файл не найден.');
   if (f.kind === 'photo' && (!viewer || !f.job_id || !(await jobParty(f.job_id, viewer.id)))) throw new AppError(403, 'Фото смены видят только её участники.');
-  try {
-    return { mime: f.mime, data: await fs.readFile(fileOf(id)), cache: f.kind === 'avatar' ? 'public, max-age=31536000, immutable' : 'private, max-age=3600' };
-  } catch {
-    throw new AppError(404, 'Файл не найден.');
-  }
+  const data = await getStorage().get(id);
+  if (!data) throw new AppError(404, 'Файл не найден.');
+  return { mime: f.mime, data, cache: f.kind === 'avatar' ? 'public, max-age=31536000, immutable' : 'private, max-age=3600' };
 }
 
 export async function addJobPhoto(num: number, kind: unknown, file: unknown, viewer: Pick<SessionUser, 'id'> | null) {
@@ -123,19 +121,14 @@ export async function sweepFiles(): Promise<number> {
        (f.kind = 'photo' AND NOT EXISTS (SELECT 1 FROM photos p WHERE p.file_id = f.id)) OR
        (f.kind = 'avatar' AND NOT EXISTS (SELECT 1 FROM users u WHERE u.avatar_url = '/api/files/' || f.id)))
      RETURNING f.id`);
+  const st = getStorage();
   let n = 0;
-  for (const r of dead.rows) { await fs.rm(fileOf(r.id), { force: true }); n++; }
-  let names: string[];
-  try { names = (await fs.readdir(dir())).filter(x => UUID_RE.test(x)); } catch { return n; }
-  const dayAgo = Date.now() - 86400_000;
-  for (let i = 0; i < names.length; i += 1000) {
-    const part = names.slice(i, i + 1000);
+  for (const r of dead.rows) { await st.remove(r.id); n++; }
+  const old = (await st.listOld(86400_000)).filter(x => UUID_RE.test(x));
+  for (let i = 0; i < old.length; i += 1000) {
+    const part = old.slice(i, i + 1000);
     const known = new Set((await query<{ id: string }>('SELECT id::text FROM files WHERE id = ANY($1::uuid[])', [part])).rows.map(r => r.id));
-    for (const name of part) {
-      if (known.has(name.toLowerCase())) continue;
-      const st = await fs.stat(fileOf(name)).catch(() => null);
-      if (st && st.mtimeMs < dayAgo) { await fs.rm(fileOf(name), { force: true }); n++; }
-    }
+    for (const name of part) if (!known.has(name.toLowerCase())) { await st.remove(name); n++; }
   }
   return n;
 }

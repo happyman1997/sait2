@@ -36,5 +36,11 @@ export const config = {
   vapidPublic: () => env('VAPID_PUBLIC_KEY', ''),
   vapidPrivate: () => env('VAPID_PRIVATE_KEY', ''),
   vapidSubject: () => env('VAPID_SUBJECT', 'mailto:support@arena-raboty.ru'),
+  // Объектное хранилище S3 (если задан S3_BUCKET — файлы там, иначе в UPLOAD_DIR).
+  s3Bucket: () => env('S3_BUCKET', ''),
+  s3Endpoint: () => env('S3_ENDPOINT', 'https://storage.yandexcloud.net'),
+  s3Region: () => env('S3_REGION', 'ru-central1'),
+  s3AccessKey: () => env('S3_ACCESS_KEY'),
+  s3SecretKey: () => env('S3_SECRET_KEY'),
   offerVersion: '2026-09'
 };

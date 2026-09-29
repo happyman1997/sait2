@@ -154,7 +154,7 @@ export async function updateProfile(viewer: U | null, raw: unknown) {
     }
   });
   // Новый адрес — сразу письмо со ссылкой (лимит писем не должен ломать сохранение профиля).
-  if (email !== undefined) await sendEmailVerification(u).catch(() => {});
+  if (email !== undefined && email.toLowerCase() !== u.email.toLowerCase()) await sendEmailVerification(u).catch(() => {});
   return { ok: true };
 }
 

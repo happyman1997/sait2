@@ -14,7 +14,7 @@ export type LiveEvent =
 
 export type Me = {
   id: string; name: string; role: 'freelancer' | 'employer'; city: string; avatarUrl: string | null;
-  baseLat: number | null; baseLng: number | null; baseLabel: string;
+  baseLat: number | null; baseLng: number | null; baseLabel: string; isStaff: boolean;
 } | null;
 
 export type ReviewRequest = {
