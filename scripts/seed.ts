@@ -26,6 +26,10 @@ async function main() {
     if (e.rows[0]) {
       await db.query(`INSERT INTO employer_profiles (user_id, org_type, org_name, access, tools) VALUES ($1, 'частное лицо', 'Айгуль Тлеубаева', '{домофон,"встречу лично"}', 'инвентарь есть на объекте')`, [e.rows[0].id]);
       await db.query('INSERT INTO notification_settings (user_id) VALUES ($1)', [e.rows[0].id]);
+      await db.query(
+        `INSERT INTO objects (employer_id, name, address, lat, lng, area, contact, access, tools)
+         VALUES ($1, 'Двор на Гиляровского', 'Москва, ул. Гиляровского, 24', 55.7812, 37.6320, '320 м²', 'консьерж — вход со двора', '{домофон}', 'инвентарь есть на объекте')`,
+        [e.rows[0].id]);
     }
   });
   await seedJobs();

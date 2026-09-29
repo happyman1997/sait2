@@ -4,6 +4,7 @@ import { config } from './config';
 import { pool, query, type Db } from './db';
 import { publishMany } from './live';
 import { getMailer } from './mail';
+import { deliverPush } from './push';
 import { codeSender } from './sms';
 
 export type EventRow = {
@@ -43,8 +44,9 @@ async function enqueue(rows: { id: string; userId: string; text: string; num: nu
   await query(
     `WITH ev AS (
        SELECT * FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::bigint[], $5::bool[]) WITH ORDINALITY AS x(id, user_id, text, num, urgent, ord)
-     ), s AS (
-       SELECT ev.*, ns.sms, ns.email, ns.daily_cap, u.phone, u.email AS addr,
+     ), s0 AS (
+       SELECT ev.*, ns.sms, ns.email AND u.email_verified_at IS NOT NULL AS email, ns.daily_cap, u.phone, u.email AS addr,
+              ns.push AND EXISTS (SELECT 1 FROM push_subscriptions p WHERE p.user_id = ev.user_id) AS webpush,
               ns.quiet_on AND NOT (ev.urgent AND ns.urgent_bypass) AND CASE
                 WHEN ns.quiet_from = ns.quiet_to THEN false
                 WHEN ns.quiet_from < ns.quiet_to THEN $6 >= ns.quiet_from AND $6 < ns.quiet_to
@@ -54,7 +56,9 @@ async function enqueue(rows: { id: string; userId: string; text: string; num: nu
                 WHERE o.user_id = ev.user_id AND o.created_at > now() - interval '24 hours' AND o.status <> 'skipped')
                 + row_number() OVER (PARTITION BY ev.user_id ORDER BY ev.ord) AS nth
          FROM ev JOIN users u ON u.id = ev.user_id JOIN notification_settings ns ON ns.user_id = ev.user_id
-        WHERE ns.enabled AND (ns.sms OR ns.email)
+        WHERE ns.enabled
+     ), s AS (
+       SELECT * FROM s0 WHERE sms OR email OR webpush
      ), muted AS (
        UPDATE events SET muted = true WHERE id IN (SELECT id FROM s WHERE nth > daily_cap) RETURNING id
      ), ok AS (
@@ -66,7 +70,9 @@ async function enqueue(rows: { id: string; userId: string; text: string; num: nu
      UNION ALL
      SELECT user_id, id, 'email', addr, 'Арена Работы: ' || left(text, 80),
             text || CASE WHEN num IS NULL THEN '' ELSE E'\n' || $8 || '/?job=' || num END || E'\n\nНастроить уведомления: ' || $8 || '/profile', at
-       FROM ok WHERE email AND addr <> ''`,
+       FROM ok WHERE email AND addr <> ''
+     UNION ALL
+     SELECT user_id, id, 'push', 'push', CASE WHEN num IS NULL THEN '/' ELSE '/?job=' || num END, left(text, 300), at FROM ok WHERE webpush`,
     [rows.map(r => r.id), rows.map(r => r.userId), rows.map(r => r.text), rows.map(r => r.num), rows.map(r => r.urgent), hour, minute, url], db);
 }
 
@@ -95,15 +101,16 @@ export async function mailSupport(subject: string, body: string, db: Db = pool()
  * Если процесс упадёт посреди отправки, аренда истечёт и запись уйдёт повторно.
  */
 export async function processOutbox(limit = 50): Promise<{ sent: number; failed: number }> {
-  const due = await query<{ id: string; channel: 'sms' | 'email'; to_addr: string; subject: string | null; body: string; attempts: number }>(
+  const due = await query<{ id: string; user_id: string | null; channel: 'sms' | 'email' | 'push'; to_addr: string; subject: string | null; body: string; attempts: number }>(
     `UPDATE notification_outbox o SET next_try_at = now() + interval '10 minutes'
       WHERE o.id IN (SELECT id FROM notification_outbox WHERE status = 'pending' AND next_try_at <= now()
                       ORDER BY next_try_at LIMIT $1 FOR UPDATE SKIP LOCKED)
-      RETURNING o.id, o.channel, o.to_addr, o.subject, o.body, o.attempts`, [limit]);
+      RETURNING o.id, o.user_id, o.channel, o.to_addr, o.subject, o.body, o.attempts`, [limit]);
   let sent = 0, failed = 0;
   for (const m of due.rows) {
     try {
       if (m.channel === 'sms') await codeSender().sendText(m.to_addr, m.body);
+      else if (m.channel === 'push') await deliverPush(m.user_id!, { title: 'Арена Работы', body: m.body, url: m.subject || '/' });
       else await getMailer().send(m.to_addr, m.subject || 'Арена Работы', m.body);
       await query(`UPDATE notification_outbox SET status = 'sent', sent_at = now(), attempts = attempts + 1, error = NULL WHERE id = $1`, [m.id]);
       sent++;

@@ -7,6 +7,7 @@ import { one, query, tx } from './db';
 import { AppError, ModerationError } from './errors';
 import { geoSearch } from './geo';
 import { limitOrThrow } from './rate-limit';
+import { sendEmailVerification } from './verify';
 import { shortName } from './jobs';
 import type { SessionUser } from './session';
 
@@ -26,8 +27,9 @@ const list = (v: unknown, maxItems: number, maxLen: number) =>
 export async function getProfile(viewer: U | null) {
   const v = need(viewer);
   // Свежая строка: профиль читают сразу после правки, а viewer — снимок на начало запроса.
-  const u = (await one<U>(
-    `SELECT id, role, login, phone, email, name, city, base_lat, base_lng, base_label, avatar_url, status, created_at, $2::uuid AS session_id
+  const u = (await one<U & { email_verified_at: Date | null }>(
+    `SELECT id, role, login, phone, email, name, city, base_lat, base_lng, base_label, avatar_url, status, created_at, $2::uuid AS session_id,
+            email_verified_at
        FROM users WHERE id = $1`, [v.id, v.session_id]))!;
   const emp = u.role === 'employer';
   const [profile, stats, history, marks, reviews, settings] = await Promise.all([
@@ -61,7 +63,7 @@ export async function getProfile(viewer: U | null) {
     complaint: 'Жалоба подтверждена', demoted: 'Понижение в выдаче', blocked: 'Блокировка'
   };
   return {
-    user: { ...publicUser(u), baseLabel: u.base_label || u.city },
+    user: { ...publicUser(u), baseLabel: u.base_label || u.city, emailVerified: !!u.email_verified_at },
     profile,
     stats: { done: stats!.done, rating: stats!.rating == null ? null : Math.round(stats!.rating * 10) / 10, reviews: stats!.reviews, jobs: stats!.jobs, noShows: stats!.no_shows },
     inn: stats!.inn,
@@ -132,7 +134,9 @@ export async function updateProfile(viewer: U | null, raw: unknown) {
       if (taken && taken.id !== u.id) throw new AppError(409, 'Этот логин уже занят — выберите другой.', 'login');
     }
     await query(
-      `UPDATE users SET name = coalesce($2, name), login = coalesce($3, login), email = coalesce($4, email), updated_at = now() WHERE id = $1`,
+      `UPDATE users SET name = coalesce($2, name), login = coalesce($3, login), email = coalesce($4, email), updated_at = now(),
+              email_verified_at = CASE WHEN $4::text IS NOT NULL AND lower($4) <> lower(email) THEN NULL ELSE email_verified_at END
+        WHERE id = $1`,
       [u.id, name ?? null, login ?? null, email ?? null], db);
     if (fp) {
       await query(
@@ -149,6 +153,8 @@ export async function updateProfile(viewer: U | null, raw: unknown) {
         [u.id, ep.orgType ?? null, ep.orgName ?? null, ep.inn ?? null, ep.objectKind ?? null, ep.access ?? null, ep.tools ?? null], db);
     }
   });
+  // Новый адрес — сразу письмо со ссылкой (лимит писем не должен ломать сохранение профиля).
+  if (email !== undefined) await sendEmailVerification(u).catch(() => {});
   return { ok: true };
 }
 

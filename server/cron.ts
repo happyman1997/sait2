@@ -4,6 +4,7 @@
 import { pool } from './db';
 import { processOutbox } from './events';
 import { sweepFiles } from './files';
+import { recheckNpd } from './verify';
 import { autoAcceptDue } from './shifts';
 
 const LOCK_KEY = 4242_0001;
@@ -24,10 +25,12 @@ export async function runDueTasks(): Promise<{ skipped: boolean; autoAccepted: n
         `DELETE FROM daily_stats WHERE day < current_date - 30`,
         `DELETE FROM notification_outbox WHERE status <> 'pending' AND created_at < now() - interval '30 days'`,
         // Журнал хранится полгода — дольше не нужен ни пользователю, ни для разборов.
-        `DELETE FROM events WHERE created_at < now() - interval '180 days'`
+        `DELETE FROM events WHERE created_at < now() - interval '180 days'`,
+        `DELETE FROM email_verifications WHERE expires_at < now() - interval '7 days'`
       ]) cleaned += (await c.query(sql)).rowCount || 0;
       cleaned += await sweepFiles().catch(e => { console.error('[files]', (e as Error).message); return 0; });
       const { sent } = await processOutbox();
+      await recheckNpd().catch(e => console.error('[npd]', (e as Error).message));
       return { skipped: false, autoAccepted, cleaned, sent };
     } finally {
       await c.query('SELECT pg_advisory_unlock($1)', [LOCK_KEY]);

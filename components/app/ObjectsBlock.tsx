@@ -1,0 +1,124 @@
+'use client';
+
+// «Мои объекты» (как в прототипе): список адресов работодателя с кнопками «Создать заказ» и «Карточка»,
+// карточка объекта — название, адрес, объём, кто встречает, доступ, инвентарь и смены по объекту.
+import { useEffect, useState } from 'react';
+import { ACCESS, TOOLS } from '@/lib/catalog';
+import { api, ApiError } from '@/lib/api';
+import { css } from '@/lib/css';
+import { dateLabel, jobNum } from '@/lib/jobs';
+import { showModeration } from '@/components/ModerationGuard';
+import { useFlash } from '@/components/Toast';
+import { Chip, Corners, FIELD_ERR, LABEL, MUTED } from './ui';
+
+export type ObjectCard = {
+  id: string; name: string; address: string; lat: number; lng: number; area: string; contact: string;
+  access: string[]; tools: string; shifts: number; lastDate: string | null;
+};
+
+const STATUS: Record<string, string> = { open: 'идёт набор', staffed: 'набрано', reported: 'сдана', accepted: 'принята', cancelled: 'отменена' };
+
+export function ObjectsList({ objects, onMark, onEdit }: { objects: ObjectCard[]; onMark: (o: ObjectCard) => void; onEdit: (o: ObjectCard) => void }) {
+  return (
+    <div className="blueprint" style={css('margin-top: 20px; padding: 13px 12px')}>
+      <Corners />
+      <div style={css(LABEL)}>Мои объекты</div>
+      {!objects.length && (
+        <div style={css('font-size: 13px; line-height: 1.45; margin-top: 8px; ' + MUTED)}>
+          Объектов пока нет. В форме заказа нажмите «Сохранить адрес как объект» — дальше заказ с этого адреса создаётся в один клик.
+        </div>
+      )}
+      <div style={css('display: grid; gap: 6px; margin-top: 9px')}>
+        {objects.map(o => (
+          <div key={o.id} style={css('border: 1px solid var(--color-divider); padding: 8px 10px')}>
+            <div style={css('font-family: var(--font-heading); font-size: 14px; text-transform: uppercase; letter-spacing: .02em')}>{o.name}</div>
+            <div style={css('font-size: 12.5px; ' + MUTED)}>{o.address + (o.area ? ' · ' + o.area : '')}</div>
+            <div style={css('font-size: 12.5px; margin-top: 3px; ' + MUTED)}>
+              {(o.access.length ? o.access.join(', ') : 'доступ не указан') + ' · ' + (o.tools || 'инвентарь не указан') +
+                (o.shifts ? ' · смен: ' + o.shifts : '')}
+            </div>
+            <div style={css('display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap')}>
+              <button className="btn btn-secondary" onClick={() => onMark(o)} style={css('height: 32px; font-size: 12.5px; padding: 0 12px')}>Создать заказ</button>
+              <button className="btn btn-ghost" onClick={() => onEdit(o)} style={css('height: 32px; font-size: 12.5px; padding: 0 12px')}>Карточка</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {objects.length > 0 && <div style={css('font-size: 12.5px; line-height: 1.4; margin-top: 8px; ' + MUTED)}>Заказ с объекта подставляет адрес, объём, доступ и инвентарь — форму заново не заполняете.</div>}
+    </div>
+  );
+}
+
+export function ObjectCardPanel({ object, onClose, onSaved, onDeleted, onOpenJob }: {
+  object: ObjectCard; onClose: () => void; onSaved: (o: ObjectCard) => void; onDeleted: (id: string) => void; onOpenJob: (num: number) => void;
+}) {
+  const flash = useFlash();
+  const [d, setD] = useState(object);
+  const [err, setErr] = useState<{ field?: string; message: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [shifts, setShifts] = useState<{ num: number; title: string; date: string; status: string; hired: number }[] | null>(null);
+
+  useEffect(() => {
+    api<{ shifts: typeof shifts }>('/api/me/objects/' + object.id + '/shifts').then(r => setShifts(r.shifts)).catch(() => setShifts([]));
+  }, [object.id]);
+
+  const save = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const r = await api<{ object: ObjectCard }>('/api/me/objects/' + object.id,
+        { name: d.name, address: d.address, area: d.area, contact: d.contact, access: d.access, tools: d.tools }, 'PATCH');
+      flash('Объект «' + r.object.name + '» сохранён');
+      onSaved(r.object);
+    } catch (e) {
+      if (e instanceof ApiError && e.body.moderation) showModeration(e.body.moderation.label, e.body.moderation.category);
+      setErr(e instanceof ApiError ? { field: e.field, message: e.message } : { message: 'Не удалось сохранить' });
+    } finally { setBusy(false); }
+  };
+  const remove = async () => {
+    if (!window.confirm('Удалить объект «' + object.name + '»? Заказы с него останутся.')) return;
+    try { await api('/api/me/objects/' + object.id, null, 'DELETE'); flash('Объект удалён'); onDeleted(object.id); }
+    catch (e) { flash(e instanceof ApiError ? e.message : 'Не удалось удалить'); }
+  };
+  const field = (k: 'name' | 'address' | 'area' | 'contact', label: string, ph: string) => (
+    <div className="field" style={css('margin-top: 10px')}>
+      <label htmlFor={'obj-' + k}>{label}</label>
+      <input id={'obj-' + k} className="input" value={d[k]} onChange={e => setD({ ...d, [k]: e.target.value })} placeholder={ph} />
+      {err?.field === k && <div role="alert" style={css(FIELD_ERR)}>{err.message}</div>}
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={css('display: flex; justify-content: space-between; align-items: baseline; gap: 10px')}>
+        <div style={css('font-family: var(--font-heading); font-size: 21px; text-transform: uppercase; letter-spacing: .02em')}>Карточка объекта</div>
+        <button className="btn btn-ghost" onClick={onClose} style={css('height: 30px; font-size: 13px; flex: none')}>Закрыть</button>
+      </div>
+      {field('name', 'Название', 'Двор на Гиляровского')}
+      {field('address', 'Адрес', 'ул. Гиляровского, 24')}
+      {field('area', 'Объём', '320 м²')}
+      {field('contact', 'Кто встречает', 'консьерж — вход со двора')}
+      <div style={css(LABEL + '; margin-top: 14px; margin-bottom: 7px')}>Доступ</div>
+      <div style={css('display: flex; flex-wrap: wrap; gap: 6px')}>
+        {ACCESS.map(a => <Chip key={a} active={d.access.includes(a)} onClick={() => setD({ ...d, access: d.access.includes(a) ? d.access.filter(x => x !== a) : [...d.access, a] })}>{a}</Chip>)}
+      </div>
+      <div style={css(LABEL + '; margin-top: 14px; margin-bottom: 7px')}>Инвентарь</div>
+      <div style={css('display: flex; flex-wrap: wrap; gap: 6px')}>
+        {TOOLS.map(t => <Chip key={t} active={d.tools === t} onClick={() => setD({ ...d, tools: d.tools === t ? '' : t })}>{t}</Chip>)}
+      </div>
+      <div style={css(LABEL + '; margin-top: 16px; margin-bottom: 7px')}>Смены по объекту</div>
+      {shifts === null && <div style={css('font-size: 13px; ' + MUTED)}>Загружаем…</div>}
+      {shifts?.length === 0 && <div style={css('font-size: 13px; ' + MUTED)}>Смен по этому объекту пока не было.</div>}
+      <div style={css('display: grid; gap: 5px')}>
+        {shifts?.map(s => (
+          <button key={s.num} onClick={() => onOpenJob(s.num)} style={css('text-align: left; cursor: pointer; background: transparent; border: 1px solid var(--color-divider); padding: 7px 9px; font-family: var(--font-body); color: inherit')}>
+            <span style={css('display: block; font-family: var(--font-heading); font-size: 14px; text-transform: uppercase; letter-spacing: .02em')}>{jobNum(s.num) + ' · ' + s.title}</span>
+            <span style={css('display: block; font-size: 12.5px; ' + MUTED)}>{dateLabel(s.date) + ' · ' + (STATUS[s.status] || s.status) + (s.hired ? ' · нанято ' + s.hired : '')}</span>
+          </button>
+        ))}
+      </div>
+      {err && !['name', 'address', 'area', 'contact'].includes(err.field || '') && <div role="alert" style={css(FIELD_ERR)}>{err.message}</div>}
+      <button className="btn btn-primary btn-block" onClick={save} disabled={busy} style={css('margin-top: 16px; height: 42px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Сохранить объект</button>
+      <button className="btn btn-ghost btn-block" onClick={remove} style={css('margin-top: 8px; height: 36px; font-size: 13px')}>Удалить объект</button>
+    </div>
+  );
+}

@@ -394,9 +394,13 @@ export async function changePassword(userId: string, raw: unknown, keepSessionId
 
 export async function loadProfile(userId: string, role: Role) {
   if (role === 'freelancer') {
-    const r = await one<{ skills: string[]; custom_skills: string[]; gear: string[]; custom_gear: string[]; own_car: boolean; work_cities: string[] }>(
-      'SELECT skills, custom_skills, gear, custom_gear, own_car, work_cities FROM freelancer_profiles WHERE user_id = $1', [userId]);
-    return r && { skills: r.skills, customSkills: r.custom_skills, gear: r.gear, customGear: r.custom_gear, ownCar: r.own_car, workCities: r.work_cities };
+    const r = await one<{ skills: string[]; custom_skills: string[]; gear: string[]; custom_gear: string[]; own_car: boolean; work_cities: string[];
+      inn: string | null; npd_status: 'ok' | 'not_found' | null; npd_checked_at: Date | null }>(
+      'SELECT skills, custom_skills, gear, custom_gear, own_car, work_cities, inn, npd_status, npd_checked_at FROM freelancer_profiles WHERE user_id = $1', [userId]);
+    return r && {
+      skills: r.skills, customSkills: r.custom_skills, gear: r.gear, customGear: r.custom_gear, ownCar: r.own_car, workCities: r.work_cities,
+      npd: { inn: r.inn, status: r.npd_status, checkedAt: r.npd_checked_at ? r.npd_checked_at.toISOString() : null }
+    };
   }
   const r = await one<Record<string, unknown>>(
     `SELECT org_type, org_name, object_kind, object_other, access, tools, meet_name, meet_phone, pass_mode, pass_whom, safety_req

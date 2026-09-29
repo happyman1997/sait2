@@ -193,6 +193,7 @@ describe('журнал и доставка', () => {
 
   it('e-mail и повтор при сбое шлюза', async () => {
     await loud(fl, { email: true });
+    await query('UPDATE users SET email_verified_at = now() WHERE id = $1', [fl.id]);
     smsFail = true;
     await jobs.createJob(form(), emp, today);
     const r = await ev.processOutbox();

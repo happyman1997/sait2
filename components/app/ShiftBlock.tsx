@@ -34,6 +34,7 @@ export function ApplicantsBlock({ job, act, onChat, busy }: { job: JobDetail; ac
               <div style={css('display: flex; align-items: center; gap: 6px; flex-wrap: wrap')}>
                 <span style={css('font-family: var(--font-heading); font-weight: 600; font-size: 16px; text-transform: uppercase; letter-spacing: .02em')}>{a.name}</span>
                 {a.status === 'hired' && <span className="tag tag-accent" style={{ whiteSpace: 'nowrap' }}>{a.isLead ? 'старший' : 'нанят'}</span>}
+                {a.npd && <span className="tag tag-outline" title="Статус НПД подтверждён ФНС" style={{ whiteSpace: 'nowrap' }}>самозанятый ✓</span>}
               </div>
               <div style={css('font-size: 13px; ' + MUTED)}>{a.rating != null ? 'рейтинг ' + a.rating.toFixed(1) : 'пока без оценок'} · {a.done} смен{a.noShows ? ' · невыходов ' + a.noShows : ''}</div>
               <div style={css('font-size: 13px; ' + MUTED)}>{a.gear}</div>

@@ -13,7 +13,7 @@ import { Corners } from './ui';
 type Person = {
   id: string; name: string; initials: string; status: 'sent' | 'hired' | 'rejected' | 'withdrawn'; isLead: boolean; appliedAt: string;
   rating: number | null; reviews: number; done: number; noShows: number; gear: string[]; ownCar: boolean; cities: string[]; skills: string[];
-  reqConfirmed: boolean; lateMark: boolean;
+  reqConfirmed: boolean; lateMark: boolean; npd: boolean;
 };
 type BoardJob = MyJob & { people: Person[] };
 
@@ -99,6 +99,7 @@ export function ApplicantsPage() {
                           <div style={css('display: flex; align-items: center; gap: 8px; flex-wrap: wrap')}>
                             <span style={css('font-family: var(--font-heading); font-weight: 600; font-size: 19px; text-transform: uppercase; letter-spacing: .02em')}>{p.name}</span>
                             <span className={p.status === 'hired' ? 'tag tag-accent' : 'tag tag-outline'}>{p.status === 'hired' ? (p.isLead ? 'старший' : 'нанят') : 'ждёт решения'}</span>
+                            {p.npd && <span className="tag tag-outline" title="Статус НПД подтверждён ФНС">самозанятый ✓</span>}
                             <span style={css('font-size: 13.5px; color: color-mix(in srgb, var(--color-text) 60%, transparent)')}>{ago(p.appliedAt)}</span>
                           </div>
                           <div style={css('display: flex; flex-wrap: wrap; gap: 0 14px; margin-top: 7px')}>

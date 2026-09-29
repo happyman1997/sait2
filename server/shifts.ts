@@ -546,6 +546,8 @@ export type ApplicantCard = {
   id: string; name: string; initials: string; status: AppStatus; isLead: boolean; appliedAt: string;
   rating: number | null; reviews: number; done: number; noShows: number; gear: string[]; ownCar: boolean; cities: string[]; skills: string[];
   reqConfirmed: boolean; lateMark: boolean;
+  /** ФНС подтвердила статус самозанятого (перепроверка раз в сутки). */
+  npd: boolean;
 };
 
 /** Вкладка «Отклики»: открытые заказы работодателя и люди по ним. */
@@ -558,13 +560,13 @@ export async function applicantsBoard(viewer: Viewer) {
   const rows = await query<{
     num: string; id: string; name: string; status: AppStatus; created_at: Date; is_lead: boolean | null; rating: number | null; reviews: number;
     done: number; no_show_count: number; gear: string[] | null; own_car: boolean | null; work_cities: string[] | null; skills: string[] | null;
-    custom_skills: string[] | null; req_confirmed: boolean; late: boolean;
+    custom_skills: string[] | null; req_confirmed: boolean; late: boolean; npd: boolean | null;
   }>(
     `SELECT j.num, a.id, u.name, a.status, a.created_at, h.is_lead, a.req_confirmed,
             (SELECT avg(rating)::float8 FROM reviews WHERE target_id = u.id) AS rating,
             (SELECT count(*) FROM reviews WHERE target_id = u.id)::int AS reviews,
             (SELECT count(*) FROM hires h2 JOIN acceptances ac ON ac.job_id = h2.job_id WHERE h2.freelancer_id = u.id)::int AS done,
-            u.no_show_count, fp.gear, fp.own_car, fp.work_cities, fp.skills, fp.custom_skills,
+            u.no_show_count, fp.gear, fp.own_car, fp.work_cities, fp.skills, fp.custom_skills, (fp.npd_status = 'ok' AND fp.npd_checked_at > now() - interval '3 days') AS npd,
             EXISTS (SELECT 1 FROM user_marks m WHERE m.user_id = u.id AND m.kind = 'late_withdrawal' AND m.until > now()) AS late
        FROM applications a JOIN jobs j ON j.id = a.job_id JOIN users u ON u.id = a.freelancer_id
        LEFT JOIN freelancer_profiles fp ON fp.user_id = u.id
@@ -581,7 +583,7 @@ export async function applicantsBoard(viewer: Viewer) {
       rating: a.rating == null ? null : Math.round(a.rating * 10) / 10, reviews: a.reviews, done: a.done, noShows: a.no_show_count,
       gear: (a.gear || []).filter(g => g !== 'Ничего нет'), ownCar: !!a.own_car, cities: a.work_cities || [],
       skills: [...(a.skills || []).map(s => labels.get(s) || s), ...(a.custom_skills || [])],
-      reqConfirmed: a.req_confirmed, lateMark: a.late
+      reqConfirmed: a.req_confirmed, lateMark: a.late, npd: !!a.npd
     });
     byNum.set(Number(a.num), list);
   }

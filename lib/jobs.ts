@@ -43,6 +43,7 @@ export type Applicant = {
   status: AppStatus;
   isLead: boolean;
   appliedAt: string;
+  npd: boolean;               // самозанятый, статус подтверждён ФНС
 };
 
 export type JobDetail = JobSummary & {
@@ -152,12 +153,14 @@ export type JobForm = {
   tools: string;
   meetName: string;
   meetPhone: string;
+  /** Объект работодателя, с которого создан заказ (история смен по адресу). */
+  objectId: string;
 };
 
 export const emptyJobForm = (): JobForm => ({
   lat: null, lng: null, address: '', district: '', type: '', typeOther: '', desc: '', volume: '', crew: '1', req: '',
   pay: '', unit: 'за заказ', payType: PAY_TYPES[0], dateISO: '', urgent: false, regular: false, repeat: '', repeatNote: '',
-  access: [], tools: '', meetName: '', meetPhone: ''
+  access: [], tools: '', meetName: '', meetPhone: '', objectId: ''
 });
 
 export const payNumber = (v: string | number) => parseInt(String(v).replace(/\D/g, ''), 10) || 0;

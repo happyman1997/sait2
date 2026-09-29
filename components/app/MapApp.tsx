@@ -20,6 +20,7 @@ import { JobFormPanel } from './JobFormPanel';
 import { JobListOverlay } from './JobListOverlay';
 import { useLive, useLiveEvent } from './Live';
 import { NAV_H } from './MobileShell';
+import { ObjectCardPanel, ObjectsList, type ObjectCard } from './ObjectsBlock';
 import { GuestGuide, StartSteps } from './RailSummary';
 import { Corners, LABEL } from './ui';
 
@@ -258,6 +259,42 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
     if (hit) { addrSynced.current = hit.label; setAddrNote('Метка на карте: ' + hit.label); }
   }, [isEmp, form]);
 
+  // ─── Мои объекты (работодатель) ───
+  const [objects, setObjects] = useState<ObjectCard[]>([]);
+  const [objEdit, setObjEdit] = useState<ObjectCard | null>(null);
+  const formOpen = !!form;
+  useEffect(() => {
+    if (!isEmp || formOpen) return;
+    api<{ objects: ObjectCard[] }>('/api/me/objects').then(r => setObjects(r.objects)).catch(() => {});
+  }, [isEmp, formOpen]);
+
+  /** Заказ с объекта: метка, адрес, объём, доступ, инвентарь и встречающий — из карточки. */
+  const fromObject = (o: ObjectCard) => {
+    setObjEdit(null);
+    placeAt({ lat: o.lat, lng: o.lng }, { lat: o.lat, lng: o.lng, label: o.address, sub: '', district: '' });
+    setFormState(f => (f ? {
+      ...f, objectId: o.id, volume: o.area, access: o.access.slice(), tools: o.tools, meetName: o.contact,
+      desc: f.desc || 'Объект «' + o.name + '»' + (o.area ? ', ' + o.area : '') + '.' + (o.contact ? ' На месте: ' + o.contact + '.' : '')
+    } : f));
+    mapRef.current?.flyTo(o.lat, o.lng, 14);
+  };
+
+  const saveAsObject = async () => {
+    if (!form || form.lat == null) return;
+    try {
+      const r = await api<{ object: ObjectCard }>('/api/me/objects', {
+        name: form.address.split(',').slice(-2).join(',').trim().slice(0, 80) || form.address.slice(0, 80), address: form.address, lat: form.lat, lng: form.lng,
+        area: form.volume, contact: form.meetName, access: form.access, tools: form.tools
+      });
+      setForm({ objectId: r.object.id });
+      setObjects(list => [r.object, ...list]);
+      flash('Объект «' + r.object.name + '» сохранён — название можно поменять в карточке');
+    } catch (e) {
+      if (e instanceof ApiError && e.body.moderation) showModeration(e.body.moderation.label, e.body.moderation.category);
+      else flash(e instanceof ApiError ? e.message : 'Не удалось сохранить объект');
+    }
+  };
+
   const onMapClick = useCallback((p: LatLng) => {
     if (!isEmp) return;
     // Геокодер не нашёл адрес — адресом станет то, что ввёл человек.
@@ -383,7 +420,7 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
       lat: d.lat, lng: d.lng, address: d.address, district: d.district || '', type: d.typeId, typeOther: '', desc: d.description,
       volume: d.volume || '', crew: String(d.crew), req: d.requirement || '', pay: d.pay.toLocaleString('ru-RU'), unit: d.unit,
       payType: d.payType || '', dateISO: d.date, urgent: d.urgent, regular: !!d.repeat, repeat: d.repeat || '', repeatNote: d.repeatNote || '',
-      access: d.access, tools: d.tools || '', meetName: d.meetName || '', meetPhone: d.meetPhone || ''
+      access: d.access, tools: d.tools || '', meetName: d.meetName || '', meetPhone: d.meetPhone || '', objectId: ''
     });
     addrSynced.current = d.address;
     setEditing(d.num); setFormStep(1); setFormErrs({}); setFormError(''); setSelected(null);
@@ -550,6 +587,13 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
             </div>
           )}
 
+          {form && isEmp && !editing && !form.objectId && form.lat != null && form.address.trim() && (
+            <div style={css('display: flex; justify-content: flex-end; margin-bottom: 6px')}>
+              <button className="btn btn-ghost" onClick={saveAsObject} style={css('height: 28px; font-size: 12.5px; padding: 0 8px')}>Сохранить адрес как объект</button>
+            </div>
+          )}
+          {form?.objectId && <div style={css('font-size: 12.5px; margin-bottom: 6px; color: var(--color-accent-700)')}>{'Заказ с объекта «' + (objects.find(o => o.id === form.objectId)?.name || 'объект') + '» — попадёт в историю смен объекта'}</div>}
+
           {form && (
             <JobFormPanel form={form} setForm={setForm} step={formStep} goStep={goStep} errs={formErrs} formError={formError}
               onNext={formNext} onBack={() => { setFormStep(s => Math.max(1, s - 1)); setFormError(''); }} onClose={() => closeForm(true)}
@@ -565,11 +609,20 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
 
           {!form && selected && !showDetail && <div style={css('font-size: 14px; ' + 'color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>Загружаем заказ…</div>}
 
-          {!form && !selected && (!me ? <GuestGuide /> : (
-            <StartSteps isEmp={isEmp} addr={isEmp ? {
-              query: addrQuery, setQuery: v => { setAddrQuery(v); setAddrError(''); setAddrManual(false); }, busy: addrBusy,
-              note: addrError || 'Найденный адрес станет черновиком заказа. Можно просто кликнуть по карте.', error: !!addrError, onFind: findAddress
-            } : undefined} />
+          {!form && !selected && objEdit && (
+            <ObjectCardPanel key={objEdit.id} object={objEdit} onClose={() => setObjEdit(null)} onOpenJob={n => { setObjEdit(null); select(n); }}
+              onSaved={o => { setObjects(list => list.map(x => (x.id === o.id ? o : x))); setObjEdit(null); }}
+              onDeleted={id => { setObjects(list => list.filter(x => x.id !== id)); setObjEdit(null); }} />
+          )}
+
+          {!form && !selected && !objEdit && (!me ? <GuestGuide /> : (
+            <>
+              <StartSteps isEmp={isEmp} addr={isEmp ? {
+                query: addrQuery, setQuery: v => { setAddrQuery(v); setAddrError(''); setAddrManual(false); }, busy: addrBusy,
+                note: addrError || 'Найденный адрес станет черновиком заказа. Можно просто кликнуть по карте.', error: !!addrError, onFind: findAddress
+              } : undefined} />
+              {isEmp && <ObjectsList objects={objects} onMark={fromObject} onEdit={o => { setObjEdit(o); mapRef.current?.flyTo(o.lat, o.lng, 14); }} />}
+            </>
           ))}
         </div>
 

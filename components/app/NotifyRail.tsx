@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { css } from '@/lib/css';
 import { localISO, money, type JobSummary } from '@/lib/jobs';
+import { disablePush, enablePush, pushState, type PushState } from '@/lib/push-client';
 import { useFlash } from '@/components/Toast';
 import { useLive, useLiveEvent } from './Live';
 import { Corners, LABEL } from './ui';
@@ -47,6 +48,8 @@ export function NotifyRail() {
   const [baseQ, setBaseQ] = useState('');
   const [baseErr, setBaseErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(true);
+  const [push, setPush] = useState<PushState | null>(null);
   const isFree = me?.role === 'freelancer';
 
   const loadEvents = useCallback(async () => {
@@ -59,7 +62,8 @@ export function NotifyRail() {
 
   useEffect(() => {
     if (rail === 'journal') loadEvents();
-    if (rail === 'settings' && !settings) api<{ settings: Settings }>('/api/me/settings').then(r => setSettings(r.settings)).catch(() => {});
+    if (rail === 'settings' && !settings) api<{ settings: Settings; emailVerified: boolean }>('/api/me/settings').then(r => { setSettings(r.settings); setEmailVerified(r.emailVerified); }).catch(() => {});
+    if (rail === 'settings') pushState().then(setPush).catch(() => setPush('unsupported'));
   }, [rail, loadEvents, settings]);
 
   useLiveEvent(e => { if (e.t === 'event' && rail === 'journal') loadEvents(); });
@@ -182,13 +186,27 @@ export function NotifyRail() {
               {s && s.enabled && (
                 <div>
                   <div style={css('display: grid; gap: 6px; margin-top: 10px')}>
-                    {([['push', 'Всплывающие в открытой вкладке'], ['sms', 'SMS'], ['email', 'E-mail']] as const).map(([k, label]) => (
+                    {([['push', 'Пуш: в открытой вкладке и в браузере'], ['sms', 'SMS'], ['email', emailVerified ? 'E-mail' : 'E-mail (сначала подтвердите адрес в профиле)']] as const).map(([k, label]) => (
                       <label key={k} style={css('display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer')}>
                         <input type="checkbox" checked={s[k]} onChange={e => save({ [k]: e.target.checked })} style={css('accent-color: var(--color-accent); width: 14px; height: 14px')} />
                         <span>{label}</span>
                       </label>
                     ))}
                   </div>
+
+                  {s.push && push && push !== 'unsupported' && (
+                    <div style={css('margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap')}>
+                      {push === 'on' && <span className="tag tag-accent">пуш на этом устройстве включён</span>}
+                      {push === 'denied' && <span style={css(NOTE)}>Браузер запретил уведомления для сайта — разрешите их в настройках браузера.</span>}
+                      {push === 'off-server' && <span style={css(NOTE)}>Пуш в браузер на сервере пока не настроен — уведомления приходят в открытой вкладке.</span>}
+                      {(push === 'on' || push === 'off') && (
+                        <button className="btn btn-secondary" disabled={busy} style={css('height: 32px; font-size: 12.5px')} onClick={async () => {
+                          setBusy(true);
+                          try { setPush(push === 'on' ? await disablePush() : await enablePush()); } catch { flash('Не удалось включить пуш — попробуйте ещё раз'); } finally { setBusy(false); }
+                        }}>{push === 'on' ? 'Выключить на этом устройстве' : 'Включить пуш на этом устройстве'}</button>
+                      )}
+                    </div>
+                  )}
 
                   {isFree && (
                     <div>

@@ -188,8 +188,8 @@ export async function getJob(num: number, viewer: Viewer, db: Db = pool()): Prom
 
   let applicantList: Applicant[] | null = null;
   if (owner) {
-    const apps = await query<{ id: string; freelancer_id: string; name: string; status: AppStatus; created_at: Date; no_show_count: number; gear: string[] | null; rating: number | null; done: number; is_lead: boolean | null }>(
-      `SELECT a.id, a.freelancer_id, u.name, a.status, a.created_at, u.no_show_count, fp.gear,
+    const apps = await query<{ id: string; freelancer_id: string; name: string; status: AppStatus; created_at: Date; no_show_count: number; gear: string[] | null; rating: number | null; done: number; is_lead: boolean | null; npd: boolean | null }>(
+      `SELECT a.id, a.freelancer_id, u.name, a.status, a.created_at, u.no_show_count, fp.gear, (fp.npd_status = 'ok' AND fp.npd_checked_at > now() - interval '3 days') AS npd,
               (SELECT avg(rating)::float8 FROM reviews WHERE target_id = u.id) AS rating,
               (SELECT count(*) FROM hires h JOIN acceptances ac ON ac.job_id = h.job_id WHERE h.freelancer_id = u.id)::int AS done,
               (SELECT is_lead FROM hires h WHERE h.job_id = a.job_id AND h.freelancer_id = u.id) AS is_lead
@@ -202,7 +202,7 @@ export async function getJob(num: number, viewer: Viewer, db: Db = pool()): Prom
     applicantList = apps.rows.map(a => ({
       id: a.id, thread: a.freelancer_id, name: shortName(a.name), initials: initialsOf(a.name), rating: a.rating == null ? null : Math.round(a.rating * 10) / 10, done: a.done,
       noShows: a.no_show_count, gear: (a.gear || []).filter(g => g !== 'Ничего нет').slice(0, 2).join(', ') || 'свой инвентарь не указан',
-      status: a.status, isLead: !!a.is_lead, appliedAt: a.created_at.toISOString()
+      status: a.status, isLead: !!a.is_lead, appliedAt: a.created_at.toISOString(), npd: !!a.npd
     }));
   }
 
@@ -313,6 +313,7 @@ export function sanitizeJobForm(raw: unknown): JobForm {
   f.tools = s(r.tools, 60);
   f.meetName = s(r.meetName, 80);
   f.meetPhone = s(r.meetPhone, 32);
+  f.objectId = typeof r.objectId === 'string' && /^[0-9a-f-]{36}$/i.test(r.objectId) ? r.objectId : '';
   return f;
 }
 
@@ -385,13 +386,14 @@ export async function createJob(raw: unknown, viewer: Viewer, todayRaw: unknown)
     const crew = parseInt(f.crew, 10) === CREW_ANY ? CREW_ANY : Math.min(12, Math.max(1, parseInt(f.crew, 10) || 1));
     const row = await one<{ id: string; num: string }>(
       `INSERT INTO jobs (employer_id, type_id, title, description, address, lat, lng, district, pay, unit, pay_type, date, volume,
-                         crew, urgent, repeat, repeat_note, requirement, access, tools, meet_name, meet_phone)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+                         crew, urgent, repeat, repeat_note, requirement, access, tools, meet_name, meet_phone, object_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22,
+               (SELECT id FROM objects WHERE id = $23::uuid AND employer_id = $1))
        RETURNING id, num`,
       [viewer.id, type.id, autoTitle(type.label, f.address), f.desc, f.address, f.lat, f.lng, f.district || null,
         payNumber(f.pay), f.unit, f.payType || null, f.dateISO, f.volume || null, crew, f.urgent || ahead <= 1,
         f.regular ? f.repeat : null, f.regular ? f.repeatNote || null : null, f.req || null, f.access, f.tools,
-        f.meetName || null, f.meetPhone || null],
+        f.meetName || null, f.meetPhone || null, f.objectId || null],
       db
     );
     await addEvents([{ userId: viewer.id, kind: 'job', text: 'Заказ опубликован — № ' + jobNum(Number(row!.num)), jobId: row!.id, num: Number(row!.num), silent: true }], db);

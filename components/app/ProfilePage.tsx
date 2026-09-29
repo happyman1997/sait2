@@ -16,10 +16,11 @@ import { useLive } from './Live';
 import { Chip, Corners, FIELD_ERR, LABEL, MUTED, initialsOf } from './ui';
 
 type Profile = {
-  user: { id: string; role: 'freelancer' | 'employer'; login: string; phone: string; email: string; name: string; city: string; avatarUrl: string | null; baseLabel: string };
+  user: { id: string; role: 'freelancer' | 'employer'; login: string; phone: string; email: string; name: string; city: string; avatarUrl: string | null; baseLabel: string; emailVerified: boolean };
   profile: {
     skills?: string[]; customSkills?: string[]; gear?: string[]; customGear?: string[]; ownCar?: boolean; workCities?: string[];
     orgType?: string; orgName?: string; objectKind?: string; objectOther?: string; access?: string[]; tools?: string;
+    npd?: { inn: string | null; status: 'ok' | 'not_found' | null; checkedAt: string | null };
   } | null;
   stats: { done: number; rating: number | null; reviews: number; jobs: number; noShows: number };
   inn: string | null;
@@ -62,6 +63,15 @@ export function ProfilePage() {
     api<Profile>('/api/me/profile').then(r => { setP(r); setLoadErr(''); }).catch(e => setLoadErr(e instanceof ApiError ? e.message : 'Не удалось загрузить профиль'));
   }, []);
   useEffect(load, [load]);
+  // Возврат по ссылке из письма: /profile?email=ok|bad
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const r = url.searchParams.get('email');
+    if (!r) return;
+    flash(r === 'ok' ? 'E-mail подтверждён — уведомления на почту включены' : 'Ссылка устарела или адрес уже сменили — отправьте письмо ещё раз');
+    url.searchParams.delete('email');
+    window.history.replaceState(null, '', url);
+  }, [flash]);
 
   /** Сохранение части профиля; ответ — свежий профиль целиком. */
   const patch = async (body: Record<string, unknown>, ok?: string, key = 'patch') => {
@@ -108,9 +118,14 @@ export function ProfilePage() {
             <Contacts p={p} patch={patch} busy={busy} fieldErr={fieldErr} onPhone={load} />
 
             {isEmp ? <Organization p={p} patch={patch} busy={busy} fieldErr={fieldErr} /> : (
-              <Section title="Свой инвентарь" note="Отмеченное видят работодатели — это поднимает отклик выше.">
-                <GearEditor gear={fp.gear || []} customGear={fp.customGear || []} ownCar={!!fp.ownCar} patch={patch} fieldErr={fieldErr} />
-              </Section>
+              <>
+                <Section title="Свой инвентарь" note="Отмеченное видят работодатели — это поднимает отклик выше.">
+                  <GearEditor gear={fp.gear || []} customGear={fp.customGear || []} ownCar={!!fp.ownCar} patch={patch} fieldErr={fieldErr} />
+                </Section>
+                <Section title="Самозанятость" note="Статус НПД проверяется по ИНН в открытом сервисе ФНС — справка не нужна.">
+                  <NpdCheck npd={fp.npd} onDone={load} />
+                </Section>
+              </>
             )}
 
             <Section title="История смен">
@@ -357,6 +372,7 @@ function Contacts({ p, patch, busy, fieldErr, onPhone }: {
           <label htmlFor="pf-email">E-mail</label>
           <input id="pf-email" className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="для чеков и уведомлений" autoComplete="email" maxLength={200} />
           {fieldErr('email')}
+          {email.trim() === p.user.email && <EmailStatus verified={p.user.emailVerified} />}
         </div>
         <div className="field">
           <label>Город базы</label>
@@ -599,6 +615,61 @@ function GearEditor({ gear, customGear, ownCar, patch, fieldErr }: {
         <button className="btn btn-secondary" onClick={add} style={css('height: 40px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; padding: 0 14px; white-space: nowrap')}>Добавить</button>
       </div>
       {fieldErr('gear')}
+    </>
+  );
+}
+
+// ───────────────────────── E-mail и самозанятость ─────────────────────────
+
+function EmailStatus({ verified }: { verified: boolean }) {
+  const flash = useFlash();
+  const [sent, setSent] = useState(false);
+  if (verified) return <div style={css('font-size: 12.5px; margin-top: 5px; color: var(--color-accent-700)')}>✓ подтверждён</div>;
+  return (
+    <div style={css('font-size: 12.5px; line-height: 1.4; margin-top: 5px; ' + MUTED)}>
+      {sent ? 'Письмо отправлено — перейдите по ссылке из него. ' : 'Не подтверждён — письма об уведомлениях не приходят. '}
+      <button className="btn btn-ghost" style={css('height: 24px; font-size: 12.5px; padding: 0 4px')} onClick={async () => {
+        try { await api('/api/me/email/verify', {}); setSent(true); flash('Письмо со ссылкой отправлено'); }
+        catch (e) { flash(e instanceof ApiError ? e.message : 'Не удалось отправить письмо'); }
+      }}>{sent ? 'Отправить ещё раз' : 'Отправить письмо'}</button>
+    </div>
+  );
+}
+
+function NpdCheck({ npd, onDone }: { npd?: { inn: string | null; status: 'ok' | 'not_found' | null; checkedAt: string | null }; onDone: () => void }) {
+  const flash = useFlash();
+  const [inn, setInn] = useState(npd?.inn || '');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const check = async () => {
+    setBusy(true); setErr('');
+    try {
+      const r = await api<{ status: 'ok' | 'not_found' }>('/api/me/npd', { inn });
+      flash(r.status === 'ok' ? 'ФНС подтвердила статус самозанятого' : 'ФНС не нашла статус по этому ИНН');
+      onDone();
+    } catch (e) { setErr(e instanceof ApiError ? e.message : 'Проверка не прошла — попробуйте позже'); } finally { setBusy(false); }
+  };
+  const when = npd?.checkedAt ? new Date(npd.checkedAt).toLocaleDateString('ru-RU') : '';
+  return (
+    <>
+      <div style={css('display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end')}>
+        <div className="field" style={css('flex: 1; min-width: 200px; max-width: 320px')}>
+          <label htmlFor="npd-inn">ИНН самозанятого</label>
+          <input id="npd-inn" className="input" inputMode="numeric" value={inn} onChange={e => setInn(e.target.value.replace(/\D/g, '').slice(0, 12))} placeholder="770712345678" />
+        </div>
+        <button className="btn btn-secondary" onClick={check} disabled={busy || inn.length !== 12} style={css(BTN)}>{busy ? 'Запрос в ФНС…' : 'Проверить'}</button>
+      </div>
+      {err && <div role="alert" style={css(FIELD_ERR)}>{err}</div>}
+      <div style={css('display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; align-items: baseline')}>
+        <span className={'tag ' + (npd?.status === 'ok' ? 'tag-accent' : 'tag-outline')}>
+          {npd?.status === 'ok' ? 'Самозанятый · проверено ' + when : npd?.status === 'not_found' ? 'Статус не найден · ' + when : 'Статус не проверен'}
+        </span>
+        <span style={css('font-size: 13px; line-height: 1.45; ' + MUTED)}>
+          {npd?.status === 'ok'
+            ? 'Работодатели видят бейдж в откликах. ФНС перепроверяет статус раз в сутки. Чеки НПД выставляете сами в «Мой налог».'
+            : 'Бейдж доверия в откликах. Встать на учёт можно в приложении «Мой налог»; платформа в расчётах не участвует.'}
+        </span>
+      </div>
     </>
   );
 }

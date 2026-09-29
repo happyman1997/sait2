@@ -32,5 +32,9 @@ export const config = {
   timeZone: () => env('APP_TIME_ZONE', 'Europe/Moscow'),
   publicUrl: () => env('PUBLIC_URL', 'http://localhost:3000'),
   uploadDir: () => env('UPLOAD_DIR', isProd ? undefined : './data/uploads'),
+  // Веб-пуш: ключи VAPID (npx web-push generate-vapid-keys). Без них пуш в браузер выключен.
+  vapidPublic: () => env('VAPID_PUBLIC_KEY', ''),
+  vapidPrivate: () => env('VAPID_PRIVATE_KEY', ''),
+  vapidSubject: () => env('VAPID_SUBJECT', 'mailto:support@arena-raboty.ru'),
   offerVersion: '2026-09'
 };
