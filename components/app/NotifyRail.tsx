@@ -129,9 +129,9 @@ export function NotifyRail() {
 
   return (
     <div style={{ display: 'contents' }}>
-      <div onClick={() => setRail(null)} style={css('position: fixed; inset: 0; z-index: 80; background: rgba(24, 30, 36, .45)')} />
+      <div onClick={() => setRail(null)} style={css('position: fixed; inset: 0; z-index: 90; background: rgba(24, 30, 36, .45)')} />
       <aside role="dialog" aria-label={rail === 'settings' ? 'Настройки' : 'Журнал'}
-        style={css('position: fixed; top: 0; right: 0; bottom: 0; z-index: 81; width: min(440px, 94vw); box-sizing: border-box; overflow: auto; padding: 22px 22px 34px; background: var(--color-neutral-100); border-left: 1px solid var(--color-divider); box-shadow: -20px 0 60px rgba(20, 26, 32, .28)')}>
+        style={css('position: fixed; top: 0; right: 0; bottom: 0; z-index: 91; width: min(440px, 94vw); box-sizing: border-box; overflow: auto; padding: 22px 22px 34px; background: var(--color-neutral-100); border-left: 1px solid var(--color-divider); box-shadow: -20px 0 60px rgba(20, 26, 32, .28)')}>
         <div style={css('display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 4px')}>
           <div style={css('font-family: var(--font-heading); font-size: 21px; text-transform: uppercase; letter-spacing: .02em')}>{rail === 'settings' ? 'Настройки' : 'Журнал'}</div>
           <button className="btn btn-ghost" onClick={() => setRail(null)} style={css('height: 30px; font-size: 13px; flex: none')}>Закрыть</button>
@@ -252,6 +252,15 @@ export function NotifyRail() {
                   </div>
                 </div>
               )}
+            </div>
+
+            <div className="blueprint" style={css('margin-top: 14px; padding: 13px 12px')}>
+              <Corners />
+              <div style={css('display: flex; justify-content: space-between; align-items: center; gap: 8px')}>
+                <div style={css(LABEL)}>Рабочий режим</div>
+                <Switch on={live.workMode} onClick={() => live.setWorkMode(!live.workMode)} title={live.workMode ? 'Выключить рабочий режим' : 'Включить рабочий режим'} />
+              </div>
+              <div style={css(NOTE + '; margin-top: 7px')}>Крупные кнопки и строки — удобно в перчатках и на ходу. Реклама в рабочем режиме не показывается. Настройка хранится на этом устройстве.</div>
             </div>
 
             <div className="blueprint" style={css('margin-top: 14px; padding: 13px 12px')}>

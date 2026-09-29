@@ -57,10 +57,24 @@ export async function subscribe(userId: string, sink: Sink): Promise<() => void>
 }
 
 /** Отправить событие пользователям (в транзакции — после COMMIT). */
-export async function publish(userIds: (string | null | undefined)[], e: LiveEvent, db: Db = pool()) {
+const CHUNK = 100; // получателей в одном NOTIFY: лимит полезной нагрузки — 8000 байт
+
+function payloads(userIds: (string | null | undefined)[], e: LiveEvent): string[] {
   const u = [...new Set(userIds.filter((x): x is string => !!x))];
-  if (!u.length) return;
-  // Лимит NOTIFY — 8000 байт; события короткие, текст журнала обрезаем.
+  // События короткие, текст журнала обрезаем.
   const ev = e.t === 'event' ? { ...e, text: e.text.slice(0, 300) } : e;
-  await db.query('SELECT pg_notify($1, $2)', [LIVE_CHANNEL, JSON.stringify({ u: u.slice(0, 100), e: ev })]);
+  const out: string[] = [];
+  for (let i = 0; i < u.length; i += CHUNK) out.push(JSON.stringify({ u: u.slice(i, i + CHUNK), e: ev }));
+  return out;
+}
+
+export async function publish(userIds: (string | null | undefined)[], e: LiveEvent, db: Db = pool()) {
+  await publishMany([{ userIds, e }], db);
+}
+
+/** Несколько уведомлений одним запросом (NOTIFY доставляется после коммита транзакции). */
+export async function publishMany(items: { userIds: (string | null | undefined)[]; e: LiveEvent }[], db: Db = pool()) {
+  const all = items.flatMap(i => payloads(i.userIds, i.e));
+  if (!all.length) return;
+  await db.query('SELECT pg_notify($1, p) FROM unnest($2::text[]) AS p', [LIVE_CHANNEL, all]);
 }

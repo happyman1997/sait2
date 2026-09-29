@@ -6,6 +6,7 @@ import { loadProfile, publicUser } from './auth';
 import { one, query, tx } from './db';
 import { AppError, ModerationError } from './errors';
 import { geoSearch } from './geo';
+import { limitOrThrow } from './rate-limit';
 import { shortName } from './jobs';
 import type { SessionUser } from './session';
 
@@ -159,6 +160,7 @@ export async function setBase(viewer: U | null, raw: unknown) {
   let label = str(r.label, 120) || '';
   const q = str(r.query, 200);
   if (q) {
+    await limitOrThrow(`base:${u.id}`, 20, 3600, 'Слишком часто меняете базу — попробуйте через час.');
     const hit = (await geoSearch(q, 1))[0];
     if (!hit) throw new AppError(404, 'Не нашли это место — уточните населённый пункт.', 'query');
     lat = hit.lat; lng = hit.lng; label = (hit.district || hit.label.split(',')[0]).trim();

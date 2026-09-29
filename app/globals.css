@@ -350,3 +350,18 @@ button:not(:disabled):active { transform: translateY(1px); }
   .profile-grid { grid-template-columns: minmax(0, 1fr) !important; }
   .profile-grid > div:last-child { position: static !important; }
 }
+
+/* Мобильная оболочка: верхняя полоса и нижнее меню только на узком экране (без мигания при гидратации) */
+.only-narrow { display: none !important; }
+@media (max-width: 719.98px) {
+  .only-wide { display: none !important; }
+  .only-narrow { display: flex !important; }
+}
+
+/* Рабочий режим: крупные цели касания и текст */
+:root[data-work] .btn { min-height: 48px; font-size: 15px !important; }
+:root[data-work] .input { min-height: 48px; font-size: 16px !important; }
+:root[data-work] .tag { min-height: 36px; font-size: 14px !important; display: inline-flex; align-items: center; }
+:root[data-work] .job-row { min-height: 76px; }
+/* Уведомление поднимается над нижним меню на телефоне */
+@media (max-width: 719.98px) { :root { --toast-lift: calc(56px + env(safe-area-inset-bottom)); } }

@@ -1,6 +1,7 @@
 'use client';
 
 // Главный экран «Карта»: шапка, интро, тулбар, левая панель (гид / карточка / форма заказа), карта, список, фильтры.
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError, api } from '@/lib/api';
 import { css } from '@/lib/css';
@@ -14,15 +15,18 @@ import { useNarrow } from '@/components/useNarrow';
 import { SeasonMap, type SeasonMapHandle } from '@/components/map/SeasonMap';
 import type { LatLng, Pin } from '@/components/map/mapView';
 import { ActiveFilterTags, EMPTY_FILTERS, FiltersPanel, filtersCount, type Filters, type JobTypeRow } from './FiltersPanel';
-import { JobDetailPanel } from './JobDetailPanel';
+import { applyState, JobDetailPanel } from './JobDetailPanel';
 import { JobFormPanel } from './JobFormPanel';
 import { JobListOverlay } from './JobListOverlay';
 import { useLive, useLiveEvent } from './Live';
+import { NAV_H } from './MobileShell';
 import { GuestGuide, StartSteps } from './RailSummary';
 import { Corners, LABEL } from './ui';
 
 export type { Me } from './Live';
 import type { Me } from './Live';
+
+const WORK_BTN = 'flex: 1; min-height: 58px; font-size: 19px; letter-spacing: .02em; border: 1px solid var(--color-accent-900); cursor: pointer; font-family: var(--font-heading); display: flex; align-items: center; justify-content: center; text-align: center; padding: 0 10px'
 
 type GeoHit = { lat: number; lng: number; label: string; sub: string; district: string };
 type Kept = { form: JobForm; step: number };
@@ -473,7 +477,7 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
   const nFilters = filtersCount(filters);
   const showDetail = !!detail && !form && detail.num === selected;
   const railStyle = narrow
-    ? 'grid-row: 2; grid-column: 1; min-height: 0; border-top: 1px solid var(--color-divider); overflow-y: auto; overflow-x: hidden; padding: 14px 16px ' + (me ? '76px' : '26px') + '; background: var(--color-neutral-100); box-shadow: 0 -6px 18px rgba(31,45,58,.10)'
+    ? 'grid-row: 2; grid-column: 1; min-height: 0; border-top: 1px solid var(--color-divider); overflow-y: auto; overflow-x: hidden; padding: 14px 16px ' + (me && live.workMode && detail ? '96px' : '26px') + '; background: var(--color-neutral-100); box-shadow: 0 -6px 18px rgba(31,45,58,.10)'
     : 'grid-row: 1; grid-column: 1; min-height: 0; border-right: 1px solid var(--color-divider); overflow-y: auto; overflow-x: hidden; padding: 20px 22px 26px 20px; background: var(--color-neutral-100)';
   const shellStyle = narrow
     ? 'position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: ' + (form ? 'minmax(120px, 24%)' : 'minmax(220px, 46%)') + ' minmax(0, 1fr)'
@@ -508,7 +512,7 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
           <button className="btn btn-primary" onClick={() => setFiltersOpen(o => !o)} aria-expanded={filtersOpen} style={css('height: 34px; font-size: 13px; padding: 0 13px; flex: none')}>{nFilters ? 'Фильтры · ' + nFilters : 'Фильтры'}</button>
           <span aria-live="polite" style={css('font-family: var(--font-heading); font-size: 13px; letter-spacing: .18em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 60%, transparent); white-space: nowrap; flex: none')}>{loaded ? 'найдено ' + found : 'загрузка…'}</span>
           {me && (
-            <>
+            <span className="only-wide" style={css('display: contents')}>
               <button className="btn btn-primary" onClick={() => live.setRail(live.rail === 'journal' ? null : 'journal')} title="Оповещения и журнал" aria-label={'Журнал' + (live.journal ? ', новых: ' + live.journal : '')}
                 style={css('position: relative; height: 34px; font-size: 13px; padding: 0 12px; flex: none; display: inline-flex; align-items: center; gap: 7px')}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
@@ -520,7 +524,7 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
                 Настройки
               </button>
-            </>
+            </span>
           )}
           <ActiveFilterTags filters={filters} setFilters={setFilters} types={types} />
         </div>
@@ -599,6 +603,24 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
           )}
         </div>
       </div>
+
+      {/* Рабочий режим на телефоне: крупная кнопка действия над нижним меню */}
+      {me && live.workMode && showDetail && !form && (
+        <div className="only-narrow" style={css('position: fixed; left: 0; right: 0; bottom: ' + NAV_H + '; z-index: 70; gap: 8px; padding: 8px 10px; background: var(--color-bg); border-top: 1px solid var(--color-divider)')}>
+          {isEmp
+            ? <Link href="/apps" style={css(WORK_BTN + '; background: var(--color-accent); color: #fff; text-decoration: none')}>{'Отклики · ' + detail!.applicants}</Link>
+            : (() => {
+              const st = applyState(detail!, role, false);
+              return (
+                <button onClick={() => apply(false)} disabled={busy || st.key !== 'open'}
+                  style={css(WORK_BTN + '; background: ' + (st.key === 'open' ? 'var(--color-accent)' : 'var(--color-neutral-100)') + '; color: ' + (st.key === 'open' ? '#fff' : 'var(--color-accent-900)'))}>
+                  {st.key === 'open' ? 'Взять заказ' : st.key === 'req' ? 'Подтвердите условие в карточке' : st.label}
+                </button>
+              );
+            })()}
+          <button onClick={() => setSelected(null)} aria-label="Закрыть заказ" style={css(WORK_BTN + '; flex: 0 0 64px; background: var(--color-neutral-100); color: var(--color-accent-900)')}>×</button>
+        </div>
+      )}
     </div>
   );
 }

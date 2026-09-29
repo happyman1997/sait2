@@ -78,7 +78,14 @@ export type ShiftInfo = {
   withdrawal: { reason: string; notice: string; late: boolean; at: string } | null;  // мой отказ от смены
   noShow: boolean;                   // меня отметили «Не вышел»
   photos: { id: string; kind: 'before' | 'after'; url: string; mine: boolean }[];
+  /** Чек-лист «Перед выходом»: работодатель видит всех нанятых, исполнитель — свой. */
+  safety: { name: string; items: string[]; me: boolean }[];
 };
+
+export const SAFETY_ITEMS = [
+  { id: 'brief', label: 'инструктаж прочитан' },
+  { id: 'ppe', label: 'СИЗ на месте: перчатки, каска, жилет' }
+] as const;
 
 export const AUTO_ACCEPT_DAYS = 7;
 export const REVIEW_EDIT_MIN = 10;

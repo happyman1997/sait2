@@ -1,7 +1,8 @@
 // Журнал событий пользователя, мгновенное уведомление (live) и доставка во внешние каналы (SMS, e-mail).
+import crypto from 'node:crypto';
 import { config } from './config';
-import { one, pool, query, type Db } from './db';
-import { publish } from './live';
+import { pool, query, type Db } from './db';
+import { publishMany } from './live';
 import { getMailer } from './mail';
 import { codeSender } from './sms';
 
@@ -19,63 +20,68 @@ export type EventRow = {
   urgent?: boolean;
 };
 
-type Settings = {
-  enabled: boolean; sms: boolean; email: boolean; quiet_on: boolean; quiet_from: number; quiet_to: number;
-  urgent_bypass: boolean; daily_cap: number; phone: string; addr: string;
-};
-
-/** Час и начало суток в часовом поясе площадки. */
+/** Час и минута в часовом поясе площадки. */
 export function localClock(now = new Date(), tz = config.timeZone()) {
-  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit' })
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit' })
     .formatToParts(now).reduce<Record<string, string>>((a, p) => ({ ...a, [p.type]: p.value }), {});
-  return { hour: parseInt(parts.hour, 10), day: `${parts.year}-${parts.month}-${parts.day}` };
+  return { hour: parseInt(parts.hour, 10), minute: parseInt(parts.minute, 10), day: `${parts.year}-${parts.month}-${parts.day}` };
 }
 
 export function inQuiet(hour: number, from: number, to: number) {
   return from === to ? false : from < to ? hour >= from && hour < to : hour >= from || hour < to;
 }
 
-/** Когда закончатся тихие часы (в минутах от сейчас). */
-function minutesUntilQuietEnds(hour: number, to: number) {
-  return (((to - hour) + 24) % 24 || 24) * 60;
+/**
+ * Постановка в очередь одним запросом на всю пачку (новая смена рядом — до 500 получателей).
+ * Лимит в сутки: уже отправленное за 24 ч + порядковый номер события в пачке; сверх лимита — «без доставки».
+ * Тихие часы: отправка сдвигается на их конец (срочное — сразу, если пользователь разрешил).
+ */
+async function enqueue(rows: { id: string; userId: string; text: string; num: number | null; urgent: boolean }[], db: Db) {
+  if (!rows.length) return;
+  const { hour, minute } = localClock();
+  const url = config.publicUrl();
+  await query(
+    `WITH ev AS (
+       SELECT * FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::bigint[], $5::bool[]) WITH ORDINALITY AS x(id, user_id, text, num, urgent, ord)
+     ), s AS (
+       SELECT ev.*, ns.sms, ns.email, ns.daily_cap, u.phone, u.email AS addr,
+              ns.quiet_on AND NOT (ev.urgent AND ns.urgent_bypass) AND CASE
+                WHEN ns.quiet_from = ns.quiet_to THEN false
+                WHEN ns.quiet_from < ns.quiet_to THEN $6 >= ns.quiet_from AND $6 < ns.quiet_to
+                ELSE $6 >= ns.quiet_from OR $6 < ns.quiet_to END AS quiet,
+              ns.quiet_to,
+              (SELECT count(DISTINCT o.event_id) FROM notification_outbox o
+                WHERE o.user_id = ev.user_id AND o.created_at > now() - interval '24 hours' AND o.status <> 'skipped')
+                + row_number() OVER (PARTITION BY ev.user_id ORDER BY ev.ord) AS nth
+         FROM ev JOIN users u ON u.id = ev.user_id JOIN notification_settings ns ON ns.user_id = ev.user_id
+        WHERE ns.enabled AND (ns.sms OR ns.email)
+     ), muted AS (
+       UPDATE events SET muted = true WHERE id IN (SELECT id FROM s WHERE nth > daily_cap) RETURNING id
+     ), ok AS (
+       SELECT *, now() + make_interval(mins => CASE WHEN quiet THEN coalesce(nullif((quiet_to - $6 + 24) % 24, 0), 24) * 60 - $7 ELSE 0 END) AS at
+         FROM s WHERE nth <= daily_cap
+     )
+     INSERT INTO notification_outbox (user_id, event_id, channel, to_addr, subject, body, next_try_at)
+     SELECT user_id, id, 'sms', phone, NULL, left('Арена Работы: ' || text, 300), at FROM ok WHERE sms
+     UNION ALL
+     SELECT user_id, id, 'email', addr, 'Арена Работы: ' || left(text, 80),
+            text || CASE WHEN num IS NULL THEN '' ELSE E'\n' || $8 || '/?job=' || num END || E'\n\nНастроить уведомления: ' || $8 || '/profile', at
+       FROM ok WHERE email AND addr <> ''`,
+    [rows.map(r => r.id), rows.map(r => r.userId), rows.map(r => r.text), rows.map(r => r.num), rows.map(r => r.urgent), hour, minute, url], db);
 }
 
-async function enqueue(r: EventRow, eventId: string, db: Db) {
-  const s = await one<Settings>(
-    `SELECT ns.enabled, ns.sms, ns.email, ns.quiet_on, ns.quiet_from, ns.quiet_to, ns.urgent_bypass, ns.daily_cap, u.phone, u.email AS addr
-       FROM users u JOIN notification_settings ns ON ns.user_id = u.id WHERE u.id = $1`, [r.userId], db);
-  if (!s || !s.enabled || (!s.sms && !s.email)) return;
-  // Суточный лимит: остальное копится в журнале.
-  const sentToday = (await one<{ n: number }>(
-    `SELECT count(DISTINCT event_id)::int AS n FROM notification_outbox WHERE user_id = $1 AND created_at > now() - interval '24 hours' AND status <> 'skipped'`,
-    [r.userId], db))!.n;
-  if (sentToday >= s.daily_cap) {
-    await query('UPDATE events SET muted = true WHERE id = $1', [eventId], db);
-    return;
-  }
-  const { hour } = localClock();
-  const delayMin = s.quiet_on && inQuiet(hour, s.quiet_from, s.quiet_to) && !(r.urgent && s.urgent_bypass)
-    ? minutesUntilQuietEnds(hour, s.quiet_to) : 0;
-  const link = r.num ? '\n' + config.publicUrl() + '/?job=' + r.num : '';
-  if (s.sms) {
-    await query(`INSERT INTO notification_outbox (user_id, event_id, channel, to_addr, body, next_try_at) VALUES ($1, $2, 'sms', $3, $4, now() + make_interval(mins => $5))`,
-      [r.userId, eventId, s.phone, ('Арена Работы: ' + r.text).slice(0, 300), delayMin], db);
-  }
-  if (s.email && s.addr) {
-    await query(`INSERT INTO notification_outbox (user_id, event_id, channel, to_addr, subject, body, next_try_at) VALUES ($1, $2, 'email', $3, $4, $5, now() + make_interval(mins => $6))`,
-      [r.userId, eventId, s.addr, 'Арена Работы: ' + r.text.slice(0, 80), r.text + link + '\n\nНастроить уведомления: ' + config.publicUrl() + '/profile', delayMin], db);
-  }
-}
-
+/** Запись событий пачкой: журнал, живое уведомление, очередь доставки. Константное число запросов на любую пачку. */
 export async function addEvents(rows: EventRow[], db: Db = pool()) {
-  for (const r of rows) {
-    if (!r.userId) continue;
-    const ev = await one<{ id: string }>(// Свои действия (silent) сразу прочитаны — в счётчик журнала не попадают.
-      `INSERT INTO events (user_id, kind, text, job_id, urgent, read_at) VALUES ($1, $2, $3, $4, $5, CASE WHEN $6 THEN now() END) RETURNING id`,
-      [r.userId, r.kind, r.text, r.jobId ?? null, !!r.urgent, !!r.silent], db);
-    if (!r.silent) await publish([r.userId], { t: 'event', text: r.text, num: r.num ?? null }, db);
-    if (r.deliver) await enqueue(r, ev!.id, db);
-  }
+  const list = rows.filter((r): r is EventRow & { userId: string } => !!r.userId).map(r => ({ ...r, id: crypto.randomUUID() }));
+  if (!list.length) return;
+  // Свои действия (silent) сразу прочитаны — в счётчик журнала не попадают.
+  await query(
+    `INSERT INTO events (id, user_id, kind, text, job_id, urgent, read_at)
+     SELECT id, u, k, t, j, g, CASE WHEN s THEN now() END
+       FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::text[], $5::uuid[], $6::bool[], $7::bool[]) AS x(id, u, k, t, j, g, s)`,
+    [list.map(r => r.id), list.map(r => r.userId), list.map(r => r.kind), list.map(r => r.text), list.map(r => r.jobId ?? null), list.map(r => !!r.urgent), list.map(r => !!r.silent)], db);
+  await publishMany(list.filter(r => !r.silent).map(r => ({ userIds: [r.userId], e: { t: 'event' as const, text: r.text, num: r.num ?? null } })), db);
+  await enqueue(list.filter(r => r.deliver).map(r => ({ id: r.id, userId: r.userId, text: r.text, num: r.num ?? null, urgent: !!r.urgent })), db);
 }
 
 /** Письмо в поддержку (жалобы). */

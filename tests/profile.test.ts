@@ -21,6 +21,9 @@ const { setCodeSender } = await import('@/server/sms');
 const { sessionUser, createSession } = await import('@/server/session');
 const { AppError } = await import('@/server/errors');
 const { localISO } = await import('@/lib/jobs');
+const { contractTemplate } = await import('@/server/contract');
+const { publishMany } = await import('@/server/live');
+const cron = await import('@/server/cron');
 
 type SU = NonNullable<Awaited<ReturnType<typeof sessionUser>>>;
 
@@ -203,6 +206,28 @@ describe('журнал и доставка', () => {
     expect((await ev.processOutbox()).sent).toBe(1);
   });
 
+  it('пачка событий одному человеку: лимит считается внутри пачки', async () => {
+    await loud(fl, { dailyCap: 3 });
+    await ev.addEvents([1, 2, 3, 4, 5].map(i => ({ userId: fl.id, kind: 'job', text: 'Событие ' + i, deliver: true })));
+    const l = await prof.listEvents(fl);
+    expect(l.events).toHaveLength(5);
+    expect(l.events.filter(e => e.muted).map(e => e.text).sort()).toEqual(['Событие 4', 'Событие 5']);
+    expect((await ev.processOutbox()).sent).toBe(3);
+  });
+
+  it('живое уведомление большой группе делится на части, никто не теряется', async () => {
+    const ids = Array.from({ length: 250 }, () => crypto.randomUUID());
+    const c = await pool().connect();
+    const got: string[] = [];
+    try {
+      await c.query('LISTEN arena_live');
+      c.on('notification', m => { got.push(...JSON.parse(m.payload!).u); });
+      await publishMany([{ userIds: ids, e: { t: 'job', num: 1 } }]);
+      await new Promise(r => setTimeout(r, 200));
+    } finally { await c.query('UNLISTEN *'); c.release(); }
+    expect(new Set(got).size).toBe(250);
+  });
+
   it('прочитать и очистить журнал', async () => {
     await jobs.createJob(form(), emp, today);
     expect((await prof.listEvents(fl)).unread).toBe(1);
@@ -248,6 +273,36 @@ describe('фото', () => {
     await expectErr(files.deleteJobPhoto(j.num, photo.id, emp), /приложил/);
     await files.deleteJobPhoto(j.num, photo.id, fl);
     expect((await jobs.getJob(j.num, emp)).shift!.photos).toEqual([]);
+  });
+});
+
+describe('договор и уборка', () => {
+  it('шаблон ГПХ: пустой — для всех, с условиями — только участнику заказа', async () => {
+    const blank = await contractTemplate(null, null);
+    expect(blank.text).toMatch(/ДОГОВОР ПОДРЯДА/);
+    expect(blank.text).toMatch(/не оказывает юридических услуг/);
+    const j = await jobs.createJob(form(), emp, today);
+    const mine = await contractTemplate(j.num, emp);
+    expect(mine.text).toMatch(/Москва, ул\. Тверская, 18/);
+    expect(mine.text).toMatch(/перевод на карту/);
+    expect(mine.filename).toBe('dogovor-gph-S-' + j.num + '.txt');
+    const other = await contractTemplate(j.num, fl);
+    expect(other.text).not.toMatch(/Тверская/);
+  });
+
+  it('брошенные файлы удаляются через сутки', async () => {
+    const a = await files.setAvatar(fl, new Blob([PNG]));
+    const id = a.avatarUrl.split('/').pop()!;
+    await query(`UPDATE users SET avatar_url = NULL WHERE id = $1`, [fl.id]);
+    await query(`UPDATE files SET created_at = now() - interval '2 days'`);
+    const stray = path.join(process.env.UPLOAD_DIR!, crypto.randomUUID());
+    await fs.writeFile(stray, JPEG);
+    const old = new Date(Date.now() - 2 * 86400_000);
+    await fs.utimes(stray, old, old);
+    await cron.runDueTasks();
+    await expect(fs.stat(path.join(process.env.UPLOAD_DIR!, id))).rejects.toThrow();
+    await expect(fs.stat(stray)).rejects.toThrow();
+    expect((await one<{ n: number }>('SELECT count(*)::int AS n FROM files'))!.n).toBe(0);
   });
 });
 

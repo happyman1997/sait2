@@ -11,6 +11,7 @@ import { uploadForm } from '@/lib/image';
 import { dateLabel, money, plural } from '@/lib/jobs';
 import { formatPhone } from '@/lib/validation';
 import { useFlash } from '@/components/Toast';
+import { AdSlot } from './AdSlot';
 import { useLive } from './Live';
 import { Chip, Corners, FIELD_ERR, LABEL, MUTED, initialsOf } from './ui';
 
@@ -195,6 +196,7 @@ export function ProfilePage() {
               ))}
             </div>
           </div>
+          <AdSlot place="profile" />
           <div style={css('border: 1px solid var(--color-divider); padding: 13px 14px; font-size: 13px; line-height: 1.5; ' + MUTED)}>
             <div style={css(LABEL + '; margin-bottom: 6px')}>Как считаются деньги</div>
             {isEmp

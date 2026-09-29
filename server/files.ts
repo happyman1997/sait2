@@ -6,6 +6,7 @@ import { config } from './config';
 import { one, pool, query, tx, type Db } from './db';
 import { AppError } from './errors';
 import { publish } from './live';
+import { limitOrThrow } from './rate-limit';
 import type { SessionUser } from './session';
 
 export type Mime = 'image/jpeg' | 'image/png' | 'image/webp';
@@ -25,6 +26,7 @@ const fileOf = (id: string) => path.join(dir(), id);
 
 async function store(ownerId: string, kind: 'avatar' | 'photo', file: unknown, jobId: string | null) {
   if (!(file instanceof Blob)) throw new AppError(422, 'Прикрепите изображение.', 'file');
+  await limitOrThrow(`upload:${ownerId}`, 60, 3600, 'Слишком много загрузок подряд — попробуйте через час.');
   if (file.size > LIMIT[kind]) throw new AppError(413, 'Файл больше ' + LIMIT[kind] / 1024 / 1024 + ' МБ — уменьшите фото.', 'file');
   const buf = new Uint8Array(await file.arrayBuffer());
   const mime = sniff(buf);
@@ -109,4 +111,31 @@ export async function jobPhotos(jobId: string, viewerId: string, db: Db = pool()
   const r = await query<{ id: string; kind: 'before' | 'after'; url: string; author_id: string }>(
     'SELECT id, kind, url, author_id FROM photos WHERE job_id = $1 ORDER BY created_at', [jobId], db);
   return r.rows.map(p => ({ id: p.id, kind: p.kind, url: p.url, mine: p.author_id === viewerId }));
+}
+
+/**
+ * Уборка раз в 10 минут (в cron): записи файлов, на которые ничего не ссылается (оборванная загрузка),
+ * и файлы на диске без записи (заказ или пользователь удалены каскадом). Трогаем только старше суток.
+ */
+export async function sweepFiles(): Promise<number> {
+  const dead = await query<{ id: string }>(
+    `DELETE FROM files f WHERE f.created_at < now() - interval '1 day' AND (
+       (f.kind = 'photo' AND NOT EXISTS (SELECT 1 FROM photos p WHERE p.file_id = f.id)) OR
+       (f.kind = 'avatar' AND NOT EXISTS (SELECT 1 FROM users u WHERE u.avatar_url = '/api/files/' || f.id)))
+     RETURNING f.id`);
+  let n = 0;
+  for (const r of dead.rows) { await fs.rm(fileOf(r.id), { force: true }); n++; }
+  let names: string[];
+  try { names = (await fs.readdir(dir())).filter(x => UUID_RE.test(x)); } catch { return n; }
+  const dayAgo = Date.now() - 86400_000;
+  for (let i = 0; i < names.length; i += 1000) {
+    const part = names.slice(i, i + 1000);
+    const known = new Set((await query<{ id: string }>('SELECT id::text FROM files WHERE id = ANY($1::uuid[])', [part])).rows.map(r => r.id));
+    for (const name of part) {
+      if (known.has(name.toLowerCase())) continue;
+      const st = await fs.stat(fileOf(name)).catch(() => null);
+      if (st && st.mtimeMs < dayAgo) { await fs.rm(fileOf(name), { force: true }); n++; }
+    }
+  }
+  return n;
 }

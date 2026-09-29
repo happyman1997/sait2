@@ -29,6 +29,7 @@ async function main() {
     }
   });
   await seedJobs();
+  await seedAds();
   console.log('seed ok: daniyar_s / aigul_t, пароль demo123');
   await pool().end();
 }
@@ -93,5 +94,22 @@ async function seedJobs() {
         i % 3 === 0 ? 'я сам' : i % 3 === 1 ? 'старший по объекту' : 'коллега на месте', '+7 900 000-00-' + String(10 + i),
         i === 3 ? 'нужна санитарная книжка и обувь с жёстким носком' : null]
     );
+  }
+}
+
+// Демо-креативы для разработки: вымышленный рекламодатель, erid-заглушка, ссылка на example.org.
+async function seedAds() {
+  const has = await pool().query('SELECT 1 FROM ads LIMIT 1');
+  if (has.rows.length) return;
+  const ADS = [
+    ['feed', 'freelancer', 'Спецодежда на смену −15%', 'Перчатки, комбинезоны и обувь — доставка за день.', 'Посмотреть', 'DEMO-0001'],
+    ['feed', 'employer', 'Мини-техника в аренду на сезон', 'Щётки, погрузчики и отвалы с доставкой на объект.', 'Узнать цены', 'DEMO-0002'],
+    ['feed', null, 'Полис от несчастного случая на смену', 'Оформление за минуту, действует с момента оплаты.', 'Подробнее', 'DEMO-0003'],
+    ['profile', null, 'Карта для самозанятых', 'Чек в «Мой налог» после каждой смены автоматически.', 'Открыть', 'DEMO-0004']
+  ];
+  for (const [placement, audience, title, line, cta, erid] of ADS) {
+    await pool().query(
+      `INSERT INTO ads (placement, audience, advertiser, title, line, cta, url, erid) VALUES ($1, $2, 'Демо-рекламодатель', $3, $4, $5, 'https://example.org/', $6)`,
+      [placement, audience, title, line, cta, erid]);
   }
 }

@@ -43,8 +43,8 @@ export function FiltersPanel({ filters, setFilters, types, found, baseLabel, onC
 
   return (
     <div>
-      <div onClick={onClose} style={css('position: fixed; inset: 0; z-index: 60')} />
-      <div role="dialog" aria-label="Фильтры" style={css('position: fixed; right: 16px; bottom: 16px; z-index: 61; width: 380px; max-width: calc(100vw - 32px); box-sizing: border-box; max-height: calc(100vh - 32px); overflow-y: auto; overflow-x: hidden; background: var(--color-neutral-100); border: 1px solid var(--color-divider); box-shadow: 0 18px 48px rgba(20, 26, 32, .24)')}>
+      <div onClick={onClose} style={css('position: fixed; inset: 0; z-index: 92')} />
+      <div role="dialog" aria-label="Фильтры" style={css('position: fixed; right: 16px; bottom: 16px; z-index: 93; width: 380px; max-width: calc(100vw - 32px); box-sizing: border-box; max-height: calc(100vh - 32px); overflow-y: auto; overflow-x: hidden; background: var(--color-neutral-100); border: 1px solid var(--color-divider); box-shadow: 0 18px 48px rgba(20, 26, 32, .24)')}>
         <div style={css('display: flex; align-items: center; gap: 10px; padding: 12px 10px 12px 16px')}>
           <span style={css('font-family: var(--font-heading); font-weight: 600; font-size: 22px; line-height: 1; text-transform: uppercase; letter-spacing: .03em')}>Фильтры</span>
           <span style={css('font-size: 13px; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>найдено {found}</span>

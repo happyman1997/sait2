@@ -45,6 +45,9 @@ type Ctx = {
   /** Правая панель «Журнал» / «Настройки». */
   rail: Rail;
   setRail: (r: Rail) => void;
+  /** Рабочий режим: крупные кнопки и строки — удобно в перчатках на объекте. */
+  workMode: boolean;
+  setWorkMode: (on: boolean) => void;
 };
 
 export type Rail = 'journal' | 'settings' | null;
@@ -75,6 +78,18 @@ export function LiveProvider({ me, children }: { me: Me; children: ReactNode }) 
   const toasts = useRef(true);
   const setToasts = useCallback((on: boolean) => { toasts.current = on; }, []);
   const [rail, setRail] = useState<Rail>(null);
+  const [workMode, setWorkModeState] = useState(false);
+  useEffect(() => {
+    try { if (localStorage.getItem('arena:work') === '1') setWorkModeState(true); } catch { /* приватный режим */ }
+  }, []);
+  useEffect(() => {
+    if (workMode) document.documentElement.dataset.work = '1';
+    else delete document.documentElement.dataset.work;
+  }, [workMode]);
+  const setWorkMode = useCallback((on: boolean) => {
+    setWorkModeState(on);
+    try { localStorage.setItem('arena:work', on ? '1' : '0'); } catch { /* не критично */ }
+  }, []);
   const listeners = useRef(new Set<(e: LiveEvent) => void>());
 
   // me — новый объект при каждом обновлении серверной части; поток и список зависят только от того, кто вошёл.
@@ -115,8 +130,8 @@ export function LiveProvider({ me, children }: { me: Me; children: ReactNode }) 
 
   const value = useMemo<Ctx>(() => ({
     me, chats, unread: chats.reduce((n, c) => n + c.unread, 0), reloadChats, dock, setDock, openChat, onLive, review, openReview: setReview, place, setPlace,
-    journal, setJournal, setToasts, rail, setRail
-  }), [setToasts, me, chats, reloadChats, dock, setDock, openChat, onLive, review, place, journal, rail]);
+    journal, setJournal, setToasts, rail, setRail, workMode, setWorkMode
+  }), [setToasts, me, chats, reloadChats, dock, setDock, openChat, onLive, review, place, journal, rail, workMode, setWorkMode]);
 
   return <LiveCtx.Provider value={value}>{children}</LiveCtx.Provider>;
 }

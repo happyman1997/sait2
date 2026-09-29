@@ -1,8 +1,9 @@
-// Фоновые задачи: автоприёмка через 7 дней и очистка устаревших служебных записей.
+// Фоновые задачи: автоприёмка через 7 дней, очистка устаревших служебных записей и брошенных файлов.
 // Запускаются из процесса приложения (instrumentation.ts) раз в 10 минут или внешним cron: `npm run cron`.
 // pg_try_advisory_lock не даёт двум инстансам выполнять одно и то же одновременно.
 import { pool } from './db';
 import { processOutbox } from './events';
+import { sweepFiles } from './files';
 import { autoAcceptDue } from './shifts';
 
 const LOCK_KEY = 4242_0001;
@@ -21,8 +22,11 @@ export async function runDueTasks(): Promise<{ skipped: boolean; autoAccepted: n
         `DELETE FROM auth_challenges WHERE expires_at < now() - interval '1 day'`,
         `DELETE FROM rate_limits WHERE window_start < now() - interval '1 day'`,
         `DELETE FROM daily_stats WHERE day < current_date - 30`,
-        `DELETE FROM notification_outbox WHERE status <> 'pending' AND created_at < now() - interval '30 days'`
+        `DELETE FROM notification_outbox WHERE status <> 'pending' AND created_at < now() - interval '30 days'`,
+        // Журнал хранится полгода — дольше не нужен ни пользователю, ни для разборов.
+        `DELETE FROM events WHERE created_at < now() - interval '180 days'`
       ]) cleaned += (await c.query(sql)).rowCount || 0;
+      cleaned += await sweepFiles().catch(e => { console.error('[files]', (e as Error).message); return 0; });
       const { sent } = await processOutbox();
       return { skipped: false, autoAccepted, cleaned, sent };
     } finally {

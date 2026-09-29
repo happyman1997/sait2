@@ -15,8 +15,10 @@ const TAB = (active: boolean) => css('flex: none; white-space: nowrap; cursor: p
 const HBTN = 'height: clamp(38px, 5vw, 46px); font-size: clamp(13px, 1.4vw, 15px); letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; flex: 0 0 auto';
 
 // Шапка приложения (тёмная полоса прототипа). Клик по логотипу — на главную, панели закрываются.
-export function AppHeader({ me, onHome, unread = 0, onChat, chatActive = false }: {
+export function AppHeader({ me, onHome, unread = 0, onChat, chatActive = false, wideOnly = false }: {
   me: HeaderUser; onHome?: () => void; unread?: number; onChat?: () => void; chatActive?: boolean;
+  /** На узком экране вошедшего пользователя шапку заменяет мобильная полоса. */
+  wideOnly?: boolean;
 }) {
   const path = usePathname();
   const tabs = !me ? [] : me.role === 'employer'
@@ -24,7 +26,7 @@ export function AppHeader({ me, onHome, unread = 0, onChat, chatActive = false }
     : [{ href: '/', label: 'Карта' }, { href: '/mine', label: 'Мои смены' }];
 
   return (
-    <div className="nav dark-bar" style={css('display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: clamp(11px, 1.6vw, 18px) max(clamp(14px, 2vw, 24px), calc((100% - 1440px) / 2)); min-height: clamp(70px, 10vw, 112px); flex: none; background: var(--ink); color: #f2efec')}>
+    <div className={'nav dark-bar' + (wideOnly ? ' only-wide' : '')} style={css('display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: clamp(11px, 1.6vw, 18px) max(clamp(14px, 2vw, 24px), calc((100% - 1440px) / 2)); min-height: clamp(70px, 10vw, 112px); flex: none; background: var(--ink); color: #f2efec')}>
       <Link href="/" onClick={onHome} title="На главную" aria-label="Арена Работы — на главную" style={css('display: flex; align-items: center; gap: clamp(10px, 1.2vw, 16px); flex: 0 1 auto; min-width: 0; color: inherit; text-decoration: none')}>
         <span aria-hidden="true" style={css('width: clamp(44px, 6vw, 84px); height: clamp(44px, 6vw, 84px); flex: none; border: 1px dashed rgba(242, 239, 236, .45)')} />
         <span style={css('font-family: var(--font-heading); font-weight: 600; font-size: clamp(26px, 3.4vw, 50px); line-height: 1; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; min-width: 0')}>Арена Работы</span>

@@ -4,10 +4,11 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { ApiError, api } from '@/lib/api';
 import { css } from '@/lib/css';
-import { jobNum, type ChatMessage } from '@/lib/jobs';
+import { jobNum, QUICK_REPLIES, type ChatMessage } from '@/lib/jobs';
 import { showModeration } from '@/components/ModerationGuard';
 import { useNarrow } from '@/components/useNarrow';
 import { useLive, useLiveEvent } from './Live';
+import { NAV_H } from './MobileShell';
 import { initialsOf } from './ui';
 
 type Thread = { messages: ChatMessage[]; canSend: boolean; who: string; initials: string; title: string };
@@ -46,16 +47,17 @@ export function ChatDock({ place }: { place: 'map' | 'form' | 'page' }) {
   });
   useEffect(() => { listRef.current?.scrollTo({ top: listRef.current.scrollHeight }); }, [thread?.messages.length]);
 
-  if (!me || (narrow && place === 'form')) return null;
+  // На телефоне плашку заменяет пункт «Чат» нижнего меню; открытый чат — на весь экран над меню.
+  if (!me || (narrow && (place === 'form' || !dock.open))) return null;
 
-  const send = async () => {
-    const text = draft.trim();
+  const send = async (quick?: string) => {
+    const text = (quick ?? draft).trim();
     if (!text || sending || !dock.num || !dock.thread) return;
     setSending(true);
     try {
       const r = await api<{ message: ChatMessage }>('/api/jobs/' + dock.num + '/chat/' + dock.thread, { text });
       setThread(t => (t ? { ...t, messages: t.messages.concat(r.message) } : t));
-      setDraft('');
+      if (quick === undefined) setDraft('');
       setError('');
     } catch (e) {
       if (e instanceof ApiError && e.body.moderation) showModeration('Сообщение', e.body.moderation.category, text);
@@ -67,7 +69,7 @@ export function ChatDock({ place }: { place: 'map' | 'form' | 'page' }) {
   const left = place === 'map' ? 'left: calc(min(420px, max(320px, 100vw - 340px)) + 16px)'
     : place === 'form' ? 'left: calc(min(620px, max(420px, 100vw - 340px)) + 16px)' : 'right: 24px';
   const style = narrow
-    ? 'position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; display: flex; flex-direction: column; border-top: 1px solid var(--color-accent); background: var(--color-bg); box-shadow: var(--shadow-lg); padding-bottom: env(safe-area-inset-bottom)'
+    ? 'position: fixed; left: 0; right: 0; top: 0; bottom: ' + NAV_H + '; z-index: 84; display: flex; flex-direction: column; background: var(--color-bg)'
     : 'position: fixed; ' + left + '; bottom: 0; z-index: 60; width: ' + (dock.open ? '400px' : '296px') + '; max-width: 92vw; box-sizing: border-box; display: flex; flex-direction: column; border: 1px solid var(--color-accent); border-bottom: 0; background: var(--color-bg); box-shadow: var(--shadow-lg)';
   const active = chats.find(c => c.num === dock.num && c.thread === dock.thread);
 
@@ -90,7 +92,7 @@ export function ChatDock({ place }: { place: 'map' | 'form' | 'page' }) {
       </button>
 
       {dock.open && (
-        <div style={css('display: flex; flex-direction: column; min-height: 0; height: ' + (narrow ? '70vh' : 'min(620px, 72vh)') + '; background: var(--color-bg)')}>
+        <div style={css('display: flex; flex-direction: column; min-height: 0; ' + (narrow ? 'flex: 1' : 'height: min(620px, 72vh)') + '; background: var(--color-bg)')}>
           {!showChat && (
             <div style={css('flex: 1; min-height: 0; overflow: auto')}>
               <div style={css('padding: 12px 14px 8px; font-family: var(--font-heading); font-size: 11.5px; letter-spacing: .22em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 60%, transparent)')}>Выберите диалог</div>
@@ -140,10 +142,17 @@ export function ChatDock({ place }: { place: 'map' | 'form' | 'page' }) {
                 {thread && !thread.canSend
                   ? <div style={css('font-size: 13px; line-height: 1.4; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>Смена отменена или исполнитель снят — переписка только для чтения.</div>
                   : (
+                    <>
+                    <div style={css('display: flex; gap: 6px; overflow-x: auto; margin-bottom: 8px; padding-bottom: 2px')}>
+                      {QUICK_REPLIES.map(q => (
+                        <button key={q} className="tag tag-outline" onClick={() => send(q)} disabled={sending} style={css('flex: none; cursor: pointer; border-width: 1px; border-style: solid; white-space: nowrap')}>{q}</button>
+                      ))}
+                    </div>
                     <div style={css('display: flex; gap: 7px')}>
                       <input className="input" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={onKey} placeholder="Напишите сообщение…" aria-label="Сообщение" style={css('flex: 1; min-width: 0; height: 40px')} />
-                      <button className="btn btn-primary" onClick={send} disabled={sending || !draft.trim()} style={css('height: 40px; font-size: 12.5px; letter-spacing: .08em; text-transform: uppercase; padding: 0 14px; flex: none')}>Отправить</button>
+                      <button className="btn btn-primary" onClick={() => send()} disabled={sending || !draft.trim()} style={css('height: 40px; font-size: 12.5px; letter-spacing: .08em; text-transform: uppercase; padding: 0 14px; flex: none')}>Отправить</button>
                     </div>
+                    </>
                   )}
               </div>
             </div>

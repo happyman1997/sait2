@@ -2,6 +2,7 @@
 // Отметки выхода/геометки и споров нет (решение заказчика). Деньги идут напрямую между сторонами.
 import { CREW_ANY } from '@/lib/catalog';
 import {
+  SAFETY_ITEMS,
   AUTO_ACCEPT_DAYS, COMPLAINT_KINDS, daysAhead, HIRE_GREETING, jobNum, LEAVE_REASONS, REPORT_MESSAGE, REVIEW_EDIT_MIN,
   type AppStatus, type ChatMessage, type ChatThread, type JobDetail, type JobStatus, type MyJob
 } from '@/lib/jobs';
@@ -593,3 +594,47 @@ export async function applicantsBoard(viewer: Viewer) {
 }
 
 export { LEAVE_REASONS };
+
+/** Чек-лист «Перед выходом»: отмечает нанятый исполнитель, пока работа не принята. */
+export async function setSafety(num: number, raw: unknown, viewer: Viewer) {
+  const u = needUser(viewer);
+  const items = (Array.isArray(raw) ? raw : []).filter((x): x is string => SAFETY_ITEMS.some(i => i.id === x));
+  const j = await one<{ id: string; employer_id: string; status: string }>('SELECT id, employer_id, status FROM jobs WHERE num = $1', [num]);
+  if (!j) throw new AppError(404, 'Заказ не найден.');
+  const hired = await one('SELECT 1 FROM hires WHERE job_id = $1 AND freelancer_id = $2', [j.id, u.id]);
+  if (!hired) throw new AppError(403, 'Чек-лист отмечает нанятый исполнитель.');
+  if (j.status === 'accepted' || j.status === 'cancelled') throw new AppError(409, 'Смена закрыта.');
+  await query(
+    `INSERT INTO safety_checks (job_id, freelancer_id, items) VALUES ($1, $2, $3)
+     ON CONFLICT (job_id, freelancer_id) DO UPDATE SET items = $3, updated_at = now()`, [j.id, u.id, [...new Set(items)]]);
+  await publish([j.employer_id], { t: 'job', num });
+  return getJob(num, viewer);
+}
+
+/**
+ * Экран «Смена» (мобильный): самая актуальная смена пользователя.
+ * Исполнитель: нанят и работа не принята → принята, но расчёт не отмечен → ждёт ответа на отклик.
+ * Работодатель: сдана и ждёт приёмки → идёт (есть нанятые) → принята, но расчёт не отмечен.
+ */
+export async function currentShift(viewer: Viewer): Promise<JobDetail | null> {
+  const u = needUser(viewer);
+  const r = u.role === 'freelancer'
+    ? await one<{ num: string }>(
+      `SELECT j.num FROM jobs j
+         LEFT JOIN hires h ON h.job_id = j.id AND h.freelancer_id = $1
+         LEFT JOIN applications a ON a.job_id = j.id AND a.freelancer_id = $1
+         LEFT JOIN settlements s ON s.job_id = j.id
+        WHERE j.status <> 'cancelled' AND (
+              (h.job_id IS NOT NULL AND j.status <> 'accepted')
+           OR (h.job_id IS NOT NULL AND j.status = 'accepted' AND NOT coalesce(s.freelancer_marked, false) AND j.date > current_date - 14)
+           OR (h.job_id IS NULL AND a.status = 'sent' AND a.withdrawn_at IS NULL AND j.date >= current_date))
+        ORDER BY CASE WHEN h.job_id IS NOT NULL AND j.status <> 'accepted' THEN 0 WHEN h.job_id IS NOT NULL THEN 1 ELSE 2 END, j.date, j.num
+        LIMIT 1`, [u.id])
+    : await one<{ num: string }>(
+      `SELECT j.num FROM jobs j LEFT JOIN settlements s ON s.job_id = j.id
+        WHERE j.employer_id = $1 AND j.status <> 'cancelled' AND EXISTS (SELECT 1 FROM hires h WHERE h.job_id = j.id)
+          AND (j.status <> 'accepted' OR (NOT coalesce(s.employer_marked, false) AND j.date > current_date - 14))
+        ORDER BY CASE j.status WHEN 'reported' THEN 0 WHEN 'accepted' THEN 2 ELSE 1 END, j.date, j.num
+        LIMIT 1`, [u.id]);
+  return r ? getJob(Number(r.num), viewer) : null;
+}

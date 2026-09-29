@@ -234,7 +234,7 @@ export async function getJob(num: number, viewer: Viewer, db: Db = pool()): Prom
 type HiredRow = { freelancer_id: string; is_lead: boolean; name: string; app_id: string | null };
 
 async function loadShift(jobId: string, employerId: string, empName: string, hired: HiredRow[], viewer: NonNullable<Viewer>, owner: boolean, db: Db): Promise<ShiftInfo> {
-  const [rep, acc, settle, reviews, complaint, withdrawal, noShow, msgs, photos] = await Promise.all([
+  const [rep, acc, settle, reviews, complaint, withdrawal, noShow, msgs, photos, safety] = await Promise.all([
     one<{ reported_at: Date }>('SELECT reported_at FROM reports WHERE job_id = $1', [jobId], db),
     one<{ accepted_at: Date; auto: boolean }>('SELECT accepted_at, auto FROM acceptances WHERE job_id = $1', [jobId], db),
     one<{ employer_marked: boolean; freelancer_marked: boolean }>('SELECT employer_marked, freelancer_marked FROM settlements WHERE job_id = $1', [jobId], db),
@@ -245,7 +245,9 @@ async function loadShift(jobId: string, employerId: string, empName: string, hir
       'SELECT reason, notice, late, at FROM withdrawals WHERE job_id = $1 AND freelancer_id = $2 ORDER BY at DESC LIMIT 1', [jobId, viewer.id], db),
     owner ? Promise.resolve(null) : one<{ at: Date }>('SELECT at FROM no_shows WHERE job_id = $1 AND freelancer_id = $2', [jobId, viewer.id], db),
     owner ? Promise.resolve(null) : one<{ n: number }>('SELECT count(*)::int AS n FROM messages WHERE job_id = $1 AND freelancer_id = $2', [jobId, viewer.id], db),
-    owner || hired.some(h => h.freelancer_id === viewer.id) ? jobPhotos(jobId, viewer.id, db) : Promise.resolve([])
+    owner || hired.some(h => h.freelancer_id === viewer.id) ? jobPhotos(jobId, viewer.id, db) : Promise.resolve([]),
+    query<{ freelancer_id: string; items: string[] }>(
+      'SELECT freelancer_id, items FROM safety_checks WHERE job_id = $1 AND ($2 OR freelancer_id = $3)', [jobId, owner, viewer.id], db)
   ]);
   const lead = hired.find(h => h.is_lead);
   const meHired = hired.find(h => h.freelancer_id === viewer.id);
@@ -270,7 +272,11 @@ async function loadShift(jobId: string, employerId: string, empName: string, hir
     myThread: owner ? null : viewer.id,
     withdrawal: withdrawal ? { reason: withdrawal.reason, notice: withdrawal.notice, late: withdrawal.late, at: withdrawal.at.toISOString() } : null,
     noShow: !!noShow,
-    photos
+    photos,
+    safety: hired.filter(h => owner || h.freelancer_id === viewer.id).map(h => ({
+      name: shortName(h.name), me: h.freelancer_id === viewer.id,
+      items: safety.rows.find(r => r.freelancer_id === h.freelancer_id)?.items ?? []
+    }))
   };
 }
 

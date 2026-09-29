@@ -2,7 +2,9 @@
 
 // «Все заказы списком» — выезжающая слева панель с поиском.
 import { css } from '@/lib/css';
+import { Fragment } from 'react';
 import { dateLabel, jobNum, jobStatus, money, type JobSummary } from '@/lib/jobs';
+import { AdSlot } from './AdSlot';
 
 export function JobListOverlay({ jobs, q, setQ, onClose, onOpen, onHover, role }: {
   jobs: JobSummary[]; q: string; setQ: (q: string) => void; onClose: () => void; onOpen: (num: number) => void;
@@ -24,10 +26,12 @@ export function JobListOverlay({ jobs, q, setQ, onClose, onOpen, onHover, role }
           {q.trim() && <button className="btn btn-ghost" onClick={() => setQ('')} style={css('height: 38px; font-size: 13px; flex: none')}>Сброс</button>}
         </div>
         <div style={css('display: grid; gap: 8px; margin-top: 14px; min-width: 0')}>
-          {jobs.map(j => {
+          {jobs.map((j, i) => {
             const s = jobStatus(j, role);
             return (
-              <button key={j.num} onClick={() => onOpen(j.num)} onMouseEnter={() => onHover(j.num)} onMouseLeave={() => onHover(null)} className="job-row"
+              <Fragment key={j.num}>
+              {i === 3 && <AdSlot place="feed" />}
+              <button onClick={() => onOpen(j.num)} onMouseEnter={() => onHover(j.num)} onMouseLeave={() => onHover(null)} className="job-row"
                 style={css('min-width: 0; box-sizing: border-box; text-align: left; cursor: pointer; background: var(--color-bg); border: 1px solid var(--color-divider); padding: 13px 14px; font-family: var(--font-body); color: inherit')}>
                 <span style={css('display: flex; justify-content: space-between; gap: 8px; align-items: baseline')}>
                   <span style={css('font-family: var(--font-heading); font-weight: 600; font-size: 14px; letter-spacing: .16em; color: color-mix(in srgb, var(--color-text) 58%, transparent)')}>{jobNum(j.num)}</span>
@@ -39,6 +43,7 @@ export function JobListOverlay({ jobs, q, setQ, onClose, onOpen, onHover, role }
                 </span>
                 <span style={css('display: block; margin-top: 7px')}><span className={s.cls}>{s.label}</span></span>
               </button>
+              </Fragment>
             );
           })}
         </div>
