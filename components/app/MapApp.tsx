@@ -56,7 +56,7 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
   // ─── Заказы и фильтры ───
   const [filters, setFiltersState] = useState<Filters>(EMPTY_FILTERS);
   const [jobs, setJobs] = useState<JobSummary[]>([]);
-  const [base, setBase] = useState<{ lat: number; lng: number; label: string } | null>(me?.baseLat != null ? { lat: me.baseLat, lng: me.baseLng!, label: me.city } : null);
+  const [base, setBase] = useState<{ lat: number; lng: number; label: string } | null>(me?.baseLat != null ? { lat: me.baseLat, lng: me.baseLng!, label: me.baseLabel } : null);
   const [types, setTypes] = useState<JobTypeRow[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [offline, setOffline] = useState(false);
@@ -417,6 +417,11 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
     window.addEventListener('arena:home', h);
     return () => window.removeEventListener('arena:home', h);
   }, []);
+  // Смена базы в настройках — пересчитать расстояния.
+  useEffect(() => {
+    window.addEventListener('arena:reload', loadJobs);
+    return () => window.removeEventListener('arena:reload', loadJobs);
+  }, [loadJobs]);
 
   const refreshDetail = useCallback(async (num: number) => {
     try { patchJob((await api<{ job: JobDetail }>('/api/jobs/' + num)).job); } catch { /* заказ могли удалить */ }
@@ -430,11 +435,11 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
   });
 
   /** Действие смены: POST на /api/jobs/N/…, обновить карточку и список, показать итог. */
-  const act = useCallback(async (path: string, body: unknown, ok: string) => {
+  const act = useCallback(async (path: string, body: unknown, ok: string, method: 'POST' | 'DELETE' = 'POST') => {
     if (!detail) return false;
     setBusy(true);
     try {
-      const r = await api<{ job: JobDetail }>('/api/jobs/' + detail.num + '/' + path, body ?? {});
+      const r = await api<{ job: JobDetail }>('/api/jobs/' + detail.num + '/' + path, method === 'DELETE' ? null : body ?? {}, method);
       patchJob(r.job);
       if (ok) flash(ok);
       loadJobs();
@@ -502,6 +507,21 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
           </button>
           <button className="btn btn-primary" onClick={() => setFiltersOpen(o => !o)} aria-expanded={filtersOpen} style={css('height: 34px; font-size: 13px; padding: 0 13px; flex: none')}>{nFilters ? 'Фильтры · ' + nFilters : 'Фильтры'}</button>
           <span aria-live="polite" style={css('font-family: var(--font-heading); font-size: 13px; letter-spacing: .18em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 60%, transparent); white-space: nowrap; flex: none')}>{loaded ? 'найдено ' + found : 'загрузка…'}</span>
+          {me && (
+            <>
+              <button className="btn btn-primary" onClick={() => live.setRail(live.rail === 'journal' ? null : 'journal')} title="Оповещения и журнал" aria-label={'Журнал' + (live.journal ? ', новых: ' + live.journal : '')}
+                style={css('position: relative; height: 34px; font-size: 13px; padding: 0 12px; flex: none; display: inline-flex; align-items: center; gap: 7px')}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
+                Журнал
+                {live.journal > 0 && <span style={css('min-width: 17px; height: 17px; box-sizing: border-box; padding: 0 4px; border-radius: 999px; background: var(--color-bg); color: var(--color-accent-900); font-family: var(--font-heading); font-size: 11.5px; line-height: 17px; text-align: center')}>{live.journal > 99 ? '99+' : live.journal}</span>}
+              </button>
+              <button className="btn btn-primary" onClick={() => live.setRail(live.rail === 'settings' ? null : 'settings')} title="Настройки" aria-label="Настройки"
+                style={css('height: 34px; font-size: 13px; padding: 0 12px; flex: none; display: inline-flex; align-items: center; gap: 7px')}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
+                Настройки
+              </button>
+            </>
+          )}
           <ActiveFilterTags filters={filters} setFilters={setFilters} types={types} />
         </div>
       )}

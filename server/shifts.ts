@@ -8,7 +8,7 @@ import {
 import { badWordIn, findBadField } from '@/lib/moderation';
 import { one, pool, query, tx, type Db } from './db';
 import { AppError, ModerationError } from './errors';
-import { addEvents } from './events';
+import { addEvents, mailSupport } from './events';
 import { clientToday, getJob, initialsOf, shortName } from './jobs';
 import { publish } from './live';
 import { limitOrThrow } from './rate-limit';
@@ -92,7 +92,7 @@ export async function staffAction(num: number, appId: string, action: StaffActio
       // При найме открывается чат — первое сообщение от работодателя.
       await systemMessage(db, j.id, num, a.freelancer_id, me.id, 'employer', HIRE_GREETING);
       await refreshStaffing(j, db);
-      await addEvents([{ userId: a.freelancer_id, kind: 'hire', text: 'Вас наняли · ' + t + '. Открыт чат с работодателем.', jobId: j.id, num }], db);
+      await addEvents([{ userId: a.freelancer_id, kind: 'hire', text: 'Вас наняли · ' + t + '. Открыт чат с работодателем.', jobId: j.id, num, deliver: true, urgent: true }], db);
       await publish([a.freelancer_id, me.id], { t: 'message', num, thread: a.freelancer_id }, db);
     } else if (action === 'reject') {
       if (isHired || a.status === 'hired') throw new AppError(409, name + ' уже нанят — если не вышел, отметьте «Не вышел».');
@@ -104,7 +104,7 @@ export async function staffAction(num: number, appId: string, action: StaffActio
       if (!isHired) throw new AppError(409, 'Старшим можно сделать только нанятого.');
       await query('UPDATE hires SET is_lead = false WHERE job_id = $1 AND is_lead', [j.id], db);
       await query('UPDATE hires SET is_lead = true WHERE job_id = $1 AND freelancer_id = $2', [j.id, a.freelancer_id], db);
-      await addEvents([{ userId: a.freelancer_id, kind: 'hire', text: 'Вы старший смены · ' + t + '. У вас телефон встречающего, работу за бригаду сдаёте вы.', jobId: j.id, num }], db);
+      await addEvents([{ userId: a.freelancer_id, kind: 'hire', text: 'Вы старший смены · ' + t + '. У вас телефон встречающего, работу за бригаду сдаёте вы.', jobId: j.id, num, deliver: true }], db);
     } else if (action === 'no-show') {
       // «Не вышел» снимает со смены только этого исполнителя, остальные остаются.
       if (!isHired) throw new AppError(409, '«Не вышел» отмечается только для нанятого исполнителя.');
@@ -115,7 +115,7 @@ export async function staffAction(num: number, appId: string, action: StaffActio
       await query('UPDATE users SET no_show_count = no_show_count + 1 WHERE id = $1', [a.freelancer_id], db);
       await query(`INSERT INTO user_marks (user_id, kind, reason, job_id) VALUES ($1, 'no_show', $2, $3)`, [a.freelancer_id, 'Не вышел на смену · ' + t, j.id], db);
       await refreshStaffing(j, db);
-      await addEvents([{ userId: a.freelancer_id, kind: 'no_show', text: 'Работодатель отметил «Не вышел» · ' + t + '. Отметка видна в профиле.', jobId: j.id, num }], db);
+      await addEvents([{ userId: a.freelancer_id, kind: 'no_show', text: 'Работодатель отметил «Не вышел» · ' + t + '. Отметка видна в профиле.', jobId: j.id, num, deliver: true }], db);
     }
     await publish([a.freelancer_id], { t: 'job', num }, db);
   });
@@ -164,7 +164,7 @@ export async function leaveShift(num: number, raw: unknown, viewer: Viewer): Pro
     }
     await refreshStaffing(j, db);
     const name = await userName(u.id, db);
-    await addEvents([{ userId: j.employer_id, kind: 'withdrawal', text: name + ' отказался от смены · заказ № ' + jobNum(num) + ' — ' + reason + ', ' + notice + '. Набор открыт снова.', jobId: j.id, num }], db);
+    await addEvents([{ userId: j.employer_id, kind: 'withdrawal', text: name + ' отказался от смены · заказ № ' + jobNum(num) + ' — ' + reason + ', ' + notice + '. Набор открыт снова.', jobId: j.id, num, deliver: true, urgent: late }], db);
     await publish([j.employer_id], { t: 'job', num }, db);
   });
   return getJob(num, viewer);
@@ -188,7 +188,7 @@ export async function reportDone(num: number, viewer: Viewer): Promise<JobDetail
     await query('INSERT INTO reports (job_id, reported_by) VALUES ($1, $2)', [j.id, u.id], db);
     await query(`UPDATE jobs SET status = 'reported', updated_at = now() WHERE id = $1`, [j.id], db);
     await systemMessage(db, j.id, num, u.id, u.id, 'freelancer', REPORT_MESSAGE);
-    await addEvents([{ userId: j.employer_id, kind: 'report', text: 'Работа сдана · заказ № ' + jobNum(num) + ' «' + j.title + '». Примите её в течение ' + AUTO_ACCEPT_DAYS + ' дней — иначе смена закроется автоматически.', jobId: j.id, num }], db);
+    await addEvents([{ userId: j.employer_id, kind: 'report', text: 'Работа сдана · заказ № ' + jobNum(num) + ' «' + j.title + '». Примите её в течение ' + AUTO_ACCEPT_DAYS + ' дней — иначе смена закроется автоматически.', jobId: j.id, num, deliver: true }], db);
     await publish([j.employer_id, ...hired.map(h => h.freelancer_id)], { t: 'job', num }, db);
     await publish([j.employer_id, u.id], { t: 'message', num, thread: u.id }, db);
   });
@@ -210,10 +210,10 @@ async function acceptLocked(j: JobRow, auto: boolean, db: Db) {
   const t = 'заказ № ' + jobNum(j.num) + ' «' + j.title + '»';
   await addEvents([
     ...hired.map(h => ({
-      userId: h.freelancer_id, kind: 'accept', jobId: j.id, num: j.num,
+      userId: h.freelancer_id, kind: 'accept', jobId: j.id, num: j.num, deliver: true,
       text: auto ? 'Смена закрыта автоматически: работодатель не ответил ' + AUTO_ACCEPT_DAYS + ' дней — засчитана вам · ' + t : 'Работа принята · ' + t + '. Оцените работодателя.'
     })),
-    ...(auto ? [{ userId: j.employer_id, kind: 'accept', jobId: j.id, num: j.num, text: 'Смена закрыта автоматически: работа сдана ' + AUTO_ACCEPT_DAYS + ' дней назад · ' + t }] : [])
+    ...(auto ? [{ userId: j.employer_id, kind: 'accept', jobId: j.id, num: j.num, deliver: true, text: 'Смена закрыта автоматически: работа сдана ' + AUTO_ACCEPT_DAYS + ' дней назад · ' + t }] : [])
   ], db);
   await publish([j.employer_id, ...hired.map(h => h.freelancer_id), ...rest], { t: 'job', num: j.num }, db);
 }
@@ -270,7 +270,7 @@ export async function moveDate(num: number, raw: unknown, viewer: Viewer, todayR
     const people = [...(await hiredOf(j.id, db)).map(h => h.freelancer_id), ...(await openApplicants(j.id, db))];
     const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
     const label = parseInt(date.slice(8), 10) + ' ' + MONTHS[parseInt(date.slice(5, 7), 10) - 1];
-    await addEvents(people.map(id => ({ userId: id, kind: 'move', text: 'Дата выхода перенесена на ' + label + ' · заказ № ' + jobNum(num) + ' «' + j.title + '»', jobId: j.id, num })), db);
+    await addEvents(people.map(id => ({ userId: id, kind: 'move', text: 'Дата выхода перенесена на ' + label + ' · заказ № ' + jobNum(num) + ' «' + j.title + '»', jobId: j.id, num, deliver: true, urgent: ahead <= 1 })), db);
     await publish(people, { t: 'job', num }, db);
   });
   return getJob(num, viewer);
@@ -387,9 +387,13 @@ export async function fileComplaint(num: number, raw: unknown, viewer: Viewer): 
       if ((e as { code?: string }).code === '23505') throw new AppError(409, 'Жалоба по этой смене уже подана — ответ придёт в течение 3 рабочих дней.');
       throw e;
     }
-    // Жалобы уходят в поддержку по почте — отправка e-mail подключается вместе с уведомлениями.
-    console.log('[complaint]', jobNum(num), reason, '—', text.slice(0, 200));
-    await addEvents([{ userId: u.id, kind: 'complaint', text: 'Жалоба зарегистрирована · заказ № ' + jobNum(num) + ' — ответ за 3 рабочих дня', jobId: j.id, num }], db);
+    // Жалобы уходят в поддержку по почте (через очередь доставки).
+    const author = await one<{ login: string; phone: string; role: string }>('SELECT login, phone, role FROM users WHERE id = $1', [u.id], db);
+    await mailSupport('Жалоба · заказ № ' + jobNum(num) + ' · ' + reason,
+      'Заказ № ' + jobNum(num) + ' «' + j.title + '»\nАвтор: ' + author?.login + ' (' + author?.role + ', ' + author?.phone + ')\n' +
+      (target ? 'На кого: ' + (await one<{ login: string }>('SELECT login FROM users WHERE id = $1', [target], db))?.login + '\n' : '') +
+      'Тема: ' + reason + '\n\n' + text, db);
+    await addEvents([{ userId: u.id, kind: 'complaint', text: 'Жалоба зарегистрирована · заказ № ' + jobNum(num) + ' — ответ за 3 рабочих дня', jobId: j.id, num, silent: true }], db);
   });
   return getJob(num, viewer);
 }

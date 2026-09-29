@@ -23,5 +23,14 @@ export const config = {
   geocoderUserAgent: () => env('GEOCODER_USER_AGENT', 'arena-raboty/0.1 (dev)'),
   // Сколько доверенных прокси стоит перед приложением (для IP в X-Forwarded-For). 0 — не доверять заголовку.
   trustProxyHops: () => Math.max(0, parseInt(env('TRUST_PROXY_HOPS', '1'), 10) || 0),
+  // Почта: console (в лог) | smtp (SMTP_URL, например smtps://user:pass@smtp.yandex.ru:465).
+  emailProvider: () => env('EMAIL_PROVIDER', isProd ? undefined : 'console') as 'console' | 'smtp',
+  smtpUrl: () => env('SMTP_URL'),
+  emailFrom: () => env('EMAIL_FROM', 'Арена Работы <no-reply@arena-raboty.ru>'),
+  supportEmail: () => env('SUPPORT_EMAIL', 'support@arena-raboty.ru'),
+  // Часовой пояс для тихих часов и суточного лимита уведомлений.
+  timeZone: () => env('APP_TIME_ZONE', 'Europe/Moscow'),
+  publicUrl: () => env('PUBLIC_URL', 'http://localhost:3000'),
+  uploadDir: () => env('UPLOAD_DIR', isProd ? undefined : './data/uploads'),
   offerVersion: '2026-09'
 };

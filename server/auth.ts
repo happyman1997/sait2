@@ -22,7 +22,7 @@ export const RECOVER_WINDOW_MIN = 15;
 
 type ChallengeRow = {
   id: string;
-  purpose: 'signup' | 'recover';
+  purpose: 'signup' | 'recover' | 'phone';
   phone: string;
   phone_key: string;
   user_id: string | null;
@@ -108,7 +108,7 @@ export async function startSignup(raw: unknown, ctx: Ctx, db: Db = pool()): Prom
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-async function loadChallenge(id: unknown, purpose: 'signup' | 'recover', db: Db, lock = false): Promise<ChallengeRow> {
+async function loadChallenge(id: unknown, purpose: 'signup' | 'recover' | 'phone', db: Db, lock = false): Promise<ChallengeRow> {
   if (typeof id !== 'string' || !UUID_RE.test(id)) throw new AppError(400, 'Сессия подтверждения не найдена — начните заново.');
   const row = await one<ChallengeRow>(`SELECT * FROM auth_challenges WHERE id = $1 AND purpose = $2${lock ? ' FOR UPDATE' : ''}`, [id, purpose], db);
   if (!row || row.consumed_at) throw new AppError(410, 'Сессия подтверждения устарела — начните заново.');
@@ -116,7 +116,7 @@ async function loadChallenge(id: unknown, purpose: 'signup' | 'recover', db: Db,
 }
 
 /** «Отправить код снова» / «Позвонить вместо SMS». */
-export async function resendCode(challengeId: unknown, channelRaw: unknown, purpose: 'signup' | 'recover', ctx: Ctx, db: Db = pool()): Promise<CodeSent> {
+export async function resendCode(challengeId: unknown, channelRaw: unknown, purpose: 'signup' | 'recover' | 'phone', ctx: Ctx, db: Db = pool()): Promise<CodeSent> {
   const channel: Channel = channelRaw === 'call' ? 'call' : 'sms';
   const ch = await loadChallenge(challengeId, purpose, db);
   const wait = RESEND_SEC - Math.floor((Date.now() - ch.last_sent_at.getTime()) / 1000);
@@ -137,7 +137,7 @@ export async function resendCode(challengeId: unknown, channelRaw: unknown, purp
     db
   );
   return {
-    challengeId: ch.id, channel, sentTo: purpose === 'signup' ? formatPhone(ch.phone) : '',
+    challengeId: ch.id, channel, sentTo: purpose === 'recover' ? '' : formatPhone(ch.phone),
     resendIn: RESEND_SEC, expiresInSec: CODE_TTL_MIN * 60, ...(code ? devCode(code) : {})
   };
 }
@@ -332,6 +332,62 @@ export async function completeRecover(challengeId: unknown, password: unknown, p
     const session = await createSession(ch.user_id, ctx, db);
     return { user: publicUser(user!), session };
   });
+}
+
+// ───────────────────────── Смена телефона и пароля ─────────────────────────
+
+/** Новый номер подтверждается кодом на него же; нужен текущий пароль. */
+export async function startPhoneChange(userId: string, raw: unknown, ctx: Ctx): Promise<CodeSent> {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const pk = phoneKey(typeof r.phone === 'string' ? r.phone : '');
+  if (!pk) throw new AppError(422, 'Телефон — минимум 10 цифр.', 'phone');
+  const phone = normalizePhone(pk)!;
+  const me = await one<{ password_hash: string; phone_key: string }>('SELECT password_hash, phone_key FROM users WHERE id = $1', [userId]);
+  if (!me) throw new AppError(401, 'Нужно войти в аккаунт.');
+  if (me.phone_key === pk) throw new AppError(422, 'Это ваш текущий номер.', 'phone');
+  if (!(await verifyPassword(typeof r.password === 'string' ? r.password : '', me.password_hash))) throw new AppError(401, 'Неверный пароль.', 'password');
+  const taken = await one<{ role: Role }>('SELECT role FROM users WHERE phone_key = $1', [pk]);
+  if (taken) throw new AppError(409, takenMessage('phone', taken.role), 'phone');
+  await limitOrThrow(`code:phone:${pk}`, 5, 3600, 'Слишком много запросов кода на этот номер — попробуйте через час.');
+  const row = await one<{ id: string }>(
+    `INSERT INTO auth_challenges (purpose, phone, phone_key, user_id, channel, expires_at, ip)
+     VALUES ('phone', $1, $2, $3, 'sms', now() + make_interval(mins => $4), $5) RETURNING id`,
+    [phone, pk, userId, CODE_TTL_MIN, ctx.ip ?? null]);
+  const { code } = await codeSender().send(phone, 'sms', 'phone', ctx.ip ?? undefined);
+  await query('UPDATE auth_challenges SET code_hash = $2 WHERE id = $1', [row!.id, hashCode(row!.id, code)]);
+  return { challengeId: row!.id, channel: 'sms', sentTo: formatPhone(phone), resendIn: RESEND_SEC, expiresInSec: CODE_TTL_MIN * 60, ...devCode(code) };
+}
+
+export async function verifyPhoneChange(userId: string, challengeId: unknown, code: unknown) {
+  const pre = await loadChallenge(challengeId, 'phone', pool());
+  if (pre.user_id !== userId) throw new AppError(403, 'Подтверждение относится к другому аккаунту.');
+  await checkCode(pre, code, pool());
+  return tx(async (db) => {
+    const ch = await loadChallenge(challengeId, 'phone', db, true);
+    const taken = await one<{ id: string; role: Role }>('SELECT id, role FROM users WHERE phone_key = $1', [ch.phone_key], db);
+    if (taken && taken.id !== userId) throw new AppError(409, takenMessage('phone', taken.role), 'phone');
+    await query('UPDATE users SET phone = $2, phone_key = $3, updated_at = now() WHERE id = $1', [userId, ch.phone, ch.phone_key], db);
+    await query('UPDATE auth_challenges SET consumed_at = now(), verified_at = now() WHERE id = $1', [ch.id], db);
+    await query(`INSERT INTO events (user_id, kind, text) VALUES ($1, 'account', $2)`, [userId, 'Телефон изменён на ' + formatPhone(ch.phone)], db);
+    return { phone: ch.phone };
+  });
+}
+
+/** Смена пароля: нужен текущий; остальные входы (другие устройства) завершаются. */
+export async function changePassword(userId: string, raw: unknown, keepSessionId: string | null) {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const next = typeof r.password === 'string' ? r.password : '';
+  if (next.length < 6) throw new AppError(422, 'Пароль короче шести символов — так аккаунт уводят за вечер.', 'password');
+  if (next !== r.password2) throw new AppError(422, 'Пароли не совпали — проверьте второе поле.', 'password2');
+  const me = await one<{ password_hash: string }>('SELECT password_hash FROM users WHERE id = $1', [userId]);
+  if (!me || !(await verifyPassword(typeof r.current === 'string' ? r.current : '', me.password_hash))) throw new AppError(401, 'Текущий пароль неверный.', 'current');
+  const hash = await hashPassword(next);
+  await tx(async (db) => {
+    await query('UPDATE users SET password_hash = $2, password_changed_at = now(), updated_at = now() WHERE id = $1', [userId, hash], db);
+    await query('DELETE FROM sessions WHERE user_id = $1 AND id IS DISTINCT FROM $2', [userId, keepSessionId], db);
+    await query(`INSERT INTO events (user_id, kind, text) VALUES ($1, 'account', 'Пароль изменён — другие входы завершены')`, [userId], db);
+  });
+  return { ok: true };
 }
 
 // ───────────────────────── Профиль текущего пользователя ─────────────────────────

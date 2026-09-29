@@ -4,10 +4,11 @@
 // расчёт, отзывы, жалоба, перенос даты и отказ исполнителя.
 import { useState } from 'react';
 import { css } from '@/lib/css';
+import { uploadForm } from '@/lib/image';
 import { COMPLAINT_KINDS, crewOf, dateLabel, LEAVE_REASONS, localISO, money, plural, type JobDetail } from '@/lib/jobs';
 import { Corners, LABEL } from './ui';
 
-export type Act = (path: string, body: unknown, ok: string) => Promise<boolean>;
+export type Act = (path: string, body: unknown, ok: string, method?: 'POST' | 'DELETE') => Promise<boolean>;
 export type ReviewOpen = (t: { target: string; name: string; rating?: number; text?: string }) => void;
 
 const MUTED = 'color: color-mix(in srgb, var(--color-text) 66%, transparent)';
@@ -120,6 +121,13 @@ export function ShiftBlock({ job, isOwner, act, onChat, onReview, busy }: {
         <div style={css('font-size: 13.5px; line-height: 1.45; margin-top: 8px; ' + MUTED)}>
           Бригада: {s.hired.map(h => h.name + (h.isLead ? ' (старший)' : '')).join(', ')}.
           {!isOwner && (s.iAmLead ? ' Вы старший: у вас телефон встречающего, работу за бригаду сдаёте вы.' : s.leadName ? ' Работу за бригаду сдаёт старший.' : ' Работодатель назначит старшего — он сдаёт работу за всех.')}
+        </div>
+      )}
+
+      <ShiftPhotos job={job} act={act} busy={busy} />
+      {job.status !== 'cancelled' && (
+        <div style={css('font-size: 13px; margin-top: 8px; ' + MUTED)}>
+          <a href={'/api/contract-template?job=' + job.num} download>Шаблон договора ГПХ</a> с условиями этого заказа — заполняете и подписываете сами.
         </div>
       )}
 
@@ -247,6 +255,57 @@ export function MoveDateForm({ job, act, busy, onClose }: { job: JobDetail; act:
         <button className="btn btn-primary" disabled={busy || !date} onClick={async () => { if (await act('move', { date, today: localISO() }, 'Дата перенесена — исполнители уведомлены')) onClose(); }} style={css('flex: 1; ' + BTN)}>Перенести</button>
         <button className="btn btn-ghost" onClick={onClose} style={css('height: 42px; font-size: 13px; padding: 0 14px')}>Назад</button>
       </div>
+    </div>
+  );
+}
+
+/** «Фото до / после»: видят только участники смены; удалить может автор, пока работа не принята. */
+function ShiftPhotos({ job, act, busy }: { job: JobDetail; act: Act; busy: boolean }) {
+  const photos = job.shift?.photos || [];
+  const [loading, setLoading] = useState<'before' | 'after' | null>(null);
+  const locked = job.status === 'accepted' || job.status === 'cancelled';
+  const upload = async (kind: 'before' | 'after', files: FileList | null) => {
+    if (!files?.length) return;
+    setLoading(kind);
+    try {
+      for (const f of Array.from(files).slice(0, 5)) {
+        if (!(await act('photos', await uploadForm(f, 1600, { kind }), ''))) break;
+      }
+    } finally { setLoading(null); }
+  };
+  const col = (kind: 'before' | 'after', title: string) => {
+    const list = photos.filter(p => p.kind === kind);
+    return (
+      <div style={{ minWidth: 0 }}>
+        <div style={css('font-family: var(--font-heading); font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 64%, transparent); margin-bottom: 5px')}>{title}</div>
+        <div style={css('display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 4px')}>
+          {list.map(p => (
+            <div key={p.id} style={css('position: relative; aspect-ratio: 1; border: 1px solid var(--color-divider); overflow: hidden; background: var(--color-bg)')}>
+              <a href={p.url} target="_blank" rel="noreferrer" title="Открыть фото">
+                <img src={p.url} alt={title} loading="lazy" style={css('width: 100%; height: 100%; object-fit: cover; display: block')} />
+              </a>
+              {p.mine && !locked && (
+                <button onClick={() => act('photos/' + p.id, null, 'Фото убрано', 'DELETE')} disabled={busy} title="Убрать фото" aria-label="Убрать фото"
+                  style={css('position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; padding: 0; border: 0; cursor: pointer; background: rgba(20, 26, 32, .7); color: #fff; font-size: 14px; line-height: 20px')}>×</button>
+              )}
+            </div>
+          ))}
+          {!locked && (
+            <label title={'Приложить ' + title.toLowerCase()} style={css('position: relative; aspect-ratio: 1; min-height: 64px; display: grid; place-items: center; text-align: center; cursor: pointer; border: 1px dashed var(--color-accent); font-size: 12px; line-height: 1.2; padding: 4px; color: var(--color-accent-900); background: color-mix(in srgb, var(--color-accent) 5%, transparent)')}>
+              {loading === kind ? 'загрузка…' : list.length ? '+ ещё' : '+ приложить'}
+              <input type="file" accept="image/jpeg,image/png,image/webp,image/heic" multiple disabled={!!loading} aria-label={'Приложить ' + title.toLowerCase()}
+                onChange={e => { upload(kind, e.target.files); e.target.value = ''; }} style={css('position: absolute; inset: 0; opacity: 0; cursor: pointer')} />
+            </label>
+          )}
+          {locked && !list.length && <div style={css('font-size: 12.5px; ' + MUTED)}>нет фото</div>}
+        </div>
+      </div>
+    );
+  };
+  return (
+    <div style={css('display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px')}>
+      {col('before', 'Фото до')}
+      {col('after', 'Фото после')}
     </div>
   );
 }

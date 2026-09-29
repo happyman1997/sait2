@@ -77,6 +77,7 @@ export type ShiftInfo = {
   myThread: string | null;          // свой диалог исполнителя с работодателем
   withdrawal: { reason: string; notice: string; late: boolean; at: string } | null;  // мой отказ от смены
   noShow: boolean;                   // меня отметили «Не вышел»
+  photos: { id: string; kind: 'before' | 'after'; url: string; mine: boolean }[];
 };
 
 export const AUTO_ACCEPT_DAYS = 7;

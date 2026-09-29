@@ -1,5 +1,6 @@
 import { MapApp } from '@/components/app/MapApp';
 import { currentUser } from '@/server/http';
+import { meOf } from '@/server/me';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,7 +11,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
   const job = parseInt(sp.job || '', 10);
   return (
     <MapApp
-      me={u && { name: u.name, role: u.role, city: u.city, baseLat: u.base_lat, baseLng: u.base_lng }}
+      me={meOf(u)}
       initialJob={Number.isSafeInteger(job) && job > 0 ? job : null}
       autoApply={sp.apply === '1'}
     />

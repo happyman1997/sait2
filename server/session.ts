@@ -16,9 +16,11 @@ export type SessionUser = {
   city: string;
   base_lat: number | null;
   base_lng: number | null;
+  base_label: string | null;
   avatar_url: string | null;
   status: 'active' | 'blocked';
   created_at: Date;
+  session_id: string;
 };
 
 const sha256 = (t: string) => crypto.createHash('sha256').update(t).digest();
@@ -37,8 +39,8 @@ export async function createSession(userId: string, ctx: Ctx, db: Db = pool()): 
 /** Пользователь по токену; продлевает сессию (не чаще раза в час). */
 export async function sessionUser(token: string | undefined | null, db: Db = pool()): Promise<SessionUser | null> {
   if (!token || token.length > 100) return null;
-  const row = await one<SessionUser & { session_id: string; last_seen_at: Date }>(
-    `SELECT u.id, u.role, u.login, u.phone, u.email, u.name, u.city, u.base_lat, u.base_lng, u.avatar_url, u.status, u.created_at,
+  const row = await one<SessionUser & { last_seen_at: Date }>(
+    `SELECT u.id, u.role, u.login, u.phone, u.email, u.name, u.city, u.base_lat, u.base_lng, u.base_label, u.avatar_url, u.status, u.created_at,
             s.id AS session_id, s.last_seen_at
        FROM sessions s JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = $1 AND s.expires_at > now()`,
@@ -53,7 +55,7 @@ export async function sessionUser(token: string | undefined | null, db: Db = poo
       db
     );
   }
-  const { session_id: _s, last_seen_at: _l, ...user } = row;
+  const { last_seen_at: _l, ...user } = row;
   return user;
 }
 

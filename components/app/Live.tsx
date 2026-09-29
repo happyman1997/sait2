@@ -12,7 +12,10 @@ export type LiveEvent =
   | { t: 'job'; num: number }
   | { t: 'event'; text: string; num: number | null };
 
-export type Me = { name: string; role: 'freelancer' | 'employer'; city: string; baseLat: number | null; baseLng: number | null } | null;
+export type Me = {
+  id: string; name: string; role: 'freelancer' | 'employer'; city: string; avatarUrl: string | null;
+  baseLat: number | null; baseLng: number | null; baseLabel: string;
+} | null;
 
 export type ReviewRequest = {
   num: number; target: string; name: string; title: string; rating?: number; text?: string; editable?: boolean;
@@ -34,7 +37,17 @@ type Ctx = {
   openReview: (r: ReviewRequest | null) => void;
   place: 'map' | 'form' | 'page';
   setPlace: (p: 'map' | 'form' | 'page') => void;
+  /** Непрочитанные события журнала. */
+  journal: number;
+  setJournal: (n: number) => void;
+  /** Показывать события всплывающими уведомлениями (настройка «В открытой вкладке»). */
+  setToasts: (on: boolean) => void;
+  /** Правая панель «Журнал» / «Настройки». */
+  rail: Rail;
+  setRail: (r: Rail) => void;
 };
+
+export type Rail = 'journal' | 'settings' | null;
 
 const LiveCtx = createContext<Ctx | null>(null);
 
@@ -58,16 +71,24 @@ export function LiveProvider({ me, children }: { me: Me; children: ReactNode }) 
   const [dock, setDockState] = useState<Dock>({ open: false, view: 'list', num: null, thread: null });
   const [review, setReview] = useState<ReviewRequest | null>(null);
   const [place, setPlace] = useState<'map' | 'form' | 'page'>('page');
+  const [journal, setJournal] = useState(0);
+  const toasts = useRef(true);
+  const setToasts = useCallback((on: boolean) => { toasts.current = on; }, []);
+  const [rail, setRail] = useState<Rail>(null);
   const listeners = useRef(new Set<(e: LiveEvent) => void>());
 
   // me — новый объект при каждом обновлении серверной части; поток и список зависят только от того, кто вошёл.
-  const meKey = me ? me.role + '|' + me.name : '';
+  const meKey = me?.id ?? '';
   const reloadChats = useCallback(() => {
     if (!meKey) { setChats([]); return; }
     api<{ chats: ChatThread[] }>('/api/chats').then(r => setChats(r.chats)).catch(() => {});
   }, [meKey]);
 
   useEffect(() => { reloadChats(); }, [reloadChats]);
+  useEffect(() => {
+    if (!meKey) { setJournal(0); return; }
+    api<{ unread: number; toasts: boolean }>('/api/events?limit=1').then(r => { setJournal(r.unread); toasts.current = r.toasts; }).catch(() => {});
+  }, [meKey]);
 
   // Один поток на вкладку; браузер сам переподключается (retry: 5000).
   useEffect(() => {
@@ -77,7 +98,7 @@ export function LiveProvider({ me, children }: { me: Me; children: ReactNode }) 
     es.onmessage = (m) => {
       let e: LiveEvent;
       try { e = JSON.parse(m.data); } catch { return; }
-      if (e.t === 'event') flash(e.text);
+      if (e.t === 'event') { if (toasts.current) flash(e.text); setJournal(n => n + 1); }
       if (e.t === 'message' || e.t === 'read') { clearTimeout(reloadT); reloadT = setTimeout(reloadChats, 150); }
       listeners.current.forEach(fn => fn(e));
     };
@@ -93,8 +114,9 @@ export function LiveProvider({ me, children }: { me: Me; children: ReactNode }) 
   const openChat = useCallback((num: number, thread: string) => setDockState({ open: true, view: 'chat', num, thread }), []);
 
   const value = useMemo<Ctx>(() => ({
-    me, chats, unread: chats.reduce((n, c) => n + c.unread, 0), reloadChats, dock, setDock, openChat, onLive, review, openReview: setReview, place, setPlace
-  }), [me, chats, reloadChats, dock, setDock, openChat, onLive, review, place]);
+    me, chats, unread: chats.reduce((n, c) => n + c.unread, 0), reloadChats, dock, setDock, openChat, onLive, review, openReview: setReview, place, setPlace,
+    journal, setJournal, setToasts, rail, setRail
+  }), [setToasts, me, chats, reloadChats, dock, setDock, openChat, onLive, review, place, journal, rail]);
 
   return <LiveCtx.Provider value={value}>{children}</LiveCtx.Provider>;
 }

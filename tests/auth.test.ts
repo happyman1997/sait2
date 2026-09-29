@@ -17,7 +17,8 @@ setCodeSender({
   async send(phone, channel) {
     sent.push({ phone, code: nextCode, channel });
     return { code: nextCode };
-  }
+  },
+  async sendText() {}
 });
 
 const ctx = { ip: '10.0.0.1', userAgent: 'vitest' };

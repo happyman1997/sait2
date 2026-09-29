@@ -15,12 +15,17 @@ export class ApiError extends Error {
   get field() { return this.body.field; }
 }
 
-export async function api<T = unknown>(url: string, body?: unknown, method: 'POST' | 'PATCH' = 'POST'): Promise<T> {
+/** JSON-запрос; FormData уходит как multipart (загрузка фото). DELETE без тела — передайте body = null. */
+export async function api<T = unknown>(url: string, body?: unknown, method: 'POST' | 'PATCH' | 'PUT' | 'DELETE' = 'POST'): Promise<T> {
   let res: Response;
   try {
     res = await fetch(url, body === undefined
       ? { credentials: 'same-origin' }
-      : { method, credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      : body === null
+        ? { method, credentials: 'same-origin' }
+        : body instanceof FormData
+          ? { method, credentials: 'same-origin', body }
+          : { method, credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   } catch {
     throw new ApiError(0, { message: 'Нет связи с сервером — проверьте интернет и повторите.' });
   }

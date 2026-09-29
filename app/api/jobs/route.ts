@@ -1,4 +1,3 @@
-import { KM_STEPS } from '@/lib/catalog';
 import { assertSameOrigin, currentUser, readJson, route } from '@/server/http';
 import { clientToday, createJob, listJobs } from '@/server/jobs';
 
@@ -10,7 +9,8 @@ export const GET = route(async (req) => {
   return listJobs({
     types: (p.get('types') || '').split(',').filter(Boolean),
     minPay: Math.min(10_000_000, Math.max(0, num('minPay') || 0)),
-    km: km && KM_STEPS.includes(km) ? km : undefined,
+    // Шаги фильтра карты и радиусы оповещений (10–300 км) — любое целое до 1000 км.
+    km: km && Number.isInteger(km) && km > 0 && km <= 1000 ? km : undefined,
     when: p.get('when') === 'soon' ? 'soon' : 'any',
     q: p.get('q') || '',
     today: clientToday(p.get('today')),

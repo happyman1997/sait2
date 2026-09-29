@@ -91,3 +91,16 @@ export async function assertSameOrigin(req: Request) {
     throw new AppError(403, 'Запрос с чужого сайта отклонён.');
   }
 }
+
+/** multipart/form-data (загрузка файлов). Размер тела ограничен на уровне прокси и проверкой в files.ts. */
+export async function readForm(req: Request): Promise<FormData> {
+  const ct = req.headers.get('content-type') || '';
+  if (!ct.includes('multipart/form-data')) throw new AppError(415, 'Ожидается загрузка файла.');
+  const len = Number(req.headers.get('content-length') || 0);
+  if (len > 9 * 1024 * 1024) throw new AppError(413, 'Файл больше 8 МБ — уменьшите фото.', 'file');
+  try {
+    return await req.formData();
+  } catch {
+    throw new AppError(400, 'Не удалось прочитать файл — попробуйте ещё раз.');
+  }
+}

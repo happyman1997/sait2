@@ -343,3 +343,10 @@ button:not(:disabled):active { transform: translateY(1px); }
 
 /* Наведение на строки списков (в прототипе — style-hover) */
 .job-row:hover { border-color: var(--color-accent) !important; }
+
+/* Профиль: строки истории и одна колонка на узком экране */
+.row-hover:hover { background: var(--color-accent-100) !important; }
+@media (max-width: 860px) {
+  .profile-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  .profile-grid > div:last-child { position: static !important; }
+}

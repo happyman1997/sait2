@@ -9,6 +9,7 @@ import { badWordIn, findBadField } from '@/lib/moderation';
 import { one, pool, query, tx, type Db } from './db';
 import { AppError, ModerationError } from './errors';
 import { addEvents } from './events';
+import { jobPhotos } from './files';
 import { publish } from './live';
 import { limitOrThrow } from './rate-limit';
 import type { SessionUser } from './session';
@@ -18,7 +19,7 @@ export const CANCEL_REASONS_EMPLOYER = ['объект отменил работ�
 const NOTICES = ['больше суток', 'меньше суток'];
 const LATE_MARK_DAYS = 90;
 
-type Viewer = Pick<SessionUser, 'id' | 'role' | 'city' | 'base_lat' | 'base_lng'> | null;
+type Viewer = (Pick<SessionUser, 'id' | 'role' | 'city' | 'base_lat' | 'base_lng'> & { base_label?: string | null }) | null;
 
 // ───────────────────────── Даты ─────────────────────────
 
@@ -47,7 +48,7 @@ export type ListParams = {
 };
 
 export function baseOf(viewer: Viewer, lat?: number, lng?: number) {
-  if (viewer?.base_lat != null && viewer.base_lng != null) return { lat: viewer.base_lat, lng: viewer.base_lng, label: viewer.city };
+  if (viewer?.base_lat != null && viewer.base_lng != null) return { lat: viewer.base_lat, lng: viewer.base_lng, label: viewer.base_label || viewer.city };
   if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat!) <= 90 && Math.abs(lng!) <= 180) return { lat: lat!, lng: lng!, label: 'выбранная точка' };
   return DEFAULT_BASE;
 }
@@ -233,7 +234,7 @@ export async function getJob(num: number, viewer: Viewer, db: Db = pool()): Prom
 type HiredRow = { freelancer_id: string; is_lead: boolean; name: string; app_id: string | null };
 
 async function loadShift(jobId: string, employerId: string, empName: string, hired: HiredRow[], viewer: NonNullable<Viewer>, owner: boolean, db: Db): Promise<ShiftInfo> {
-  const [rep, acc, settle, reviews, complaint, withdrawal, noShow, msgs] = await Promise.all([
+  const [rep, acc, settle, reviews, complaint, withdrawal, noShow, msgs, photos] = await Promise.all([
     one<{ reported_at: Date }>('SELECT reported_at FROM reports WHERE job_id = $1', [jobId], db),
     one<{ accepted_at: Date; auto: boolean }>('SELECT accepted_at, auto FROM acceptances WHERE job_id = $1', [jobId], db),
     one<{ employer_marked: boolean; freelancer_marked: boolean }>('SELECT employer_marked, freelancer_marked FROM settlements WHERE job_id = $1', [jobId], db),
@@ -243,7 +244,8 @@ async function loadShift(jobId: string, employerId: string, empName: string, hir
     owner ? Promise.resolve(null) : one<{ reason: string; notice: string; late: boolean; at: Date }>(
       'SELECT reason, notice, late, at FROM withdrawals WHERE job_id = $1 AND freelancer_id = $2 ORDER BY at DESC LIMIT 1', [jobId, viewer.id], db),
     owner ? Promise.resolve(null) : one<{ at: Date }>('SELECT at FROM no_shows WHERE job_id = $1 AND freelancer_id = $2', [jobId, viewer.id], db),
-    owner ? Promise.resolve(null) : one<{ n: number }>('SELECT count(*)::int AS n FROM messages WHERE job_id = $1 AND freelancer_id = $2', [jobId, viewer.id], db)
+    owner ? Promise.resolve(null) : one<{ n: number }>('SELECT count(*)::int AS n FROM messages WHERE job_id = $1 AND freelancer_id = $2', [jobId, viewer.id], db),
+    owner || hired.some(h => h.freelancer_id === viewer.id) ? jobPhotos(jobId, viewer.id, db) : Promise.resolve([])
   ]);
   const lead = hired.find(h => h.is_lead);
   const meHired = hired.find(h => h.freelancer_id === viewer.id);
@@ -267,7 +269,8 @@ async function loadShift(jobId: string, employerId: string, empName: string, hir
     canChat: owner ? hired.length > 0 : !!meHired || !!(msgs && msgs.n > 0),
     myThread: owner ? null : viewer.id,
     withdrawal: withdrawal ? { reason: withdrawal.reason, notice: withdrawal.notice, late: withdrawal.late, at: withdrawal.at.toISOString() } : null,
-    noShow: !!noShow
+    noShow: !!noShow,
+    photos
   };
 }
 
@@ -385,9 +388,11 @@ export async function createJob(raw: unknown, viewer: Viewer, todayRaw: unknown)
         f.meetName || null, f.meetPhone || null],
       db
     );
-    await addEvents([{ userId: viewer.id, kind: 'job', text: 'Заказ опубликован — № ' + jobNum(Number(row!.num)), jobId: row!.id, num: Number(row!.num) }], db);
+    await addEvents([{ userId: viewer.id, kind: 'job', text: 'Заказ опубликован — № ' + jobNum(Number(row!.num)), jobId: row!.id, num: Number(row!.num), silent: true }], db);
     return Number(row!.num);
   });
+  // «Новая смена рядом» — вне транзакции публикации: сбой рассылки не должен отменять заказ.
+  await notifyNearby(num).catch(e => console.error('[nearby]', (e as Error).message));
   return getJob(num, viewer);
 }
 
@@ -454,7 +459,7 @@ export async function cancelJob(num: number, raw: unknown, viewer: Viewer): Prom
     await query(`UPDATE jobs SET status = 'cancelled', updated_at = now() WHERE id = $1`, [j.id], db);
     // Отклики закрываются; нанятые и откликнувшиеся узнают о причине.
     const people = await query<{ freelancer_id: string }>(`SELECT freelancer_id FROM applications WHERE job_id = $1 AND status IN ('sent', 'hired')`, [j.id], db);
-    await addEvents(people.rows.map(a => ({ userId: a.freelancer_id, kind: 'cancel', text: 'Заказ № ' + jobNum(num) + ' «' + j.title + '» отменён: ' + reason, jobId: j.id, num })), db);
+    await addEvents(people.rows.map(a => ({ userId: a.freelancer_id, kind: 'cancel', text: 'Заказ № ' + jobNum(num) + ' «' + j.title + '» отменён: ' + reason, jobId: j.id, num, deliver: true, urgent: notice === 'меньше суток' })), db);
     await publish(people.rows.map(a => a.freelancer_id), { t: 'job', num }, db);
     await query(`UPDATE applications SET status = 'rejected', updated_at = now() WHERE job_id = $1 AND status = 'sent'`, [j.id], db);
     if (late) {
@@ -504,7 +509,7 @@ export async function applyToJob(num: number, raw: unknown, viewer: Viewer, toda
     const me = await one<{ name: string }>('SELECT name FROM users WHERE id = $1', [viewer.id], db);
     await query(`INSERT INTO events (user_id, kind, text, job_id) VALUES ($1, 'application', $2, $3)`,
       [viewer.id, 'Отклик отправлен · заказ № ' + jobNum(num) + ' «' + j.title + '»', j.id], db);
-    await addEvents([{ userId: j.employer_id, kind: 'application', text: 'Новый отклик · заказ № ' + jobNum(num) + ' «' + j.title + '» — ' + shortName(me?.name || 'исполнитель'), jobId: j.id, num }], db);
+    await addEvents([{ userId: j.employer_id, kind: 'application', text: 'Новый отклик · заказ № ' + jobNum(num) + ' «' + j.title + '» — ' + shortName(me?.name || 'исполнитель'), jobId: j.id, num, deliver: true }], db);
     await publish([j.employer_id], { t: 'job', num }, db);
   });
   return getJob(num, viewer);
@@ -531,3 +536,29 @@ export async function withdrawApplication(num: number, viewer: Viewer): Promise<
   return getJob(num, viewer);
 }
 
+
+/**
+ * «Новая смена рядом»: исполнителям, у кого база в радиусе оповещений (настройка «Радиус от дома»).
+ * Навыки не отсекают — только ставят выше. С выключенными оповещениями событие остаётся в журнале без доставки.
+ */
+export async function notifyNearby(num: number, db: Db = pool()) {
+  const j = await one<{ id: string; title: string; lat: number; lng: number; pay: number; unit: string; urgent: boolean; type_id: string; date: string }>(
+    `SELECT id, title, lat, lng, pay, unit, urgent, type_id, to_char(date, 'YYYY-MM-DD') AS date FROM jobs WHERE num = $1`, [num], db);
+  if (!j) return 0;
+  const people = await query<{ id: string; km: number }>(
+    `SELECT u.id, earth_distance(ll_to_earth(u.base_lat, u.base_lng), ll_to_earth($1, $2)) / 1000 AS km
+       FROM users u JOIN notification_settings ns ON ns.user_id = u.id
+       LEFT JOIN freelancer_profiles fp ON fp.user_id = u.id
+      WHERE u.role = 'freelancer' AND u.status = 'active' AND u.base_lat IS NOT NULL
+        AND earth_box(ll_to_earth($1, $2), 300000) @> ll_to_earth(u.base_lat, u.base_lng)
+        AND earth_distance(ll_to_earth(u.base_lat, u.base_lng), ll_to_earth($1, $2)) <= ns.radius_km * 1000
+      ORDER BY ($3 = ANY(coalesce(fp.skills, '{}'))) DESC, km
+      LIMIT 500`,
+    [j.lat, j.lng, j.type_id], db);
+  const price = j.pay.toLocaleString('ru-RU') + ' ₽' + (j.unit === 'за заказ' ? '' : ' ' + j.unit);
+  await addEvents(people.rows.map(p => ({
+    userId: p.id, kind: 'nearby', jobId: j.id, num, deliver: true, urgent: j.urgent,
+    text: (j.urgent ? 'Срочная смена' : 'Новая смена') + ' в ' + (p.km < 10 ? p.km.toFixed(1) : Math.round(p.km)) + ' км: ' + j.title + ' · ' + price
+  })), db);
+  return people.rows.length;
+}
