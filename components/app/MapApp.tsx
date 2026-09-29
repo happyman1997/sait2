@@ -8,7 +8,6 @@ import {
   dateLabel, emptyJobForm, jobAllErrors, jobNum, jobStepErrors, localISO, money, moneyShort,
   type JobDetail, type JobForm, type JobSummary
 } from '@/lib/jobs';
-import { AppHeader } from '@/components/AppHeader';
 import { showModeration } from '@/components/ModerationGuard';
 import { useFlash } from '@/components/Toast';
 import { useNarrow } from '@/components/useNarrow';
@@ -18,10 +17,12 @@ import { ActiveFilterTags, EMPTY_FILTERS, FiltersPanel, filtersCount, type Filte
 import { JobDetailPanel } from './JobDetailPanel';
 import { JobFormPanel } from './JobFormPanel';
 import { JobListOverlay } from './JobListOverlay';
+import { useLive, useLiveEvent } from './Live';
 import { GuestGuide, StartSteps } from './RailSummary';
 import { Corners, LABEL } from './ui';
 
-export type Me = { name: string; role: 'freelancer' | 'employer'; city: string; baseLat: number | null; baseLng: number | null } | null;
+export type { Me } from './Live';
+import type { Me } from './Live';
 
 type GeoHit = { lat: number; lng: number; label: string; sub: string; district: string };
 type Kept = { form: JobForm; step: number };
@@ -140,7 +141,7 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
 
   const patchJob = (j: JobDetail) => {
     setDetail(j);
-    setJobs(list => list.map(x => (x.num === j.num ? { ...x, myStatus: j.myStatus, applicants: j.applicants, hired: j.hired, status: j.status } : x)));
+    setJobs(list => list.map(x => (x.num === j.num ? { ...x, myStatus: j.myStatus, applicants: j.applicants, hired: j.hired, status: j.status, date: j.date, urgent: j.urgent } : x)));
   };
 
   const apply = useCallback(async (reqConfirmed: boolean) => {
@@ -404,6 +405,47 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
     setSelected(null); setListOpen(false); setFiltersOpen(false); setStackPick(null);
   };
 
+  // ─── Оболочка: логотип, место плашки «Сообщения», живые обновления ───
+  const live = useLive();
+  const { setPlace } = live;
+  useEffect(() => { setPlace(form ? 'form' : 'map'); }, [form, setPlace]);
+  useEffect(() => () => setPlace('page'), [setPlace]);
+  const goHomeRef = useRef(goHome);
+  goHomeRef.current = goHome;
+  useEffect(() => {
+    const h = () => goHomeRef.current();
+    window.addEventListener('arena:home', h);
+    return () => window.removeEventListener('arena:home', h);
+  }, []);
+
+  const refreshDetail = useCallback(async (num: number) => {
+    try { patchJob((await api<{ job: JobDetail }>('/api/jobs/' + num)).job); } catch { /* заказ могли удалить */ }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const listReloadT = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useLiveEvent((e) => {
+    if (e.t !== 'job') return;
+    if (e.num === selected) refreshDetail(e.num);
+    clearTimeout(listReloadT.current);
+    listReloadT.current = setTimeout(loadJobs, 400);
+  });
+
+  /** Действие смены: POST на /api/jobs/N/…, обновить карточку и список, показать итог. */
+  const act = useCallback(async (path: string, body: unknown, ok: string) => {
+    if (!detail) return false;
+    setBusy(true);
+    try {
+      const r = await api<{ job: JobDetail }>('/api/jobs/' + detail.num + '/' + path, body ?? {});
+      patchJob(r.job);
+      if (ok) flash(ok);
+      loadJobs();
+      return true;
+    } catch (e) {
+      if (e instanceof ApiError && e.body.moderation) showModeration(e.body.moderation.label, e.body.moderation.category);
+      flash(e instanceof ApiError ? e.message : 'Не получилось — попробуйте ещё раз');
+      return false;
+    } finally { setBusy(false); }
+  }, [detail, flash, loadJobs]);
+
   // ─── Метки ───
   const pins: Pin[] = useMemo(() => {
     const list = jobs.map(j => ({
@@ -426,7 +468,7 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
   const nFilters = filtersCount(filters);
   const showDetail = !!detail && !form && detail.num === selected;
   const railStyle = narrow
-    ? 'grid-row: 2; grid-column: 1; min-height: 0; border-top: 1px solid var(--color-divider); overflow-y: auto; overflow-x: hidden; padding: 14px 16px 26px; background: var(--color-neutral-100); box-shadow: 0 -6px 18px rgba(31,45,58,.10)'
+    ? 'grid-row: 2; grid-column: 1; min-height: 0; border-top: 1px solid var(--color-divider); overflow-y: auto; overflow-x: hidden; padding: 14px 16px ' + (me ? '76px' : '26px') + '; background: var(--color-neutral-100); box-shadow: 0 -6px 18px rgba(31,45,58,.10)'
     : 'grid-row: 1; grid-column: 1; min-height: 0; border-right: 1px solid var(--color-divider); overflow-y: auto; overflow-x: hidden; padding: 20px 22px 26px 20px; background: var(--color-neutral-100)';
   const shellStyle = narrow
     ? 'position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: ' + (form ? 'minmax(120px, 24%)' : 'minmax(220px, 46%)') + ' minmax(0, 1fr)'
@@ -434,8 +476,7 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
   const PAD = 'max(clamp(14px, 2vw, 24px), calc((100% - 1440px) / 2))';
 
   return (
-    <div style={css('display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden')}>
-      <AppHeader me={me && { name: me.name, role: me.role, city: me.city }} onHome={goHome} />
+    <div style={css('display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden')}>
 
       {!me && !(narrow && (form || selected)) && (
         <div style={css('flex: none; display: flex; align-items: baseline; gap: 6px 16px; flex-wrap: wrap; padding: clamp(9px, 1.4vw, 13px) ' + PAD + '; background: var(--color-accent-900); border-bottom: 1px solid var(--color-accent-900)')}>
@@ -493,7 +534,9 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
 
           {showDetail && (
             <JobDetailPanel key={detail!.num} job={detail!} role={role} others={jobs} busy={busy}
-              onClose={() => setSelected(null)} onApply={apply} onWithdraw={withdraw} onCancel={cancelJob} onEdit={startEdit} onOpenJob={select} />
+              onClose={() => setSelected(null)} onApply={apply} onWithdraw={withdraw} onCancel={cancelJob} onEdit={startEdit} onOpenJob={select}
+              act={act} onChat={thread => live.openChat(detail!.num, thread)}
+              onReview={(t) => live.openReview({ ...t, num: detail!.num, title: detail!.title + ' · ' + dateLabel(detail!.date), onSaved: patchJob })} />
           )}
 
           {!form && selected && !showDetail && <div style={css('font-size: 14px; ' + 'color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>Загружаем заказ…</div>}

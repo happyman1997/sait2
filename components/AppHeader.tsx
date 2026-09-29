@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { css } from '@/lib/css';
@@ -17,8 +17,14 @@ const TAB = (active: boolean) => css('flex: none; white-space: nowrap; cursor: p
 const HBTN = 'height: clamp(38px, 5vw, 46px); font-size: clamp(13px, 1.4vw, 15px); letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; flex: 0 0 auto';
 
 // Шапка приложения (тёмная полоса прототипа). Клик по логотипу — на главную, панели закрываются.
-export function AppHeader({ me, onHome }: { me: HeaderUser; onHome?: () => void }) {
+export function AppHeader({ me, onHome, unread = 0, onChat, chatActive = false }: {
+  me: HeaderUser; onHome?: () => void; unread?: number; onChat?: () => void; chatActive?: boolean;
+}) {
   const router = useRouter();
+  const path = usePathname();
+  const tabs = !me ? [] : me.role === 'employer'
+    ? [{ href: '/', label: 'Карта' }, { href: '/mine', label: 'Мои заказы' }, { href: '/apps', label: 'Отклики' }]
+    : [{ href: '/', label: 'Карта' }, { href: '/mine', label: 'Мои смены' }];
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -45,9 +51,11 @@ export function AppHeader({ me, onHome }: { me: HeaderUser; onHome?: () => void 
       {!me && <Link href="/auth" className="btn btn-primary" style={css(HBTN + '; padding: 0 clamp(12px, 2vw, 22px)')}>Создать профиль</Link>}
 
       {me && (
-        <div style={css('display: flex; gap: 5px; flex: 0 0 auto; flex-wrap: nowrap')}>
-          <Link href="/" onClick={onHome} style={TAB(true)}>Карта</Link>
-        </div>
+        <nav aria-label="Разделы" style={css('display: flex; gap: 5px; flex: 0 1 auto; flex-wrap: wrap')}>
+          {tabs.map(t => (
+            <Link key={t.href} href={t.href} onClick={t.href === '/' ? onHome : undefined} aria-current={path === t.href ? 'page' : undefined} style={TAB(path === t.href)}>{t.label}</Link>
+          ))}
+        </nav>
       )}
 
       {!me && <Link href="/auth?mode=login" className="btn btn-secondary" style={css(HBTN + '; padding: 0 clamp(14px, 2vw, 24px)')}>Войти</Link>}
@@ -56,6 +64,12 @@ export function AppHeader({ me, onHome }: { me: HeaderUser; onHome?: () => void 
 
       {me && (
         <div ref={menuRef} style={css('position: relative; display: flex; align-items: center; gap: 10px; flex: none')}>
+          <button onClick={onChat} title="Чат" aria-label={'Чат' + (unread ? ', непрочитанных: ' + unread : '')}
+            style={css('position: relative; flex: none; width: 38px; height: 38px; display: grid; place-items: center; border-radius: 999px; cursor: pointer; background: ' +
+              (chatActive ? 'var(--color-accent)' : 'transparent') + '; border: 1px solid ' + (chatActive ? 'var(--color-accent)' : 'rgba(242, 239, 236, .32)') + '; color: ' + (chatActive ? '#fff' : 'rgba(242, 239, 236, .8)'))}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>
+            {unread > 0 && <span style={css('position: absolute; top: -3px; right: -3px; min-width: 17px; height: 17px; box-sizing: border-box; padding: 0 4px; border-radius: 999px; background: var(--color-accent); color: #fff; font-family: var(--font-heading); font-size: 11.5px; line-height: 17px; text-align: center')}>{unread}</span>}
+          </button>
           <button onClick={() => setMenu(m => !m)} aria-expanded={menu} title="Профиль"
             style={css('flex: none; display: inline-flex; align-items: center; gap: 9px; padding: 3px 12px 3px 3px; min-height: 42px; cursor: pointer; border-radius: 999px; font-family: var(--font-body); background: ' +
               (menu ? 'var(--color-accent)' : 'transparent') + '; border: 1px solid ' + (menu ? 'var(--color-accent)' : 'rgba(242, 239, 236, .34)'))}>

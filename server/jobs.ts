@@ -3,11 +3,13 @@ import crypto from 'node:crypto';
 import { CREW_ANY, MONTHS_GEN } from '@/lib/catalog';
 import {
   autoTitle, daysAhead, emptyJobForm, isKnownPayType, isKnownRepeat, isKnownTools, isKnownUnit, jobAllErrors, JOB_FIELD_STEP,
-  jobNum, payNumber, type AppStatus, type Applicant, type JobDetail, type JobForm, type JobStatus, type JobSummary
+  jobNum, payNumber, AUTO_ACCEPT_DAYS, type AppStatus, type Applicant, type JobDetail, type JobForm, type JobStatus, type JobSummary, type ShiftInfo
 } from '@/lib/jobs';
 import { badWordIn, findBadField } from '@/lib/moderation';
 import { one, pool, query, tx, type Db } from './db';
 import { AppError, ModerationError } from './errors';
+import { addEvents } from './events';
+import { publish } from './live';
 import { limitOrThrow } from './rate-limit';
 import type { SessionUser } from './session';
 
@@ -130,11 +132,11 @@ export async function jobTypes(today: string, db: Db = pool()) {
 
 // ───────────────────────── Карточка ─────────────────────────
 
-function initialsOf(name: string) {
+export function initialsOf(name: string) {
   return String(name || '').replace(/[^А-Яа-яЁёA-Za-z ]/g, '').trim().split(/\s+/).map(w => w[0] || '').join('').slice(0, 2).toUpperCase();
 }
 
-function shortName(name: string) {
+export function shortName(name: string) {
   const [a, b] = String(name || '').trim().split(/\s+/);
   return b ? a + ' ' + b[0] + '.' : a || '';
 }
@@ -158,42 +160,54 @@ export async function getJob(num: number, viewer: Viewer, db: Db = pool()): Prom
   const r = await loadJobRow(num, viewer, db);
   if (!r) throw new AppError(404, 'Заказ не найден — возможно, его удалили.');
   const owner = !!viewer && viewer.id === r.employer_id;
-  const hiredMe = viewer?.role === 'freelancer' && r.my_status === 'hired';
 
-  const emp = await one<{ name: string; org_type: string | null; org_name: string | null; created_at: Date; rating: number | null; reviews: number; jobs: number }>(
-    `SELECT u.name, p.org_type, p.org_name, u.created_at,
-            (SELECT avg(rating)::float8 FROM reviews WHERE target_id = u.id) AS rating,
-            (SELECT count(*) FROM reviews WHERE target_id = u.id)::int AS reviews,
-            (SELECT count(*) FROM jobs WHERE employer_id = u.id)::int AS jobs
-       FROM users u LEFT JOIN employer_profiles p ON p.user_id = u.id WHERE u.id = $1`,
-    [r.employer_id],
-    db
-  );
+  const [emp, cancel, hiredRows] = await Promise.all([
+    one<{ name: string; org_type: string | null; org_name: string | null; created_at: Date; rating: number | null; reviews: number; jobs: number }>(
+      `SELECT u.name, p.org_type, p.org_name, u.created_at,
+              (SELECT avg(rating)::float8 FROM reviews WHERE target_id = u.id) AS rating,
+              (SELECT count(*) FROM reviews WHERE target_id = u.id)::int AS reviews,
+              (SELECT count(*) FROM jobs WHERE employer_id = u.id)::int AS jobs
+         FROM users u LEFT JOIN employer_profiles p ON p.user_id = u.id WHERE u.id = $1`,
+      [r.employer_id], db),
+    r.status === 'cancelled'
+      ? one<{ reason: string; notice: string; late: boolean; at: Date }>('SELECT reason, notice, late, at FROM cancellations WHERE job_id = $1', [r.id], db)
+      : Promise.resolve(null),
+    query<{ freelancer_id: string; is_lead: boolean; name: string; app_id: string | null }>(
+      `SELECT h.freelancer_id, h.is_lead, u.name, a.id AS app_id
+         FROM hires h JOIN users u ON u.id = h.freelancer_id
+         LEFT JOIN applications a ON a.job_id = h.job_id AND a.freelancer_id = h.freelancer_id
+        WHERE h.job_id = $1 ORDER BY h.hired_at`,
+      [r.id], db)
+  ]);
   const empName = emp && emp.org_type && emp.org_type !== 'частное лицо' && emp.org_name ? emp.org_name : shortName(emp?.name || '');
-
-  const cancel = r.status === 'cancelled'
-    ? await one<{ reason: string; notice: string; late: boolean; at: Date }>('SELECT reason, notice, late, at FROM cancellations WHERE job_id = $1', [r.id], db)
-    : null;
+  const hired = hiredRows.rows;
+  const meHired = viewer?.role === 'freelancer' ? hired.find(h => h.freelancer_id === viewer.id) : undefined;
+  // Телефон встречающего: владельцу и нанятому; в бригаде из нескольких человек — только старшему.
+  const phoneForMe = owner || (!!meHired && (hired.length <= 1 || meHired.is_lead));
 
   let applicantList: Applicant[] | null = null;
   if (owner) {
-    const apps = await query<{ name: string; status: AppStatus; created_at: Date; no_show_count: number; gear: string[] | null; rating: number | null; done: number; is_lead: boolean | null }>(
-      `SELECT u.name, a.status, a.created_at, u.no_show_count, fp.gear,
+    const apps = await query<{ id: string; freelancer_id: string; name: string; status: AppStatus; created_at: Date; no_show_count: number; gear: string[] | null; rating: number | null; done: number; is_lead: boolean | null }>(
+      `SELECT a.id, a.freelancer_id, u.name, a.status, a.created_at, u.no_show_count, fp.gear,
               (SELECT avg(rating)::float8 FROM reviews WHERE target_id = u.id) AS rating,
               (SELECT count(*) FROM hires h JOIN acceptances ac ON ac.job_id = h.job_id WHERE h.freelancer_id = u.id)::int AS done,
               (SELECT is_lead FROM hires h WHERE h.job_id = a.job_id AND h.freelancer_id = u.id) AS is_lead
          FROM applications a JOIN users u ON u.id = a.freelancer_id LEFT JOIN freelancer_profiles fp ON fp.user_id = u.id
         WHERE a.job_id = $1 AND a.status IN ('sent', 'hired')
-        ORDER BY a.created_at`,
+        ORDER BY a.status = 'hired' DESC, a.created_at`,
       [r.id],
       db
     );
     applicantList = apps.rows.map(a => ({
-      name: shortName(a.name), initials: initialsOf(a.name), rating: a.rating == null ? null : Math.round(a.rating * 10) / 10, done: a.done,
+      id: a.id, thread: a.freelancer_id, name: shortName(a.name), initials: initialsOf(a.name), rating: a.rating == null ? null : Math.round(a.rating * 10) / 10, done: a.done,
       noShows: a.no_show_count, gear: (a.gear || []).filter(g => g !== 'Ничего нет').slice(0, 2).join(', ') || 'свой инвентарь не указан',
       status: a.status, isLead: !!a.is_lead, appliedAt: a.created_at.toISOString()
     }));
   }
+
+  const shift = viewer && (owner || meHired || r.my_status)
+    ? await loadShift(r.id, r.employer_id, empName, hired, viewer, owner, db)
+    : null;
 
   return {
     ...toSummary(r, viewer),
@@ -203,7 +217,7 @@ export async function getJob(num: number, viewer: Viewer, db: Db = pool()): Prom
     access: r.access,
     tools: r.tools,
     meetName: r.meet_name,
-    meetPhone: owner || hiredMe ? r.meet_phone : null,
+    meetPhone: phoneForMe ? r.meet_phone : null,
     payWhen: r.pay_when,
     employer: {
       name: empName, initials: initialsOf(empName), orgType: emp?.org_type || 'частное лицо',
@@ -211,7 +225,49 @@ export async function getJob(num: number, viewer: Viewer, db: Db = pool()): Prom
       since: emp ? 'на площадке с ' + MONTHS_GEN[emp.created_at.getMonth()] + ' ' + emp.created_at.getFullYear() + ' года' : ''
     },
     cancellation: cancel && { reason: cancel.reason, notice: cancel.notice, late: cancel.late, at: cancel.at.toISOString() },
-    applicantList
+    applicantList,
+    shift
+  };
+}
+
+type HiredRow = { freelancer_id: string; is_lead: boolean; name: string; app_id: string | null };
+
+async function loadShift(jobId: string, employerId: string, empName: string, hired: HiredRow[], viewer: NonNullable<Viewer>, owner: boolean, db: Db): Promise<ShiftInfo> {
+  const [rep, acc, settle, reviews, complaint, withdrawal, noShow, msgs] = await Promise.all([
+    one<{ reported_at: Date }>('SELECT reported_at FROM reports WHERE job_id = $1', [jobId], db),
+    one<{ accepted_at: Date; auto: boolean }>('SELECT accepted_at, auto FROM acceptances WHERE job_id = $1', [jobId], db),
+    one<{ employer_marked: boolean; freelancer_marked: boolean }>('SELECT employer_marked, freelancer_marked FROM settlements WHERE job_id = $1', [jobId], db),
+    query<{ target_id: string; rating: number; text: string; editable_until: Date }>(
+      'SELECT target_id, rating, text, editable_until FROM reviews WHERE job_id = $1 AND author_id = $2', [jobId, viewer.id], db),
+    one<{ reason: string; created_at: Date }>('SELECT reason, created_at FROM complaints WHERE job_id = $1 AND author_id = $2 ORDER BY created_at DESC LIMIT 1', [jobId, viewer.id], db),
+    owner ? Promise.resolve(null) : one<{ reason: string; notice: string; late: boolean; at: Date }>(
+      'SELECT reason, notice, late, at FROM withdrawals WHERE job_id = $1 AND freelancer_id = $2 ORDER BY at DESC LIMIT 1', [jobId, viewer.id], db),
+    owner ? Promise.resolve(null) : one<{ at: Date }>('SELECT at FROM no_shows WHERE job_id = $1 AND freelancer_id = $2', [jobId, viewer.id], db),
+    owner ? Promise.resolve(null) : one<{ n: number }>('SELECT count(*)::int AS n FROM messages WHERE job_id = $1 AND freelancer_id = $2', [jobId, viewer.id], db)
+  ]);
+  const lead = hired.find(h => h.is_lead);
+  const meHired = hired.find(h => h.freelancer_id === viewer.id);
+  const nameOf = (id: string) => (id === employerId ? empName : shortName(hired.find(h => h.freelancer_id === id)?.name || ''));
+  const targetKey = (id: string) => (id === employerId ? 'employer' : hired.find(h => h.freelancer_id === id)?.app_id || id);
+  const now = Date.now();
+  return {
+    hired: hired.map(h => ({ appId: owner ? h.app_id : null, thread: owner ? h.freelancer_id : null, name: shortName(h.name), isLead: h.is_lead, me: h.freelancer_id === viewer.id })),
+    leadName: lead ? shortName(lead.name) : null,
+    iAmLead: !!meHired?.is_lead,
+    reportedAt: rep ? rep.reported_at.toISOString() : null,
+    autoAcceptAt: rep && !acc ? new Date(rep.reported_at.getTime() + AUTO_ACCEPT_DAYS * 86400_000).toISOString() : null,
+    acceptedAt: acc ? acc.accepted_at.toISOString() : null,
+    autoAccepted: !!acc?.auto,
+    settle: settle ? { employer: settle.employer_marked, freelancer: settle.freelancer_marked } : null,
+    myReviews: reviews.rows.map(v => ({ target: targetKey(v.target_id), targetName: nameOf(v.target_id), rating: v.rating, text: v.text, editable: v.editable_until.getTime() > now })),
+    reviewTargets: acc
+      ? (owner ? hired.filter(h => h.app_id).map(h => ({ target: h.app_id!, name: shortName(h.name) })) : meHired ? [{ target: 'employer', name: empName }] : [])
+      : [],
+    myComplaint: complaint ? { reason: complaint.reason, at: complaint.created_at.toISOString() } : null,
+    canChat: owner ? hired.length > 0 : !!meHired || !!(msgs && msgs.n > 0),
+    myThread: owner ? null : viewer.id,
+    withdrawal: withdrawal ? { reason: withdrawal.reason, notice: withdrawal.notice, late: withdrawal.late, at: withdrawal.at.toISOString() } : null,
+    noShow: !!noShow
   };
 }
 
@@ -329,8 +385,7 @@ export async function createJob(raw: unknown, viewer: Viewer, todayRaw: unknown)
         f.meetName || null, f.meetPhone || null],
       db
     );
-    await query(`INSERT INTO events (user_id, kind, text, job_id) VALUES ($1, 'job', $2, $3)`,
-      [viewer.id, 'Заказ опубликован — № ' + jobNum(Number(row!.num)), row!.id], db);
+    await addEvents([{ userId: viewer.id, kind: 'job', text: 'Заказ опубликован — № ' + jobNum(Number(row!.num)), jobId: row!.id, num: Number(row!.num) }], db);
     return Number(row!.num);
   });
   return getJob(num, viewer);
@@ -372,12 +427,9 @@ export async function updateJob(num: number, raw: unknown, viewer: Viewer, today
         f.regular ? f.repeatNote || null : null, f.req || null, f.access, f.tools, f.meetName || null, f.meetPhone || null],
       db
     );
-    await query(
-      `INSERT INTO events (user_id, kind, text, job_id)
-       SELECT a.freelancer_id, 'job', $2, $1 FROM applications a WHERE a.job_id = $1 AND a.status = 'sent'`,
-      [j.id, 'Условия заказа № ' + jobNum(num) + ' изменились — проверьте карточку'],
-      db
-    );
+    const sent = await query<{ freelancer_id: string }>(`SELECT freelancer_id FROM applications WHERE job_id = $1 AND status = 'sent'`, [j.id], db);
+    await addEvents(sent.rows.map(a => ({ userId: a.freelancer_id, kind: 'job', text: 'Условия заказа № ' + jobNum(num) + ' изменились — проверьте карточку', jobId: j.id, num })), db);
+    await publish(sent.rows.map(a => a.freelancer_id), { t: 'job', num }, db);
   });
   return getJob(num, viewer);
 }
@@ -401,12 +453,9 @@ export async function cancelJob(num: number, raw: unknown, viewer: Viewer): Prom
     await query('INSERT INTO cancellations (job_id, by_role, reason, notice, late) VALUES ($1, $2, $3, $4, $5)', [j.id, 'employer', reason, notice, late], db);
     await query(`UPDATE jobs SET status = 'cancelled', updated_at = now() WHERE id = $1`, [j.id], db);
     // Отклики закрываются; нанятые и откликнувшиеся узнают о причине.
-    await query(
-      `INSERT INTO events (user_id, kind, text, job_id)
-       SELECT a.freelancer_id, 'cancel', $2, $1 FROM applications a WHERE a.job_id = $1 AND a.status IN ('sent', 'hired')`,
-      [j.id, 'Заказ № ' + jobNum(num) + ' «' + j.title + '» отменён: ' + reason],
-      db
-    );
+    const people = await query<{ freelancer_id: string }>(`SELECT freelancer_id FROM applications WHERE job_id = $1 AND status IN ('sent', 'hired')`, [j.id], db);
+    await addEvents(people.rows.map(a => ({ userId: a.freelancer_id, kind: 'cancel', text: 'Заказ № ' + jobNum(num) + ' «' + j.title + '» отменён: ' + reason, jobId: j.id, num })), db);
+    await publish(people.rows.map(a => a.freelancer_id), { t: 'job', num }, db);
     await query(`UPDATE applications SET status = 'rejected', updated_at = now() WHERE job_id = $1 AND status = 'sent'`, [j.id], db);
     if (late) {
       await query(
@@ -454,9 +503,9 @@ export async function applyToJob(num: number, raw: unknown, viewer: Viewer, toda
     }
     const me = await one<{ name: string }>('SELECT name FROM users WHERE id = $1', [viewer.id], db);
     await query(`INSERT INTO events (user_id, kind, text, job_id) VALUES ($1, 'application', $2, $3)`,
-      [j.employer_id, 'Новый отклик · заказ № ' + jobNum(num) + ' «' + j.title + '» — ' + shortName(me?.name || 'исполнитель'), j.id], db);
-    await query(`INSERT INTO events (user_id, kind, text, job_id) VALUES ($1, 'application', $2, $3)`,
       [viewer.id, 'Отклик отправлен · заказ № ' + jobNum(num) + ' «' + j.title + '»', j.id], db);
+    await addEvents([{ userId: j.employer_id, kind: 'application', text: 'Новый отклик · заказ № ' + jobNum(num) + ' «' + j.title + '» — ' + shortName(me?.name || 'исполнитель'), jobId: j.id, num }], db);
+    await publish([j.employer_id], { t: 'job', num }, db);
   });
   return getJob(num, viewer);
 }
@@ -472,12 +521,12 @@ export async function withdrawApplication(num: number, viewer: Viewer): Promise<
       db
     );
     if (!a || a.status === 'withdrawn') throw new AppError(409, 'Отклика на этот заказ нет.');
-    if (a.status === 'hired') throw new AppError(409, 'Вы уже наняты — откажитесь от смены с причиной в карточке смены.');
+    if (a.status === 'hired') throw new AppError(409, 'Вы уже наняты — откажитесь от смены с причиной и сроком предупреждения.');
     if (a.status === 'rejected') throw new AppError(409, 'Работодатель уже ответил на отклик.');
     await query(`UPDATE applications SET status = 'withdrawn', withdrawn_at = now(), updated_at = now() WHERE job_id = $1 AND freelancer_id = $2`,
       [a.job_id, viewer.id], db);
-    await query(`INSERT INTO events (user_id, kind, text, job_id) VALUES ($1, 'application', $2, $3)`,
-      [a.employer_id, 'Исполнитель отозвал отклик · заказ № ' + jobNum(num) + ' «' + a.title + '»', a.job_id], db);
+    await addEvents([{ userId: a.employer_id, kind: 'application', text: 'Исполнитель отозвал отклик · заказ № ' + jobNum(num) + ' «' + a.title + '»', jobId: a.job_id, num }], db);
+    await publish([a.employer_id], { t: 'job', num }, db);
   });
   return getJob(num, viewer);
 }

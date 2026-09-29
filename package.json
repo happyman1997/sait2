@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "db:migrate": "node --env-file-if-exists=.env.local --import tsx scripts/migrate.ts",
-    "db:seed": "node --env-file-if-exists=.env.local --import tsx scripts/seed.ts"
+    "db:seed": "node --env-file-if-exists=.env.local --import tsx scripts/seed.ts",
+    "cron": "node --env-file-if-exists=.env.local --import tsx scripts/cron.ts"
   },
   "engines": {
     "node": ">=20"

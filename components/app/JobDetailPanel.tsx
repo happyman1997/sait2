@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { css } from '@/lib/css';
 import { crewOf, dateLabel, jobNum, jobStatus, money, type JobDetail, type JobSummary } from '@/lib/jobs';
+import { ApplicantsBlock, LeaveShiftForm, MoveDateForm, ShiftBlock, type Act, type ReviewOpen } from './ShiftBlock';
 import { Corners, LABEL } from './ui';
 
 const CANCEL_REASONS = ['объект отменил работы', 'погода изменилась', 'нашли своих людей', 'ошибка в заказе', 'другая причина'];
@@ -34,7 +35,7 @@ function brief(j: JobDetail) {
   ];
 }
 
-export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw, onCancel, onEdit, onOpenJob, busy }: {
+export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw, onCancel, onEdit, onOpenJob, busy, act, onChat, onReview }: {
   job: JobDetail;
   role: Role;
   others: JobSummary[];
@@ -45,6 +46,9 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
   onEdit: () => void;
   onOpenJob: (num: number) => void;
   busy: boolean;
+  act: Act;
+  onChat: (thread: string) => void;
+  onReview: ReviewOpen;
 }) {
   const [reqOk, setReqOk] = useState(false);
   const [more, setMore] = useState(false);
@@ -52,6 +56,8 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
   const [cancelOpen, setCancelOpen] = useState(false);
   const [reason, setReason] = useState(CANCEL_REASONS[0]);
   const [notice, setNotice] = useState('больше суток');
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
 
   const isEmp = role === 'employer';
   const s = jobStatus(job, role);
@@ -178,13 +184,25 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
         </div>
       </div>
 
-      {role === 'freelancer' && (job.myStatus === 'sent' || job.myStatus === 'hired') && (
-        <div style={css('margin-top: 10px; font-size: 13px; line-height: 1.4; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>
-          {job.myStatus === 'hired'
-            ? 'Встречающий: ' + (job.meetName || 'уточните в чате') + (job.meetPhone ? ' · ' + job.meetPhone : '')
-            : 'Чат откроется, когда работодатель наймёт вас на этот заказ.'}
+      {role === 'freelancer' && job.myStatus === 'sent' && (
+        <div style={css('margin-top: 10px; font-size: 13px; line-height: 1.4; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>Чат откроется, когда работодатель наймёт вас на этот заказ.</div>
+      )}
+      {role === 'freelancer' && job.shift?.noShow && (
+        <div style={css('margin-top: 12px; border: 1px solid var(--color-accent); padding: 9px 11px; font-size: 13.5px; line-height: 1.45; color: var(--color-accent-900)')}>Работодатель отметил «Не вышел» — вы сняты со смены, отметка видна в профиле.</div>
+      )}
+      {role === 'freelancer' && job.shift?.withdrawal && job.myStatus !== 'hired' && (
+        <div style={css('margin-top: 12px; border: 1px solid var(--color-accent); padding: 9px 11px; font-size: 13.5px; line-height: 1.45; color: var(--color-accent-900)')}>
+          Вы отказались {new Date(job.shift.withdrawal.at).toLocaleDateString('ru-RU')} · {job.shift.withdrawal.reason} · {job.shift.withdrawal.notice}{job.shift.withdrawal.late ? ' · пометка в профиле на 90 дней' : ' · без последствий для рейтинга'}
         </div>
       )}
+
+      {job.shift && ((job.mine && (job.hired > 0 || job.status === 'accepted')) || (!job.mine && job.myStatus === 'hired')) && (
+        <ShiftBlock job={job} isOwner={job.mine} act={act} onChat={onChat} onReview={onReview} busy={busy} />
+      )}
+      {role === 'freelancer' && job.myStatus === 'hired' && (job.status === 'open' || job.status === 'staffed') && !leaveOpen && (
+        <button className="btn btn-ghost btn-block" onClick={() => setLeaveOpen(true)} style={css('margin-top: 8px; height: 42px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Отказаться от смены</button>
+      )}
+      {leaveOpen && <LeaveShiftForm act={act} busy={busy} onClose={() => setLeaveOpen(false)} />}
 
       {closed && (
         <div className="blueprint" style={css('margin-top: 14px; padding: 13px 14px')}>
@@ -209,34 +227,18 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
         </div>
       )}
 
-      {job.mine && job.applicantList && (
-        <div style={css('margin-top: 18px')}>
-          <div style={css(LABEL + '; margin-bottom: 10px')}>Откликнулись — {job.applicantList.length}</div>
-          <div style={css('display: grid; gap: 8px')}>
-            {job.applicantList.map((a, i) => (
-              <div key={i} style={css('display: flex; align-items: center; gap: 10px; border: 1px solid var(--color-divider); padding: 9px 11px')}>
-                <div style={css('width: 32px; height: 32px; border: 1px solid var(--color-divider); display: grid; place-items: center; font-family: var(--font-heading); font-size: 13px; color: var(--color-accent-700); flex: none')}>{a.initials}</div>
-                <div style={css('flex: 1; min-width: 0')}>
-                  <div style={css('font-family: var(--font-heading); font-weight: 600; font-size: 16px; text-transform: uppercase; letter-spacing: .02em')}>{a.name}</div>
-                  <div style={css('font-size: 13px; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>{a.rating != null ? 'рейтинг ' + a.rating.toFixed(1) : 'пока без оценок'} · {a.done} смен{a.noShows ? ' · невыходов ' + a.noShows : ''}</div>
-                  <div style={css('font-size: 13px; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>{a.gear}</div>
-                </div>
-                <span className={a.status === 'hired' ? 'tag tag-accent' : 'tag tag-outline'} style={{ whiteSpace: 'nowrap' }}>{a.status === 'hired' ? (a.isLead ? 'нанят · старший' : 'нанят') : 'откликнулся'}</span>
-              </div>
-            ))}
-          </div>
-          {!job.applicantList.length && <div style={css('font-size: 13.5px; line-height: 1.45; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>Откликов пока нет — заказ виден исполнителям на карте и в списке.</div>}
-        </div>
-      )}
+      {job.mine && job.applicantList && job.status !== 'cancelled' && <ApplicantsBlock job={job} act={act} onChat={onChat} busy={busy} />}
 
       {job.mine && job.status !== 'cancelled' && job.status !== 'accepted' && !cancelOpen && (
         <div style={css('display: grid; gap: 8px; margin-top: 14px')}>
           {job.status === 'open' && job.hired === 0 && (
             <button className="btn btn-secondary" onClick={onEdit} style={css('height: 42px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Изменить условия</button>
           )}
-          <button className="btn btn-ghost" onClick={() => setCancelOpen(true)} style={css('height: 42px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Отменить смену</button>
+          <button className="btn btn-ghost" onClick={() => { setCancelOpen(true); setMoveOpen(false); }} style={css('height: 42px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Отменить смену</button>
+          {!moveOpen && <button className="btn btn-ghost" onClick={() => setMoveOpen(true)} style={css('height: 42px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Перенести дату выхода</button>}
         </div>
       )}
+      {moveOpen && !cancelOpen && <MoveDateForm job={job} act={act} busy={busy} onClose={() => setMoveOpen(false)} />}
 
       {cancelOpen && (
         <div className="blueprint" style={css('margin-top: 12px; padding: 13px 12px')}>

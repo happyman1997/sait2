@@ -32,6 +32,8 @@ export type JobSummary = {
 };
 
 export type Applicant = {
+  id: string;                 // id отклика — по нему нанимают/отказывают
+  thread: string;             // диалог с исполнителем (id исполнителя)
   name: string;
   initials: string;
   rating: number | null;
@@ -55,7 +57,68 @@ export type JobDetail = JobSummary & {
   employer: { name: string; initials: string; orgType: string; rating: number | null; reviews: number; jobs: number; since: string };
   cancellation: { reason: string; notice: string; late: boolean; at: string } | null;
   applicantList: Applicant[] | null; // только владельцу
+  shift: ShiftInfo | null;           // только участникам смены (владелец, нанятые)
 };
+
+/** Смена глазами участника: кто нанят, сдача, приёмка, расчёт, отзывы и жалоба текущего пользователя. */
+export type ShiftInfo = {
+  hired: { appId: string | null; thread: string | null; name: string; isLead: boolean; me: boolean }[];
+  leadName: string | null;
+  iAmLead: boolean;
+  reportedAt: string | null;
+  autoAcceptAt: string | null;       // когда закроется автоматически
+  acceptedAt: string | null;
+  autoAccepted: boolean;
+  settle: { employer: boolean; freelancer: boolean } | null;
+  myReviews: { target: string; targetName: string; rating: number; text: string; editable: boolean }[];
+  reviewTargets: { target: string; name: string }[];  // кого можно оценить (id отклика или 'employer')
+  myComplaint: { reason: string; at: string } | null;
+  canChat: boolean;
+  myThread: string | null;          // свой диалог исполнителя с работодателем
+  withdrawal: { reason: string; notice: string; late: boolean; at: string } | null;  // мой отказ от смены
+  noShow: boolean;                   // меня отметили «Не вышел»
+};
+
+export const AUTO_ACCEPT_DAYS = 7;
+export const REVIEW_EDIT_MIN = 10;
+export const HIRE_GREETING = 'Здравствуйте! Вы наняты на этот заказ. Подтвердите, пожалуйста, время выхода.';
+export const REPORT_MESSAGE = 'Работа выполнена — прошу принять.';
+export const LEAVE_REASONS = ['не смогу выйти', 'болезнь', 'нашёл другую смену', 'не договорились по условиям', 'далеко ехать'];
+export const COMPLAINT_KINDS = {
+  employer: ['работа не выполнена', 'исполнитель не вышел', 'ущерб имуществу', 'грубое общение'],
+  freelancer: ['не рассчитались', 'условия не совпали с описанием', 'небезопасный объект', 'грубое общение']
+};
+export const QUICK_REPLIES = ['Буду через 20 минут', 'Инвентарь свой', 'Подтверждаю выход', 'Готово, отправил фото'];
+
+/** Строка «Мои смены / Мои заказы». */
+export type MyJob = JobSummary & {
+  reportedAt: string | null;
+  acceptedAt: string | null;
+  autoAccepted: boolean;
+  autoAcceptAt: string | null;
+  cancellation: { reason: string; at: string } | null;
+  withdrawal: { reason: string; at: string } | null;
+  noShow: boolean;
+  counterpart: string;               // работодатель (для исполнителя) или нанятые (для работодателя)
+  hasChat: boolean;
+  chatThread: string | null;         // для исполнителя — свой диалог
+  reviewed: number;                  // сколько отзывов я оставил
+  reviewable: number;                // сколько могу оставить
+};
+
+export type ChatThread = {
+  num: number;
+  thread: string;                    // id исполнителя — диалог внутри заказа
+  title: string;
+  who: string;
+  last: string;
+  lastMine: boolean;
+  lastAt: string | null;
+  unread: number;
+  jobStatus: JobStatus;
+};
+
+export type ChatMessage = { id: string; mine: boolean; text: string; at: string; read: boolean };
 
 /** Поля формы «Новый заказ» (4 шага). */
 export type JobForm = {
