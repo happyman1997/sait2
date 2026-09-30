@@ -9,11 +9,13 @@ const jobs = await import('@/server/jobs');
 const sh = await import('@/server/shifts');
 const support = await import('@/server/support');
 const { AppError } = await import('@/server/errors');
-const { seriesDates, seriesDayLabel, localISO } = await import('@/lib/jobs');
+const { seriesDates, seriesDayLabel } = await import('@/lib/jobs');
+const { localClock } = await import('@/server/events');
 
 type U = NonNullable<Parameters<typeof jobs.listJobs>[1]>;
 const MOSCOW = { lat: 55.7558, lng: 37.6173 };
-const today = localISO();
+// «Сегодня» — по часовому поясу площадки, как считает сервер (ночью по UTC это может быть ещё вчера).
+const today = localClock().day;
 const plus = (iso: string, n: number) => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 
 describe('даты серии', () => {
@@ -223,3 +225,98 @@ describe('серия в заказе', () => {
   });
 });
 
+describe('сдача, приёмка и расчёт по дням серии', () => {
+  /** Серия, начавшаяся два дня назад: дни — позавчера, вчера, сегодня, завтра, послезавтра. */
+  async function running(over: Record<string, unknown> = {}) {
+    const j = await jobs.createJob(form(over), emp, today);
+    await jobs.applyToJob(j.num, { reqConfirmed: true }, fl, today);
+    await sh.staffAction(j.num, (await jobs.getJob(j.num, emp)).applicantList![0].id, 'hire', emp);
+    await query('UPDATE jobs SET date = $2 WHERE num = $1', [j.num, plus(today, -2)]);
+    return j.num;
+  }
+  const dayOf = async (num: number, who: U | null, date: string) => (await jobs.getJob(num, who)).series!.days.find(d => d.date === date)!;
+  const act = (num: number, who: U, day: string, action: string) => sh.seriesDayAction(num, { day, action }, who);
+
+  it('день сдаёт тот, кто выходил, — с дня выхода; работодатель принимает; расчёт отмечают обе стороны', async () => {
+    const num = await running();
+    const d1 = plus(today, -2);
+    expect((await dayOf(num, null, d1)).work).toBeNull();
+    expect((await dayOf(num, fl, d1)).work).toMatchObject({ canReport: true, canAccept: false, workers: 1 });
+    expect((await dayOf(num, emp, d1)).work).toMatchObject({ canReport: false, canAccept: true });
+    await expectErr(act(num, fl, plus(today, 1), 'report'), /ещё не наступил/);
+    await expectErr(sh.reportDone(num, fl), /Сдать день/);
+    await act(num, fl, d1, 'report');
+    await expectErr(act(num, fl, d1, 'report'), /уже сдан/);
+    expect((await one<{ text: string }>(`SELECT text FROM events WHERE user_id = $1 AND kind = 'report'`, [emp.id]))!.text).toMatch(/сдан\. Примите день/);
+    expect((await dayOf(num, emp, d1)).work!.autoAcceptAt).not.toBeNull();
+    await expectErr(act(num, fl, d1, 'paid'), /Сначала работодатель/);
+    await expectErr(act(num, fl, d1, 'accept'), /только работодатель/);
+    await act(num, emp, d1, 'accept');
+    expect((await dayOf(num, fl, d1)).work).toMatchObject({ canPay: true, acceptedAt: expect.any(String) });
+    await act(num, fl, d1, 'paid');
+    await act(num, emp, d1, 'paid');
+    expect((await dayOf(num, fl, d1)).work).toMatchObject({ employerPaid: true, freelancerPaid: true, canPay: false });
+    expect((await one<{ text: string }>(`SELECT text FROM events WHERE user_id = $1 AND kind = 'settle' ORDER BY created_at DESC LIMIT 1`, [fl.id]))!.text).toMatch(/обеими сторонами/);
+    // Серия идёт дальше: заказ не закрыт, сданный сегодня день уже не снять.
+    expect((await jobs.getJob(num, emp)).status).toBe('staffed');
+    await act(num, fl, today, 'report');
+    await expectErr(sh.toggleSeriesDay(num, { day: today }, fl), /уже сдан/);
+  });
+
+  it('бригада: день сдаёт старший, а если он в этот день не выходит — любой из выходящих; замена сдаёт свой день', async () => {
+    const other = await mkUser('freelancer', 'olga_k', '9163333333', 'Ольга Кузнецова');
+    const num = await running({ crew: '2' });
+    await jobs.applyToJob(num, { reqConfirmed: true }, other, today);
+    const apps = (await jobs.getJob(num, emp)).applicantList!;
+    await sh.staffAction(num, apps.find(a => a.thread === other.id)!.id, 'hire', emp);
+    await sh.staffAction(num, apps.find(a => a.thread === fl.id)!.id, 'lead', emp);
+    await expectErr(act(num, other, plus(today, -1), 'report'), /старший/);
+    await act(num, fl, plus(today, -1), 'report');
+    // Старший снял сегодняшний день — сдаёт Ольга.
+    await sh.toggleSeriesDay(num, { day: today }, fl);
+    expect((await dayOf(num, other, today)).work).toMatchObject({ canReport: true, workers: 1 });
+    await act(num, other, today, 'report');
+
+    // Замена на день сдаёт свой день сама.
+    const sub = await mkUser('freelancer', 'ivan_p', '9164444444', 'Иван Петров');
+    const tomorrow = plus(today, 1);
+    await sh.toggleSeriesDay(num, { day: tomorrow }, other);
+    await sh.offerSubstitute(num, { day: tomorrow }, sub);
+    await sh.decideSubstitute(num, { day: tomorrow, freelancer: sub.id, action: 'hire' }, emp);
+    // Прошли сутки: «завтра» стало сегодня.
+    for (const sql of ['UPDATE jobs SET date = date - 1', 'UPDATE series_skips SET day = day - 1', 'UPDATE series_subs SET day = day - 1', 'UPDATE series_days SET day = day - 1']) await query(sql);
+    expect((await dayOf(num, sub, today)).work).toMatchObject({ workers: 2, canReport: false });
+    await expectErr(act(num, sub, today, 'report'), /старший/);
+    await act(num, fl, today, 'report');
+    await act(num, emp, today, 'accept');
+    expect((await one<{ workers: string[] }>('SELECT workers FROM series_days WHERE day = $1', [today]))!.workers.sort()).toEqual([fl.id, sub.id].sort());
+    await act(num, sub, today, 'paid');
+    await expectErr(act(num, other, today, 'paid'), /стороны смены этого дня/);
+  });
+
+  it('сданный день без ответа засчитывается через 7 дней; «Завершить серию» принимает сданные и сводит расчёт', async () => {
+    const num = await running();
+    const [d1, d2] = [plus(today, -2), plus(today, -1)];
+    await act(num, fl, d1, 'report');
+    await query(`UPDATE series_days SET reported_at = now() - interval '8 days'`);
+    await sh.autoAcceptDue();
+    expect((await dayOf(num, emp, d1)).work).toMatchObject({ autoAccepted: true, acceptedAt: expect.any(String) });
+    expect((await one<{ text: string }>(`SELECT text FROM events WHERE user_id = $1 AND kind = 'accept'`, [fl.id]))!.text).toMatch(/засчитан вам автоматически/);
+    expect((await jobs.getJob(num, emp)).status).toBe('staffed');
+    // Спор по расчёту доступен после первого сданного дня.
+    expect((await jobs.getJob(num, fl)).shift!.canDispute).toBe(true);
+
+    await act(num, fl, d2, 'report');
+    const closed = await sh.acceptWork(num, emp);
+    expect(closed.status).toBe('accepted');
+    expect((await dayOf(num, emp, d2)).work!.acceptedAt).not.toBeNull();
+    expect(closed.shift!.settle).toEqual({ employer: false, freelancer: false });
+    await act(num, emp, d1, 'paid');
+    expect((await jobs.getJob(num, emp)).shift!.settle).toEqual({ employer: false, freelancer: false });
+    await sh.markSettled(num, emp);                 // за все принятые дни разом
+    expect((await jobs.getJob(num, emp)).shift!.settle!.employer).toBe(true);
+    await sh.markSettled(num, fl);
+    expect((await jobs.getJob(num, fl)).shift!.settle).toEqual({ employer: true, freelancer: true });
+    await expectErr(act(num, fl, today, 'report'), /закрыта/);
+  });
+});

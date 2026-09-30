@@ -110,6 +110,8 @@ export type SeriesInfo = {
     free: number;                                   // мест на день: снявшие минус взятые на замену
     mySub: 'sent' | 'hired' | 'rejected' | null;    // мой отклик на замену (исполнитель не из смены)
     subs: { id: string; name: string; status: 'sent' | 'hired' | 'rejected' }[];  // отклики на замену (работодателю)
+    /** Сдача, приёмка и расчёт дня — работодателю и тем, кто в серии или выходит в этот день. */
+    work: SeriesDayWork | null;
   }[];
   canSkip: boolean;             // нанятый исполнитель
   canSub: boolean;              // исполнитель не из смены может выйти на замену в свободный день
@@ -137,6 +139,23 @@ export function seriesDates(repeat: string, startISO: string, count: number): st
   }
   return out;
 }
+
+/** Сдача, приёмка и расчёт одного дня серии. */
+export type SeriesDayWork = {
+  reportedAt: string | null;
+  acceptedAt: string | null;
+  autoAccepted: boolean;
+  autoAcceptAt: string | null;       // сдан и не принят — когда засчитается сам
+  employerPaid: boolean;
+  freelancerPaid: boolean;
+  workers: number;                   // сколько выходит в этот день (состав минус снявшие плюс замены)
+  canReport: boolean;
+  canAccept: boolean;
+  canPay: boolean;
+};
+
+/** Серия с датами (не «по снегопаду»): выходы сдаются, принимаются и рассчитываются по дням. */
+export const isDatedSeries = (repeat: string | null | undefined) => !!repeat && !/снегопад/.test(repeat);
 
 /** Номер спора для людей: «СП-12». */
 export const disputeNum = (n: number) => 'СП-' + n;

@@ -10,6 +10,7 @@ import { dateLabel, jobNum, jobStatus, money, SAFETY_ITEMS, seriesDayLabel, type
 import { showModeration } from '@/components/ModerationGuard';
 import { useFlash } from '@/components/Toast';
 import { useLive, useLiveEvent } from './Live';
+import { SeriesBlock } from './SeriesBlock';
 import { ShiftBlock } from './ShiftBlock';
 import { Chip, Corners, LABEL, MUTED } from './ui';
 
@@ -169,6 +170,9 @@ export function ShiftScreen() {
             onChat={thread => live.openChat(job.num, thread)}
             onReview={t => live.openReview({ ...t, num: job.num, title: job.title + ' · ' + dateLabel(job.date), onSaved: setJob })} />
         )}
+
+        {/* Серия: сдача, приёмка и расчёт по дням, снятие дня — прямо на экране смены. */}
+        {job.series && !job.series.onCall && (shift || subHired.length > 0) && <SeriesBlock job={job} act={act} busy={busy} />}
 
         <div style={css('margin-top: 16px; text-align: center')}>
           <Link href="/mine" style={css('font-size: 13.5px')}>{isEmp ? 'Все мои заказы →' : 'Все мои смены →'}</Link>

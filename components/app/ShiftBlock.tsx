@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { css } from '@/lib/css';
 import { uploadForm } from '@/lib/image';
-import { COMPLAINT_KINDS, crewOf, dateLabel, DISPUTE_REASONS, LEAVE_REASONS, localISO, money, plural, type DisputeInfo, type JobDetail } from '@/lib/jobs';
+import { COMPLAINT_KINDS, crewOf, dateLabel, DISPUTE_REASONS, isDatedSeries, LEAVE_REASONS, localISO, money, plural, type DisputeInfo, type JobDetail } from '@/lib/jobs';
 import { Corners, LABEL } from './ui';
 
 export type Act = (path: string, body: unknown, ok: string, method?: 'POST' | 'DELETE') => Promise<boolean>;
@@ -78,10 +78,16 @@ export function ShiftBlock({ job, isOwner, act, onChat, onReview, busy }: {
   const brigade = s.hired.length > 1;
   // До дня выхода сдавать нечего (сервер проверяет то же самое).
   const early = !job.repeat && job.date > localISO();
+  // Серия с датами сдаётся и принимается по дням (в «Серии выходов»); здесь — только «Завершить серию».
+  const series = isDatedSeries(job.repeat);
   const canReport = !isOwner && job.myStatus === 'hired' && !reported && !accepted && job.status !== 'cancelled' && (!brigade || s.iAmLead) && !early;
 
   const line = accepted
-    ? (s.autoAccepted ? 'Смена закрыта автоматически: работодатель не ответил 7 дней — засчитана исполнителю.' : 'Работа принята · ' + new Date(s.acceptedAt!).toLocaleDateString('ru-RU'))
+    ? (s.autoAccepted ? 'Смена закрыта автоматически: работодатель не ответил 7 дней — засчитана исполнителю.' : (series ? 'Серия завершена · ' : 'Работа принята · ') + new Date(s.acceptedAt!).toLocaleDateString('ru-RU'))
+    : series
+      ? (isOwner
+        ? 'Нанято ' + s.hired.length + (crewOf(job) === Infinity ? '' : ' из ' + crewOf(job)) + ' · серия с ' + dateLabel(job.date) + '. Каждый выход сдаётся и принимается отдельно — в «Серии выходов». «Завершить серию» закрывает заказ и открывает отзывы.'
+        : 'Вы в серии с ' + dateLabel(job.date) + '. Каждый выход сдаёте отдельно — «Сдать день» в «Серии выходов»; на приёмку дня у работодателя 7 дней.')
     : reported
       ? (isOwner
         ? 'Работа сдана. Примите её — осталось ' + daysLeft(s.autoAcceptAt!) + ' ' + plural(daysLeft(s.autoAcceptAt!), 'день', 'дня', 'дней') + ', потом смена закроется автоматически и будет засчитана исполнителю.'
@@ -134,13 +140,17 @@ export function ShiftBlock({ job, isOwner, act, onChat, onReview, busy }: {
         </div>
       )}
 
-      {!isOwner && job.myStatus === 'hired' && !accepted && (
+      {!isOwner && job.myStatus === 'hired' && !accepted && !series && (
         <button className="btn btn-secondary btn-block" disabled={busy || !canReport} onClick={() => act('report', {}, 'Работа сдана — у работодателя 7 дней на приёмку')} style={css('margin-top: 10px; ' + BTN)}>
           {reported ? 'Работа сдана' : early ? 'Сдать работу — с ' + dateLabel(job.date) : 'Сдать работу'}
         </button>
       )}
       {isOwner && !accepted && s.hired.length > 0 && job.status !== 'cancelled' && (
-        <button className="btn btn-primary btn-block" disabled={busy} onClick={() => act('accept', {}, 'Работа принята — оцените исполнителя')} style={css('margin-top: 12px; height: 40px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase')}>Принять работу</button>
+        series
+          ? <button className="btn btn-secondary btn-block" disabled={busy}
+              onClick={() => { if (window.confirm('Завершить серию? Сданные дни будут приняты, оставшиеся выходы отменятся, откроются отзывы.')) act('accept', {}, 'Серия завершена — оцените исполнителей'); }}
+              style={css('margin-top: 12px; height: 40px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase')}>Завершить серию</button>
+          : <button className="btn btn-primary btn-block" disabled={busy} onClick={() => act('accept', {}, 'Работа принята — оцените исполнителя')} style={css('margin-top: 12px; height: 40px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase')}>Принять работу</button>
       )}
 
       {(s.canChat && (isOwner ? s.hired.length === 1 : true)) && (
@@ -153,6 +163,7 @@ export function ShiftBlock({ job, isOwner, act, onChat, onReview, busy }: {
         <div style={css('margin-top: 12px; border: 1px solid var(--color-divider); padding: 11px 12px')}>
           <div style={css(LABEL)}>Расчёт</div>
           <div style={css('font-size: 14px; line-height: 1.45; margin-top: 6px')}>{settleLine}</div>
+          {series && <div style={css('font-size: 13px; line-height: 1.4; margin-top: 4px; ' + MUTED)}>Расчёт по серии — по дням, в «Серии выходов». Отметка здесь ставится сразу за все принятые дни.</div>}
           <button className="btn btn-secondary btn-block" disabled={busy || settleDone} onClick={() => act('settle', {}, isOwner ? 'Отмечено: оплата передана' : 'Отмечено: деньги получены')} style={css('margin-top: 10px; height: 42px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>
             {isOwner ? (settleDone ? 'Оплата передана' : 'Отметить: оплата передана') : (settleDone ? 'Деньги получены' : 'Отметить: деньги получены')}
           </button>

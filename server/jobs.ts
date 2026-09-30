@@ -220,7 +220,7 @@ async function loadJob(num: number, viewer: Viewer, db: Db): Promise<JobDetail> 
   const [applicantList, shift, series] = await Promise.all([
     owner ? loadApplicants(r.id, db) : Promise.resolve(null),
     viewer && (owner || meHired || r.my_status) ? loadShift(r.id, r.employer_id, empName, hired, viewer, owner, db) : Promise.resolve(null),
-    r.repeat ? loadSeries(r, viewer, owner, !!meHired, db) : Promise.resolve(null)
+    r.repeat ? loadSeries(r, viewer, owner, hired, db) : Promise.resolve(null)
   ]);
 
   return {
@@ -267,33 +267,62 @@ async function loadApplicants(jobId: string, db: Db): Promise<Applicant[]> {
 
 /** Серия выходов: даты по правилу повтора; снятые дни — свои (исполнитель) или число снявших (работодатель). */
 async function loadSeries(r: { id: string; repeat: string | null; repeat_note: string | null; date: string; series_len: number; status: string },
-  viewer: Viewer, owner: boolean, hired: boolean, db: Db): Promise<SeriesInfo> {
+  viewer: Viewer, owner: boolean, crew: { freelancer_id: string; is_lead: boolean }[], db: Db): Promise<SeriesInfo> {
   const dates = seriesDates(r.repeat!, r.date, r.series_len);
-  // Сколько сняли день и сколько взяли на замену — видно всем (свободные места); кто именно — только работодателю.
-  const [skips, subs] = dates ? await Promise.all([
-    query<{ day: string; n: number; mine: boolean }>(
-      `SELECT to_char(day, 'YYYY-MM-DD') AS day, count(*)::int AS n, coalesce(bool_or(freelancer_id = $2), false) AS mine
-         FROM series_skips WHERE job_id = $1 GROUP BY day`, [r.id, viewer?.id ?? null], db).then(x => x.rows),
+  const hired = !!viewer && crew.some(h => h.freelancer_id === viewer.id);
+  // Кто снял какой день и кого взяли на замену; сдача и приёмка по дням. Считаем все — показываем по правам.
+  const [skips, subs, work] = dates ? await Promise.all([
+    query<{ day: string; freelancer_id: string }>(
+      `SELECT to_char(day, 'YYYY-MM-DD') AS day, freelancer_id FROM series_skips WHERE job_id = $1`, [r.id], db).then(x => x.rows),
     query<{ day: string; freelancer_id: string; name: string; status: 'sent' | 'hired' | 'rejected' }>(
       `SELECT to_char(s.day, 'YYYY-MM-DD') AS day, s.freelancer_id, u.name, s.status
-         FROM series_subs s JOIN users u ON u.id = s.freelancer_id WHERE s.job_id = $1 ORDER BY s.created_at`, [r.id], db).then(x => x.rows)
-  ]) : [[], []];
+         FROM series_subs s JOIN users u ON u.id = s.freelancer_id WHERE s.job_id = $1 ORDER BY s.created_at`, [r.id], db).then(x => x.rows),
+    query<{ day: string; reported_at: Date | null; accepted_at: Date | null; auto: boolean; employer_paid: boolean; freelancer_paid: boolean; i_worked: boolean }>(
+      `SELECT to_char(day, 'YYYY-MM-DD') AS day, reported_at, accepted_at, auto,
+              employer_paid_at IS NOT NULL AS employer_paid, freelancer_paid_at IS NOT NULL AS freelancer_paid,
+              coalesce($2::uuid = ANY(workers), false) AS i_worked
+         FROM series_days WHERE job_id = $1`, [r.id, viewer?.id ?? null], db).then(x => x.rows)
+  ]) : [[], [], []];
   const today = localClock().day;
   const live = r.status !== 'cancelled' && r.status !== 'accepted';
+  const lead = crew.find(h => h.is_lead);
   return {
     rule: r.repeat! + (r.repeat_note ? ' · ' + r.repeat_note : ''),
     onCall: !dates,
     days: Array.from({ length: r.series_len }, (_, i) => {
       const date = dates ? dates[i] : null;
-      const sk = date ? skips.find(x => x.day === date) : undefined;
+      const off = date ? skips.filter(x => x.day === date) : [];
       const daySubs = date ? subs.filter(x => x.day === date) : [];
+      const subsHired = daySubs.filter(x => x.status === 'hired');
       const mine = viewer ? daySubs.find(x => x.freelancer_id === viewer.id) : undefined;
+      const iSkipped = hired && off.some(x => x.freelancer_id === viewer!.id);
+      // Выходят в этот день: состав минус снявшие (из нынешнего состава) плюс взятые на замену.
+      const workers = crew.length - off.filter(x => crew.some(h => h.freelancer_id === x.freelancer_id)).length + subsHired.length;
+      const iWork = (hired && !iSkipped) || mine?.status === 'hired';
+      const w = date ? work.find(x => x.day === date) : undefined;
+      const due = !!date && date <= today;
+      // В бригаде день сдаёт старший, если он в этот день выходит; иначе — любой, кто выходит.
+      const leadWorks = !!lead && !off.some(x => x.freelancer_id === lead.freelancer_id);
+      const reporter = workers <= 1 || !leadWorks || lead!.freelancer_id === viewer?.id;
       return {
         i, date, label: date ? seriesDayLabel(date) : 'вызов ' + (i + 1) + ' · после снегопада',
-        skipped: !!(hired && sk?.mine), skippedBy: owner ? sk?.n ?? 0 : 0, past: !!date && date < today,
-        free: Math.max(0, (sk?.n ?? 0) - daySubs.filter(x => x.status === 'hired').length),
+        skipped: iSkipped, skippedBy: owner ? off.length : 0, past: !!date && date < today,
+        free: Math.max(0, off.length - subsHired.length),
         mySub: mine?.status ?? null,
-        subs: owner ? daySubs.map(x => ({ id: x.freelancer_id, name: shortName(x.name), status: x.status })) : []
+        subs: owner ? daySubs.map(x => ({ id: x.freelancer_id, name: shortName(x.name), status: x.status })) : [],
+        work: date && (owner || hired || iWork || w?.i_worked) ? {
+          reportedAt: w?.reported_at?.toISOString() ?? null,
+          acceptedAt: w?.accepted_at?.toISOString() ?? null,
+          autoAccepted: !!w?.auto,
+          autoAcceptAt: w?.reported_at && !w.accepted_at ? new Date(w.reported_at.getTime() + AUTO_ACCEPT_DAYS * 86400_000).toISOString() : null,
+          employerPaid: !!w?.employer_paid,
+          freelancerPaid: !!w?.freelancer_paid,
+          workers,
+          canReport: live && due && !!iWork && reporter && !w?.reported_at && !w?.accepted_at,
+          canAccept: live && due && owner && workers > 0 && !w?.accepted_at,
+          // «Деньги получены» — тем, кто выходил в этот день (снимок при приёмке), даже если потом ушёл из серии.
+          canPay: !!w?.accepted_at && (owner ? !w.employer_paid : w.i_worked && !w.freelancer_paid)
+        } : null
       };
     }),
     canSkip: hired && live && !!dates,
@@ -305,7 +334,7 @@ async function loadSeries(r: { id: string; repeat: string | null; repeat_note: s
 type HiredRow = { freelancer_id: string; is_lead: boolean; name: string; app_id: string | null };
 
 async function loadShift(jobId: string, employerId: string, empName: string, hired: HiredRow[], viewer: NonNullable<Viewer>, owner: boolean, db: Db): Promise<ShiftInfo> {
-  const [rep, acc, settle, reviews, complaint, withdrawal, noShow, msgs, photos, safety, disputes] = await Promise.all([
+  const [rep, acc, settle, reviews, complaint, withdrawal, noShow, msgs, photos, safety, disputes, dayDone] = await Promise.all([
     one<{ reported_at: Date }>('SELECT reported_at FROM reports WHERE job_id = $1', [jobId], db),
     one<{ accepted_at: Date; auto: boolean }>('SELECT accepted_at, auto FROM acceptances WHERE job_id = $1', [jobId], db),
     one<{ employer_marked: boolean; freelancer_marked: boolean }>('SELECT employer_marked, freelancer_marked FROM settlements WHERE job_id = $1', [jobId], db),
@@ -319,7 +348,9 @@ async function loadShift(jobId: string, employerId: string, empName: string, hir
     owner || hired.some(h => h.freelancer_id === viewer.id) ? jobPhotos(jobId, viewer.id, db) : Promise.resolve([]),
     query<{ freelancer_id: string; items: string[] }>(
       'SELECT freelancer_id, items FROM safety_checks WHERE job_id = $1 AND ($2 OR freelancer_id = $3)', [jobId, owner, viewer.id], db),
-    owner || hired.some(h => h.freelancer_id === viewer.id) ? jobDisputes(jobId, employerId, viewer.id, db) : Promise.resolve([])
+    owner || hired.some(h => h.freelancer_id === viewer.id) ? jobDisputes(jobId, employerId, viewer.id, db) : Promise.resolve([]),
+    // Серия: спор возможен после первого сданного или принятого дня.
+    one('SELECT 1 FROM series_days WHERE job_id = $1 AND (reported_at IS NOT NULL OR accepted_at IS NOT NULL) LIMIT 1', [jobId], db)
   ]);
   const openFor = new Set(disputes.filter(d => d.status === 'open' || d.status === 'review').map(d => d.appId ?? 'me'));
   const lead = hired.find(h => h.is_lead);
@@ -348,7 +379,7 @@ async function loadShift(jobId: string, employerId: string, empName: string, hir
     photos,
     disputes,
     // Спор — после сдачи работы; у каждой пары «работодатель ↔ исполнитель» не больше одного незакрытого.
-    canDispute: (!!rep || !!acc) && (owner ? hired.some(h => h.app_id && !openFor.has(h.app_id)) : !!meHired && !openFor.has('me')),
+    canDispute: (!!rep || !!acc || !!dayDone) && (owner ? hired.some(h => h.app_id && !openFor.has(h.app_id)) : !!meHired && !openFor.has('me')),
     safety: hired.filter(h => owner || h.freelancer_id === viewer.id).map(h => ({
       name: shortName(h.name), me: h.freelancer_id === viewer.id,
       items: safety.rows.find(r => r.freelancer_id === h.freelancer_id)?.items ?? []

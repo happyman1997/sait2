@@ -64,7 +64,11 @@ export async function openDispute(num: number, raw: unknown, viewer: Viewer) {
 
   await tx(async (db) => {
     const j = await lockJob(num, db);
-    if (j.status !== 'accepted' && j.status !== 'reported') throw new AppError(409, 'Спор по расчёту открывается после сдачи работы.');
+    // В серии — после первого сданного или принятого дня.
+    if (j.status !== 'accepted' && j.status !== 'reported'
+      && !(await one('SELECT 1 FROM series_days WHERE job_id = $1 AND (reported_at IS NOT NULL OR accepted_at IS NOT NULL)', [j.id], db))) {
+      throw new AppError(409, 'Спор по расчёту открывается после сдачи работы.');
+    }
     let freelancerId: string;
     if (side === 'employer') {
       if (j.employer_id !== u.id) throw new AppError(403, 'Спор открывают только стороны смены.');
