@@ -7,6 +7,7 @@ const { pool, query, one } = await import('@/server/db');
 const { migrate } = await import('@/server/migrate');
 const jobs = await import('@/server/jobs');
 const sh = await import('@/server/shifts');
+const support = await import('@/server/support');
 const { AppError } = await import('@/server/errors');
 const { seriesDates, seriesDayLabel, localISO } = await import('@/lib/jobs');
 
@@ -131,6 +132,94 @@ describe('серия в заказе', () => {
     await expectErr(sh.toggleSeriesDay(j.num, { day }, fl), /уже взял замену/);
     const third = await mkUser('freelancer', 'ivan_p', '9164444444', 'Иван Петров');
     await expectErr(sh.offerSubstitute(j.num, { day }, third), /свободных мест нет/);
+  });
+
+  /** Серия на одного: исполнитель нанят и снял день; вторая — откликнулась на замену (и, если нужно, взята). */
+  async function withSub(hireSub: boolean, over: Record<string, unknown> = {}) {
+    const other = await mkUser('freelancer', 'olga_k', '9163333333', 'Ольга Кузнецова');
+    const j = await jobs.createJob(form(over), emp, today);
+    await jobs.applyToJob(j.num, { reqConfirmed: true }, fl, today);
+    await sh.staffAction(j.num, (await jobs.getJob(j.num, emp)).applicantList![0].id, 'hire', emp);
+    const day = plus(today, 3);
+    await sh.toggleSeriesDay(j.num, { day }, fl);
+    await sh.offerSubstitute(j.num, { day }, other);
+    if (hireSub) await sh.decideSubstitute(j.num, { day, freelancer: other.id, action: 'hire' }, emp);
+    return { j, day, other };
+  }
+  const freeOn = async (num: number, day: string) => (await jobs.getJob(num, null)).series!.days.find(d => d.date === day)!.free;
+
+  it('ушёл из серии: его снятые дни без замены больше не «свободны», день с заменой остаётся за ней', async () => {
+    const { j, day, other } = await withSub(true);
+    const lone = plus(today, 4);
+    await sh.toggleSeriesDay(j.num, { day: lone }, fl);
+    expect(await freeOn(j.num, lone)).toBe(1);
+    await sh.leaveShift(j.num, { reason: 'заболел', notice: 'больше суток' }, fl);
+    expect(await freeOn(j.num, lone)).toBe(0);
+    expect(await freeOn(j.num, day)).toBe(0);
+    expect((await jobs.getJob(j.num, other)).series!.days.find(d => d.date === day)!.mySub).toBe('hired');
+    // Новый исполнитель в основной состав не получает чужих «снятых» дней.
+    const next = await mkUser('freelancer', 'ivan_p', '9164444444', 'Иван Петров');
+    await jobs.applyToJob(j.num, { reqConfirmed: true }, next, today);
+    const app = (await jobs.getJob(j.num, emp)).applicantList!.find(a => a.thread === next.id)!.id;
+    await sh.staffAction(j.num, app, 'hire', emp);
+    expect((await jobs.getJob(j.num, next)).series!.days.every(d => !d.skipped)).toBe(true);
+  });
+
+  it('«Не вышел» тоже закрывает его снятые дни', async () => {
+    const { j, day } = await withSub(false);
+    const app = (await jobs.getJob(j.num, emp)).applicantList!.find(a => a.thread === fl.id)!.id;
+    await sh.staffAction(j.num, app, 'no-show', emp);
+    expect(await freeOn(j.num, day)).toBe(0);
+    expect(await one('SELECT 1 FROM series_skips WHERE freelancer_id = $1', [fl.id])).toBeNull();
+  });
+
+  it('замена видна себе: в «Моих сменах» с днём и решением, на экране «Смена» — после найма на день', async () => {
+    const { j, day, other } = await withSub(false);
+    const before = (await sh.myJobs(other)).find(x => x.num === j.num)!;
+    expect(before).toMatchObject({ myStatus: null, subDays: [{ day, status: 'sent' }] });
+    expect(await sh.currentShift(other)).toBeNull();
+    await sh.decideSubstitute(j.num, { day, freelancer: other.id, action: 'hire' }, emp);
+    expect((await sh.myJobs(other)).find(x => x.num === j.num)!.subDays).toEqual([{ day, status: 'hired' }]);
+    expect((await sh.currentShift(other))!.num).toBe(j.num);
+    // Основному составу подпись не мешает.
+    expect((await sh.myJobs(fl)).find(x => x.num === j.num)!.subDays).toEqual([]);
+  });
+
+  it('замену взяли в основной состав — её замены по дням снимаются, место на день снова свободно', async () => {
+    const { j, day, other } = await withSub(true, { crew: '2' });
+    expect(await freeOn(j.num, day)).toBe(0);
+    await jobs.applyToJob(j.num, { reqConfirmed: true }, other, today);
+    const app = (await jobs.getJob(j.num, emp)).applicantList!.find(a => a.thread === other.id)!.id;
+    await sh.staffAction(j.num, app, 'hire', emp);
+    expect(await one('SELECT 1 FROM series_subs WHERE freelancer_id = $1', [other.id])).toBeNull();
+    expect(await freeOn(j.num, day)).toBe(1);
+  });
+
+  it('отмена серии доходит и до замен', async () => {
+    const { j, other } = await withSub(true);
+    await jobs.cancelJob(j.num, { reason: 'объект закрыт', notice: 'больше суток' }, emp);
+    expect((await one<{ text: string }>(`SELECT text FROM events WHERE user_id = $1 AND kind = 'cancel'`, [other.id]))!.text).toMatch(/отменён/);
+  });
+
+  it('блокировка исполнителя: снят со смены и с будущих замен, работодатель узнаёт сразу', async () => {
+    const staff = await mkUser('employer', 'staff_1', '9165555555', 'Сотрудник Поддержки');
+    await query('UPDATE users SET is_staff = true WHERE id = $1', [staff.id]);
+    const { j, day, other } = await withSub(true, { crew: '2' });
+    const j2 = await jobs.createJob(form({ address: 'Москва, ул. Арбат, 1' }), emp, today);
+    await sh.toggleSeriesDay(j.num, { day: plus(today, 4) }, fl);
+    await sh.offerSubstitute(j2.num, { day: plus(today, 2) }, other).catch(() => {});
+
+    await support.setBlocked(staff, other.id, { blocked: true, note: 'нарушение правил площадки' });
+    expect(await one('SELECT 1 FROM series_subs WHERE freelancer_id = $1', [other.id])).toBeNull();
+    expect(await freeOn(j.num, day)).toBe(1);
+    expect((await one<{ text: string }>(`SELECT text FROM events WHERE user_id = $1 AND text LIKE '%снят с замены%'`, [emp.id]))!.text).toMatch(/заблокирован/);
+
+    await support.setBlocked(staff, fl.id, { blocked: true, note: 'нарушение правил площадки' });
+    const after = await jobs.getJob(j.num, emp);
+    expect(after.hired).toBe(0);
+    expect(after.status).toBe('open');
+    expect(await one('SELECT 1 FROM series_skips WHERE freelancer_id = $1', [fl.id])).toBeNull();
+    expect((await one<{ text: string }>(`SELECT text FROM events WHERE user_id = $1 AND text LIKE '%снят со смены площадкой%'`, [emp.id]))!.text).toMatch(/Набор открыт/);
   });
 });
 

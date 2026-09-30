@@ -173,6 +173,8 @@ export type MyJob = JobSummary & {
   chatThread: string | null;         // для исполнителя — свой диалог
   reviewed: number;                  // сколько отзывов я оставил
   reviewable: number;                // сколько могу оставить
+  /** Исполнитель: дни серии, на которые он откликался заменой, и решение по каждому. */
+  subDays: { day: string; status: 'sent' | 'hired' | 'rejected' }[];
 };
 
 export type ChatThread = {

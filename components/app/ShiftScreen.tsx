@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { css } from '@/lib/css';
-import { dateLabel, jobNum, jobStatus, money, SAFETY_ITEMS, type JobDetail } from '@/lib/jobs';
+import { dateLabel, jobNum, jobStatus, money, SAFETY_ITEMS, seriesDayLabel, type JobDetail } from '@/lib/jobs';
 import { showModeration } from '@/components/ModerationGuard';
 import { useFlash } from '@/components/Toast';
 import { useLive, useLiveEvent } from './Live';
@@ -65,8 +65,12 @@ export function ShiftScreen() {
     );
   }
 
-  const s = jobStatus(job, role);
   const shift = job.shift;
+  // Замена на отдельные дни серии: смены (чек-листа, сдачи) у неё нет — только дни и чат с работодателем.
+  const subHired = (!shift && job.series?.days.filter(d => d.mySub === 'hired' && d.date && !d.past)) || [];
+  const subSent = (!shift && job.series?.days.filter(d => d.mySub === 'sent' && d.date && !d.past)) || [];
+  const s = subHired.length && job.status !== 'accepted' && job.status !== 'cancelled' ? { label: 'Вы на замене', cls: 'tag tag-neutral' } : jobStatus(job, role);
+  const when = subHired.length ? 'замена ' + subHired.map(d => seriesDayLabel(d.date!)).join(', ') : dateLabel(job.date);
   const meSafety = shift?.safety.find(x => x.me);
   const canCheck = !isEmp && !!meSafety && job.status !== 'accepted' && job.status !== 'cancelled';
   const toggle = (id: string) => {
@@ -79,7 +83,7 @@ export function ShiftScreen() {
   return (
     <div style={css('flex: 1; min-height: 0; overflow: auto; padding: 14px 12px 22px')}>
       <div style={css('max-width: 640px; margin: 0 auto')}>
-        <div style={css(LABEL + '; font-size: 12px')}>{'Смена ' + jobNum(job.num) + ' · ' + dateLabel(job.date)}</div>
+        <div style={css(LABEL + '; font-size: 12px')}>{'Смена ' + jobNum(job.num) + ' · ' + when}</div>
         <h1 style={css('font-family: var(--font-heading); font-size: 24px; line-height: 1.1; text-transform: uppercase; letter-spacing: .02em; margin: 3px 0 0')}>{job.title}</h1>
         <div style={css('font-size: 13.5px; line-height: 1.4; margin-top: 3px; ' + MUTED)}>{job.address}</div>
         <div style={css('display: flex; align-items: center; gap: 8px; margin-top: 9px; flex-wrap: wrap')}>
@@ -89,7 +93,21 @@ export function ShiftScreen() {
           <Link href={'/?job=' + job.num} style={css('font-size: 13px')}>Заказ на карте →</Link>
         </div>
 
-        {!shift && (
+        {!shift && subHired.length > 0 && (
+          <div className="blueprint" style={css('margin-top: 14px; padding: 12px')}>
+            <Corners />
+            <div style={css(LABEL + '; font-size: 12px')}>Замена</div>
+            <div style={css('font-size: 13.5px; line-height: 1.45; margin-top: 5px')}>
+              Вы выходите на замену {subHired.map(d => seriesDayLabel(d.date!)).join(', ')}. Время и место встречи уточните в чате — работу за смену сдаёт основной состав.
+              {subSent.length > 0 && ' Ждём решения по: ' + subSent.map(d => seriesDayLabel(d.date!)).join(', ') + '.'}
+            </div>
+            {live.me && (
+              <button className="btn btn-secondary" onClick={() => live.openChat(job.num, live.me!.id)} style={css('height: 38px; margin-top: 10px; font-size: 13px')}>Чат с работодателем</button>
+            )}
+          </div>
+        )}
+
+        {!shift && !subHired.length && (
           <div className="blueprint" style={css('margin-top: 14px; padding: 12px')}>
             <Corners />
             <div style={css(LABEL + '; font-size: 12px')}>Отклик</div>

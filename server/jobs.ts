@@ -6,7 +6,7 @@ import {
   jobNum, payNumber, seriesDates, seriesDayLabel, SERIES_STEP, AUTO_ACCEPT_DAYS, type AppStatus, type Applicant, type JobDetail, type JobForm, type JobStatus, type JobSummary, type SeriesInfo, type ShiftInfo
 } from '@/lib/jobs';
 import { badWordIn, findBadField } from '@/lib/moderation';
-import { one, pool, query, tx, type Db } from './db';
+import { afterCommit, one, pool, query, tx, type Db } from './db';
 import { AppError, ModerationError } from './errors';
 import { addEvents, localClock } from './events';
 import { TtlCache } from './cache';
@@ -84,10 +84,11 @@ function toSummary(r: SummaryRow, viewer: Viewer): JobSummary {
 
 /**
  * Выдача для гостей не зависит от зрителя — одинаковые запросы в пределах 20 с делят один расчёт и один ответ
- * (база округлена до ~100 м). Изменения заказов на этом инстансе сбрасывают кэш сразу, на соседних — по времени.
+ * (база округлена до ~100 м). Изменения заказов на этом инстансе сбрасывают кэш после фиксации транзакции,
+ * на соседних — по времени.
  */
 const guestSearch = new TtlCache<{ jobs: JobSummary[]; base: { lat: number; lng: number; label: string } }>(20_000, 500);
-export function invalidateSearch() { guestSearch.clear(); guestCard.clear(); }
+export function invalidateSearch() { afterCommit(() => { guestSearch.clear(); guestCard.clear(); }); }
 
 export async function listJobs(p: ListParams, viewer: Viewer, db: Db = pool()) {
   if (!viewer && db === pool()) {
@@ -522,6 +523,14 @@ export async function updateJob(num: number, raw: unknown, viewer: Viewer, today
   return getJob(num, viewer);
 }
 
+/** Кому сообщить об отмене заказа: откликнувшиеся и нанятые, а в серии — и замены на отдельные дни. */
+export async function jobPeople(jobId: string, db: Db): Promise<string[]> {
+  const r = await query<{ id: string }>(
+    `SELECT freelancer_id AS id FROM applications WHERE job_id = $1 AND status IN ('sent', 'hired')
+     UNION SELECT freelancer_id FROM series_subs WHERE job_id = $1 AND status IN ('sent', 'hired')`, [jobId], db);
+  return r.rows.map(x => x.id);
+}
+
 /** Отмена работодателем. Меньше суток до выхода при нанятых — пометка на 90 дней. */
 export async function cancelJob(num: number, raw: unknown, viewer: Viewer): Promise<JobDetail> {
   assertEmployer(viewer);
@@ -542,9 +551,9 @@ export async function cancelJob(num: number, raw: unknown, viewer: Viewer): Prom
     await query(`UPDATE jobs SET status = 'cancelled', updated_at = now() WHERE id = $1`, [j.id], db);
     invalidateSearch();
     // Отклики закрываются; нанятые и откликнувшиеся узнают о причине.
-    const people = await query<{ freelancer_id: string }>(`SELECT freelancer_id FROM applications WHERE job_id = $1 AND status IN ('sent', 'hired')`, [j.id], db);
-    await addEvents(people.rows.map(a => ({ userId: a.freelancer_id, kind: 'cancel', text: 'Заказ № ' + jobNum(num) + ' «' + j.title + '» отменён: ' + reason, jobId: j.id, num, deliver: true, urgent: notice === 'меньше суток' })), db);
-    await publish(people.rows.map(a => a.freelancer_id), { t: 'job', num }, db);
+    const people = await jobPeople(j.id, db);
+    await addEvents(people.map(id => ({ userId: id, kind: 'cancel', text: 'Заказ № ' + jobNum(num) + ' «' + j.title + '» отменён: ' + reason, jobId: j.id, num, deliver: true, urgent: notice === 'меньше суток' })), db);
+    await publish(people, { t: 'job', num }, db);
     await query(`UPDATE applications SET status = 'rejected', updated_at = now() WHERE job_id = $1 AND status = 'sent'`, [j.id], db);
     if (late) {
       await query(

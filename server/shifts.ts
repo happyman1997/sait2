@@ -1,5 +1,5 @@
 // Жизненный цикл смены: Отклик → Найм → Работа принята. Все правила README проверяются на сервере.
-// Отметки выхода/геометки и споров нет (решение заказчика). Деньги идут напрямую между сторонами.
+// Отметки выхода и геометки нет (решение заказчика), споры — в disputes.ts. Деньги идут напрямую между сторонами.
 import { CREW_ANY } from '@/lib/catalog';
 import {
   SAFETY_ITEMS, dateLabel, seriesDates, seriesDayLabel, SERIES_STEP,
@@ -57,6 +57,53 @@ async function systemMessage(db: Db, jobId: string, _num: number, freelancerId: 
   await query('INSERT INTO messages (job_id, freelancer_id, author_id, author_role, text) VALUES ($1, $2, $3, $4, $5)', [jobId, freelancerId, authorId, role, text], db);
 }
 
+/**
+ * Исполнитель ушёл из серии (отказ, «Не вышел», блокировка): его снятые дни больше не «свободные места»,
+ * кроме дней, где под них уже взята замена, — замена остаётся за своим днём.
+ */
+export async function dropSkips(jobId: string, freelancerId: string, db: Db) {
+  await query(
+    `DELETE FROM series_skips k WHERE k.job_id = $1 AND k.freelancer_id = $2
+        AND (SELECT count(*) FROM series_skips x WHERE x.job_id = k.job_id AND x.day = k.day)
+          > (SELECT count(*) FROM series_subs s WHERE s.job_id = k.job_id AND s.day = k.day AND s.status = 'hired')`, [jobId, freelancerId], db);
+}
+
+/**
+ * Блокировка исполнителя площадкой: ждущие отклики отзываются, с идущих смен и будущих замен он снимается
+ * (без пометок — это решение площадки), работодатели получают срочное уведомление и открытый набор.
+ */
+export async function detachFreelancer(userId: string, db: Db) {
+  await query(`UPDATE applications SET status = 'withdrawn', withdrawn_at = now(), updated_at = now() WHERE freelancer_id = $1 AND status = 'sent'`, [userId], db);
+  await query(`DELETE FROM series_subs WHERE freelancer_id = $1 AND status = 'sent'`, [userId], db);
+  const name = await userName(userId, db);
+  const live = await query<JobRow & { num: string }>(
+    `SELECT j.id, j.num, j.employer_id, j.status, j.crew, j.title, to_char(j.date, 'YYYY-MM-DD') AS date, j.repeat
+       FROM jobs j JOIN hires h ON h.job_id = j.id AND h.freelancer_id = $1
+      WHERE j.status IN ('open', 'staffed') ORDER BY j.id FOR UPDATE OF j`, [userId], db);
+  for (const row of live.rows) {
+    const j = { ...row, num: Number(row.num) };
+    await query('DELETE FROM hires WHERE job_id = $1 AND freelancer_id = $2', [j.id, userId], db);
+    await query(`UPDATE applications SET status = 'withdrawn', withdrawn_at = now(), updated_at = now() WHERE job_id = $1 AND freelancer_id = $2`, [j.id, userId], db);
+    await dropSkips(j.id, userId, db);
+    await refreshStaffing(j, db);
+    await addEvents([{ userId: j.employer_id, kind: 'withdrawal', jobId: j.id, num: j.num, deliver: true, urgent: true,
+      text: name + ' снят со смены площадкой — аккаунт заблокирован · заказ № ' + jobNum(j.num) + ' «' + j.title + '». Набор открыт снова.' }], db);
+    await publish([j.employer_id], { t: 'job', num: j.num }, db);
+  }
+  const subs = await query<{ job_id: string; num: string; employer_id: string; day: string }>(
+    `DELETE FROM series_subs ss USING jobs j
+      WHERE ss.freelancer_id = $1 AND ss.status = 'hired' AND ss.day >= current_date
+        AND j.id = ss.job_id AND j.status NOT IN ('cancelled', 'accepted')
+      RETURNING ss.job_id, j.num, j.employer_id, to_char(ss.day, 'YYYY-MM-DD') AS day`, [userId], db);
+  await addEvents(subs.rows.map(g => ({
+    userId: g.employer_id, kind: 'withdrawal', jobId: g.job_id, num: Number(g.num), deliver: true, urgent: true,
+    text: name + ' снят с замены на ' + seriesDayLabel(g.day) + ' площадкой — аккаунт заблокирован · серия заказа № ' + jobNum(Number(g.num)) + '. День снова открыт.'
+  })), db);
+  for (const g of subs.rows) await publish([g.employer_id], { t: 'job', num: Number(g.num) }, db);
+  invalidateSearch();
+  return live.rows.length + subs.rows.length;
+}
+
 /** Статус заказа по числу нанятых (для открытого набора). */
 async function refreshStaffing(j: JobRow, db: Db) {
   if (j.status !== 'open' && j.status !== 'staffed') return;
@@ -91,6 +138,8 @@ export async function staffAction(num: number, appId: string, action: StaffActio
       if (j.crew < CREW_ANY && hired.length >= j.crew) throw new AppError(409, 'Смена уже набрана — нужно ' + j.crew + ' чел.');
       await query('INSERT INTO hires (job_id, freelancer_id) VALUES ($1, $2)', [j.id, a.freelancer_id], db);
       await query(`UPDATE applications SET status = 'hired', decided_at = now(), updated_at = now() WHERE id = $1`, [appId], db);
+      // Взятый в основной состав больше не замена на отдельные дни — иначе занял бы два места в один день.
+      await query('DELETE FROM series_subs WHERE job_id = $1 AND freelancer_id = $2', [j.id, a.freelancer_id], db);
       // При найме открывается чат — первое сообщение от работодателя.
       await systemMessage(db, j.id, num, a.freelancer_id, me.id, 'employer', HIRE_GREETING);
       await refreshStaffing(j, db);
@@ -113,6 +162,7 @@ export async function staffAction(num: number, appId: string, action: StaffActio
       if (j.status !== 'open' && j.status !== 'staffed') throw new AppError(409, 'Работа уже сдана или смена закрыта — «Не вышел» не отмечается.');
       await query('DELETE FROM hires WHERE job_id = $1 AND freelancer_id = $2', [j.id, a.freelancer_id], db);
       await query(`UPDATE applications SET status = 'rejected', decided_at = now(), updated_at = now() WHERE id = $1`, [appId], db);
+      await dropSkips(j.id, a.freelancer_id, db);
       await query('INSERT INTO no_shows (job_id, freelancer_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [j.id, a.freelancer_id], db);
       await query('UPDATE users SET no_show_count = no_show_count + 1 WHERE id = $1', [a.freelancer_id], db);
       await query(`INSERT INTO user_marks (user_id, kind, reason, job_id) VALUES ($1, 'no_show', $2, $3)`, [a.freelancer_id, 'Не вышел на смену · ' + t, j.id], db);
@@ -159,6 +209,7 @@ export async function leaveShift(num: number, raw: unknown, viewer: Viewer): Pro
     const late = notice === 'меньше суток';
     await query('DELETE FROM hires WHERE job_id = $1 AND freelancer_id = $2', [j.id, u.id], db);
     await query(`UPDATE applications SET status = 'withdrawn', withdrawn_at = now(), updated_at = now() WHERE job_id = $1 AND freelancer_id = $2`, [j.id, u.id], db);
+    await dropSkips(j.id, u.id, db);
     await query('INSERT INTO withdrawals (job_id, freelancer_id, reason, notice, late) VALUES ($1, $2, $3, $4, $5)', [j.id, u.id, reason, notice, late], db);
     if (late) {
       await query(`INSERT INTO user_marks (user_id, kind, reason, job_id, until) VALUES ($1, 'late_withdrawal', $2, $3, now() + make_interval(days => $4))`,
@@ -515,13 +566,16 @@ export async function myJobs(viewer: Viewer): Promise<MyJob[]> {
               : "(SELECT coalesce(CASE WHEN p.org_type <> 'частное лицо' THEN p.org_name END, u2.name) FROM users u2 LEFT JOIN employer_profiles p ON p.user_id = u2.id WHERE u2.id = j.employer_id)"} AS counterpart,
             ${emp ? 'EXISTS (SELECT 1 FROM hires h WHERE h.job_id = j.id)' : 'EXISTS (SELECT 1 FROM hires h WHERE h.job_id = j.id AND h.freelancer_id = $1) OR EXISTS (SELECT 1 FROM messages m WHERE m.job_id = j.id AND m.freelancer_id = $1)'} AS has_chat,
             (SELECT count(*) FROM reviews v WHERE v.job_id = j.id AND v.author_id = $1)::int AS reviewed,
-            ${emp ? '(SELECT count(*) FROM hires h WHERE h.job_id = j.id)::int' : '(CASE WHEN EXISTS (SELECT 1 FROM hires h WHERE h.job_id = j.id AND h.freelancer_id = $1) THEN 1 ELSE 0 END)'} AS reviewable
+            ${emp ? '(SELECT count(*) FROM hires h WHERE h.job_id = j.id)::int' : '(CASE WHEN EXISTS (SELECT 1 FROM hires h WHERE h.job_id = j.id AND h.freelancer_id = $1) THEN 1 ELSE 0 END)'} AS reviewable,
+            ${emp ? 'NULL' : `(SELECT json_agg(json_build_object('day', to_char(ss.day, 'YYYY-MM-DD'), 'status', ss.status) ORDER BY ss.day)
+                                FROM series_subs ss WHERE ss.job_id = j.id AND ss.freelancer_id = $1)`} AS sub_days
        FROM jobs j JOIN job_types t ON t.id = j.type_id
-       ${emp ? '' : 'JOIN applications a ON a.job_id = j.id AND a.freelancer_id = $1'}
+       ${emp ? '' : 'LEFT JOIN applications a ON a.job_id = j.id AND a.freelancer_id = $1'}
        LEFT JOIN reports rp ON rp.job_id = j.id
        LEFT JOIN acceptances ac ON ac.job_id = j.id
        LEFT JOIN cancellations c ON c.job_id = j.id
-      WHERE ${emp ? 'j.employer_id = $1' : 'true'}
+      -- Исполнитель: заказы с его откликом и серии, где он откликался на замену отдельного дня.
+      WHERE ${emp ? 'j.employer_id = $1' : 'j.id IN (SELECT job_id FROM applications WHERE freelancer_id = $1 UNION SELECT job_id FROM series_subs WHERE freelancer_id = $1)'}
       -- Сверху то, что требует действия: сдано → набрано → открыто; закрытые — ниже, свежие первыми.
       ORDER BY CASE j.status WHEN 'reported' THEN 0 WHEN 'staffed' THEN 1 WHEN 'open' THEN 2 WHEN 'accepted' THEN 3 ELSE 4 END,
                CASE WHEN j.status IN ('accepted', 'cancelled') THEN NULL ELSE j.date END,
@@ -548,7 +602,8 @@ export async function myJobs(viewer: Viewer): Promise<MyJob[]> {
       hasChat: !!x.has_chat,
       chatThread: emp ? null : u.id,
       reviewed: x.reviewed as number,
-      reviewable: accepted ? (x.reviewable as number) : 0
+      reviewable: accepted ? (x.reviewable as number) : 0,
+      subDays: (x.sub_days as MyJob['subDays'] | null) ?? []
     };
   });
 }
@@ -637,11 +692,18 @@ export async function currentShift(viewer: Viewer): Promise<JobDetail | null> {
          LEFT JOIN hires h ON h.job_id = j.id AND h.freelancer_id = $1
          LEFT JOIN applications a ON a.job_id = j.id AND a.freelancer_id = $1
          LEFT JOIN settlements s ON s.job_id = j.id
-        WHERE j.status <> 'cancelled' AND (
+         -- Замена на день серии: ближайший ещё не прошедший день, на который взяли.
+         LEFT JOIN LATERAL (SELECT min(ss.day) AS day FROM series_subs ss
+                             WHERE ss.job_id = j.id AND ss.freelancer_id = $1 AND ss.status = 'hired' AND ss.day >= current_date) sb ON true
+        WHERE j.id IN (SELECT job_id FROM applications WHERE freelancer_id = $1
+                       UNION SELECT job_id FROM series_subs WHERE freelancer_id = $1 AND status = 'hired')
+          AND j.status <> 'cancelled' AND (
               (h.job_id IS NOT NULL AND j.status <> 'accepted')
            OR (h.job_id IS NOT NULL AND j.status = 'accepted' AND NOT coalesce(s.freelancer_marked, false) AND j.date > current_date - 14)
+           OR (h.job_id IS NULL AND sb.day IS NOT NULL AND j.status <> 'accepted')
            OR (h.job_id IS NULL AND a.status = 'sent' AND a.withdrawn_at IS NULL AND j.date >= current_date))
-        ORDER BY CASE WHEN h.job_id IS NOT NULL AND j.status <> 'accepted' THEN 0 WHEN h.job_id IS NOT NULL THEN 1 ELSE 2 END, j.date, j.num
+        ORDER BY CASE WHEN h.job_id IS NOT NULL AND j.status <> 'accepted' THEN 0 WHEN sb.day IS NOT NULL THEN 1 WHEN h.job_id IS NOT NULL THEN 2 ELSE 3 END,
+                 coalesce(sb.day, j.date), j.num
         LIMIT 1`, [u.id])
     : await one<{ num: string }>(
       `SELECT j.num FROM jobs j LEFT JOIN settlements s ON s.job_id = j.id

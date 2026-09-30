@@ -5,8 +5,9 @@ import { config } from './config';
 import { one, query, tx, type Db } from './db';
 import { AppError } from './errors';
 import { addEvents } from './events';
-import { invalidateSearch } from './jobs';
+import { invalidateSearch, jobPeople } from './jobs';
 import { publish } from './live';
+import { detachFreelancer } from './shifts';
 import type { SessionUser } from './session';
 
 type U = Pick<SessionUser, 'id'> | null;
@@ -192,24 +193,23 @@ export async function setBlocked(viewer: U, userId: string, raw: unknown) {
             [j.id, 'заказ снят площадкой'], t);
           await query(`UPDATE jobs SET status = 'cancelled', updated_at = now() WHERE id = $1`, [j.id], t);
           invalidateSearch();
-          const people = await query<{ freelancer_id: string }>(`SELECT freelancer_id FROM applications WHERE job_id = $1 AND status IN ('sent', 'hired')`, [j.id], t);
+          const people = await jobPeople(j.id, t);
           await query(`UPDATE applications SET status = 'rejected', updated_at = now() WHERE job_id = $1 AND status = 'sent'`, [j.id], t);
-          await addEvents(people.rows.map(p => ({
-            userId: p.freelancer_id, kind: 'cancel', jobId: j.id, num: Number(j.num), deliver: true, urgent: true,
+          await addEvents(people.map(id => ({
+            userId: id, kind: 'cancel', jobId: j.id, num: Number(j.num), deliver: true, urgent: true,
             text: 'Заказ № ' + jobNum(Number(j.num)) + ' «' + j.title + '» снят площадкой — работодатель заблокирован. Не выходите на эту смену.'
           })), t);
-          await publish(people.rows.map(p => p.freelancer_id), { t: 'job', num: Number(j.num) }, t);
+          await publish(people, { t: 'job', num: Number(j.num) }, t);
           cancelled++;
         }
       } else {
-        await query(`UPDATE applications SET status = 'withdrawn', withdrawn_at = now(), updated_at = now() WHERE freelancer_id = $1 AND status = 'sent'`, [userId], t);
+        await detachFreelancer(userId, t);
       }
     }
     await audit(staff, blocked ? 'block' : 'unblock', userId, null, note, t);
   });
   return { ok: true, cancelled };
 }
-
 
 // ───────────────────────── Назначение и шаблоны ─────────────────────────
 

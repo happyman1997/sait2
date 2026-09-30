@@ -5,14 +5,40 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, api } from '@/lib/api';
 import { css } from '@/lib/css';
-import { dateLabel, jobNum, jobStatus, localISO, money, plural, type JobDetail, type MyJob } from '@/lib/jobs';
+import { dateLabel, jobNum, jobStatus, localISO, money, plural, seriesDayLabel, type JobDetail, type MyJob } from '@/lib/jobs';
 import { useFlash } from '@/components/Toast';
 import { useLive, useLiveEvent } from './Live';
 import { Corners } from './ui';
 
 const daysLeft = (iso: string) => Math.max(0, Math.ceil((Date.parse(iso) - Date.now()) / 86400000));
 
+/** Исполнитель пришёл в серию заменой на отдельные дни (без отклика на всю серию). */
+const isSubOnly = (j: MyJob, emp: boolean) => !emp && j.myStatus !== 'hired' && j.subDays.length > 0;
+const dayList = (xs: MyJob['subDays']) => xs.map(d => seriesDayLabel(d.day)).join(', ');
+
+function subTrack(j: MyJob) {
+  const hired = j.subDays.filter(d => d.status === 'hired');
+  const sent = j.subDays.filter(d => d.status === 'sent');
+  const today = localISO();
+  const done = hired.length > 0 && (j.status === 'accepted' || hired.every(d => d.day < today));
+  const stages = [
+    { label: 'Отклик на замену', ok: true },
+    { label: 'Взяли на день', ok: hired.length > 0 },
+    { label: 'Выход отработан', ok: done }
+  ];
+  const off = j.status === 'cancelled' || (!hired.length && !sent.length);
+  const cur = off ? -2 : stages.findIndex(s => !s.ok);
+  const note = j.cancellation
+    ? 'Серия отменена работодателем · ' + j.cancellation.reason + '.'
+    : off ? 'Работодатель выбрал другого исполнителя на ' + dayList(j.subDays) + '.'
+      : done ? 'Выход отработан. Расчёт — как договорились с работодателем в чате.'
+        : hired.length ? 'Вы выходите на замену: ' + dayList(hired) + '. Время и место встречи — в чате; работу за смену сдаёт основной состав.' + (sent.length ? ' Ждём решения по: ' + dayList(sent) + '.' : '')
+          : 'Отклик на замену ' + dayList(sent) + ' у работодателя — ждём решения.';
+  return { stages, off, cur, note, reported: false };
+}
+
 function track(j: MyJob, emp: boolean) {
+  if (isSubOnly(j, emp)) return subTrack(j);
   const accepted = j.status === 'accepted';
   const hiredMe = !emp && j.myStatus === 'hired';
   const stages = emp
@@ -77,9 +103,15 @@ export function MyJobsPage({ role }: { role: 'freelancer' | 'employer' }) {
       {!jobs && <div style={css('font-size: 14px; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>Загружаем…</div>}
       <div style={css('display: grid; gap: 13px')}>
         {jobs?.map(j => {
-          const s = jobStatus(j, role);
+          const sub = isSubOnly(j, emp);
+          const subLive = sub && j.status !== 'cancelled' && j.status !== 'accepted';
+          const subOpen = j.subDays.filter(d => d.status !== 'rejected');
+          const subShown = subOpen.length ? subOpen : j.subDays;
+          const s = subLive && j.subDays.some(d => d.status === 'hired') ? { label: 'Вы на замене', cls: 'tag tag-neutral' }
+            : subLive && j.subDays.some(d => d.status === 'sent') ? { label: 'Вы откликнулись', cls: 'tag tag-accent' }
+              : jobStatus(j, role);
           const t = track(j, emp);
-          const hasNext = t.cur >= 0 && (emp ? t.cur === 1 || t.cur === 2 : t.cur === 2 && !t.reported);
+          const hasNext = !sub && t.cur >= 0 && (emp ? t.cur === 1 || t.cur === 2 : t.cur === 2 && !t.reported);
           return (
             <div key={j.num} className="card blueprint" style={css('padding: 16px 18px')}>
               <Corners />
@@ -87,7 +119,7 @@ export function MyJobsPage({ role }: { role: 'freelancer' | 'employer' }) {
                 <div style={css('font-family: var(--font-heading); font-size: 14px; letter-spacing: .2em; color: color-mix(in srgb, var(--color-text) 62%, transparent); padding-top: 6px')}>{jobNum(j.num)}</div>
                 <div style={css('flex: 1; min-width: 190px')}>
                   <div style={css('font-family: var(--font-heading); font-weight: 600; font-size: 20px; text-transform: uppercase; letter-spacing: .02em')}>{j.title}</div>
-                  <div style={css('font-size: 14px; color: color-mix(in srgb, var(--color-text) 70%, transparent); margin-top: 2px')}>{j.address} · {dateLabel(j.date)}</div>
+                  <div style={css('font-size: 14px; color: color-mix(in srgb, var(--color-text) 70%, transparent); margin-top: 2px')}>{j.address} · {sub ? 'замена ' + dayList(subShown) : dateLabel(j.date)}</div>
                   <div style={css('margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap')}>
                     <span className={s.cls}>{s.label}</span>
                     <span style={css('font-size: 13px; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>

@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { Pool, type PoolClient, type QueryResultRow } from 'pg';
 import { config } from './config';
 
@@ -31,17 +32,30 @@ export async function one<T extends QueryResultRow = QueryResultRow>(sql: string
   return r.rows[0] ?? null;
 }
 
+// Действия «после фиксации» (сброс кэшей и т. п.): внутри tx копятся и выполняются только после COMMIT,
+// при откате — отбрасываются. Иначе параллельный запрос успел бы закэшировать ещё не зафиксированное состояние.
+const pending = new AsyncLocalStorage<Array<() => void>>();
+
+export function afterCommit(fn: () => void) {
+  const list = pending.getStore();
+  if (list) list.push(fn); else fn();
+}
+
 export async function tx<T>(fn: (db: PoolClient) => Promise<T>): Promise<T> {
   const client = await pool().connect();
+  const after: Array<() => void> = [];
   try {
     await client.query('BEGIN');
-    const out = await fn(client);
+    const out = await pending.run(after, () => fn(client));
     await client.query('COMMIT');
+    client.release();
+    for (const f of after) {
+      try { f(); } catch (e) { console.error('[db] afterCommit:', e); }
+    }
     return out;
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
-    throw e;
-  } finally {
     client.release();
+    throw e;
   }
 }
