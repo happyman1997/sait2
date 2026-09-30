@@ -1,6 +1,6 @@
 // Споры по расчёту (как в прототипе): площадка денег не держит — фиксирует претензию с доказательствами
 // (фото, переписка, приёмка, отметки о расчёте, условия заказа), даёт второй стороне ответить, спорное решает поддержка.
-import { DISPUTE_REASONS, jobNum, money, type DisputeInfo } from '@/lib/jobs';
+import { disputeNum, DISPUTE_REASONS, jobNum, money, type DisputeInfo } from '@/lib/jobs';
 import { findBadField } from '@/lib/moderation';
 import { one, pool, query, tx, type Db } from './db';
 import { AppError, ModerationError } from './errors';
@@ -15,7 +15,6 @@ type U = Pick<SessionUser, 'id' | 'role'>;
 type Viewer = Parameters<typeof getJob>[1];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MARK_DAYS = 90;
-export const disputeNum = (n: number) => 'СП-' + n;
 
 type JobRow = { id: string; num: string; title: string; status: string; employer_id: string; pay: number; unit: string; pay_type: string | null };
 

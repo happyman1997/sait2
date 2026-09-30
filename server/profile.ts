@@ -228,7 +228,8 @@ export async function saveSettings(viewer: U | null, raw: unknown): Promise<Sett
 
 const KIND_LABEL: Record<string, string> = {
   account: 'Аккаунт', job: 'Заказ', application: 'Отклик', hire: 'Найм', cancel: 'Отмена', withdrawal: 'Отказ', no_show: 'Не вышел',
-  report: 'Работа сдана', accept: 'Приёмка', move: 'Перенос', settle: 'Расчёт', review: 'Отзыв', complaint: 'Жалоба', nearby: 'Рядом', dispute: 'Спор'
+  report: 'Работа сдана', accept: 'Приёмка', move: 'Перенос', settle: 'Расчёт', review: 'Отзыв', complaint: 'Жалоба', nearby: 'Рядом', dispute: 'Спор',
+  support: 'Поддержка'
 };
 
 export async function listEvents(viewer: U | null, limit = 30) {
@@ -246,7 +247,9 @@ export async function listEvents(viewer: U | null, limit = 30) {
     toasts: head.toasts ?? true,
     events: r.rows.map(e => ({
       id: e.id, kind: KIND_LABEL[e.kind] || e.kind, text: e.text, num: e.num ? Number(e.num) : null, muted: e.muted,
-      read: !!e.read_at, at: e.created_at.toISOString()
+      read: !!e.read_at, at: e.created_at.toISOString(),
+      // Куда ведёт запись журнала: напоминания поддержке — в её кабинет, остальное — в карточку заказа.
+      href: e.kind === 'support' ? '/support' : e.num ? '/?job=' + e.num : null
     }))
   };
 }

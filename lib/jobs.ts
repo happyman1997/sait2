@@ -138,6 +138,9 @@ export function seriesDates(repeat: string, startISO: string, count: number): st
   return out;
 }
 
+/** Номер спора для людей: «СП-12». */
+export const disputeNum = (n: number) => 'СП-' + n;
+
 export function seriesDayLabel(iso: string) {
   const d = new Date(iso + 'T12:00:00Z');
   return d.getUTCDate() + ' ' + MONTHS_GEN[d.getUTCMonth()] + ', ' + WEEKDAYS[d.getUTCDay()];

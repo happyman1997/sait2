@@ -19,6 +19,8 @@ export type EventRow = {
   deliver?: boolean;
   /** Срочное — проходит тихие часы, если пользователь разрешил. */
   urgent?: boolean;
+  /** Куда ведёт ссылка в письме и пуше (по умолчанию — карточка заказа). */
+  path?: string;
 };
 
 /** Час и минута в часовом поясе площадки. */
@@ -37,13 +39,14 @@ export function inQuiet(hour: number, from: number, to: number) {
  * Лимит в сутки: уже отправленное за 24 ч + порядковый номер события в пачке; сверх лимита — «без доставки».
  * Тихие часы: отправка сдвигается на их конец (срочное — сразу, если пользователь разрешил).
  */
-async function enqueue(rows: { id: string; userId: string; text: string; num: number | null; urgent: boolean }[], db: Db) {
+async function enqueue(rows: { id: string; userId: string; text: string; num: number | null; urgent: boolean; path: string | null }[], db: Db) {
   if (!rows.length) return;
   const { hour, minute } = localClock();
   const url = config.publicUrl();
   await query(
     `WITH ev AS (
-       SELECT * FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::bigint[], $5::bool[]) WITH ORDINALITY AS x(id, user_id, text, num, urgent, ord)
+       SELECT x.*, coalesce(x.path, '/?job=' || x.num) AS link
+         FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::bigint[], $5::bool[], $9::text[]) WITH ORDINALITY AS x(id, user_id, text, num, urgent, path, ord)
      ), s0 AS (
        SELECT ev.*, ns.sms, ns.email AND u.email_verified_at IS NOT NULL AS email, ns.daily_cap, u.phone, u.email AS addr,
               ns.push AND EXISTS (SELECT 1 FROM push_subscriptions p WHERE p.user_id = ev.user_id) AS webpush,
@@ -69,11 +72,11 @@ async function enqueue(rows: { id: string; userId: string; text: string; num: nu
      SELECT user_id, id, 'sms', phone, NULL, left('Арена Работы: ' || text, 300), at FROM ok WHERE sms
      UNION ALL
      SELECT user_id, id, 'email', addr, 'Арена Работы: ' || left(text, 80),
-            text || CASE WHEN num IS NULL THEN '' ELSE E'\n' || $8 || '/?job=' || num END || E'\n\nНастроить уведомления: ' || $8 || '/profile', at
+            text || CASE WHEN link IS NULL THEN '' ELSE E'\n' || $8 || link END || E'\n\nНастроить уведомления: ' || $8 || '/profile', at
        FROM ok WHERE email AND addr <> ''
      UNION ALL
-     SELECT user_id, id, 'push', 'push', CASE WHEN num IS NULL THEN '/' ELSE '/?job=' || num END, left(text, 300), at FROM ok WHERE webpush`,
-    [rows.map(r => r.id), rows.map(r => r.userId), rows.map(r => r.text), rows.map(r => r.num), rows.map(r => r.urgent), hour, minute, url], db);
+     SELECT user_id, id, 'push', 'push', coalesce(link, '/'), left(text, 300), at FROM ok WHERE webpush`,
+    [rows.map(r => r.id), rows.map(r => r.userId), rows.map(r => r.text), rows.map(r => r.num), rows.map(r => r.urgent), hour, minute, url, rows.map(r => r.path)], db);
 }
 
 /** Запись событий пачкой: журнал, живое уведомление, очередь доставки. Константное число запросов на любую пачку. */
@@ -87,7 +90,7 @@ export async function addEvents(rows: EventRow[], db: Db = pool()) {
        FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::text[], $5::uuid[], $6::bool[], $7::bool[]) AS x(id, u, k, t, j, g, s)`,
     [list.map(r => r.id), list.map(r => r.userId), list.map(r => r.kind), list.map(r => r.text), list.map(r => r.jobId ?? null), list.map(r => !!r.urgent), list.map(r => !!r.silent)], db);
   await publishMany(list.filter(r => !r.silent).map(r => ({ userIds: [r.userId], e: { t: 'event' as const, text: r.text, num: r.num ?? null } })), db);
-  await enqueue(list.filter(r => r.deliver).map(r => ({ id: r.id, userId: r.userId, text: r.text, num: r.num ?? null, urgent: !!r.urgent })), db);
+  await enqueue(list.filter(r => r.deliver).map(r => ({ id: r.id, userId: r.userId, text: r.text, num: r.num ?? null, urgent: !!r.urgent, path: r.path ?? null })), db);
 }
 
 /** Письмо в поддержку (жалобы). */

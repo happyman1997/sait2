@@ -11,7 +11,7 @@ import { useFlash } from '@/components/Toast';
 import { useLive, useLiveEvent } from './Live';
 import { Corners, LABEL } from './ui';
 
-type Ev = { id: string; kind: string; text: string; num: number | null; muted: boolean; read: boolean; at: string };
+type Ev = { id: string; kind: string; text: string; num: number | null; muted: boolean; read: boolean; at: string; href: string | null };
 export type Settings = {
   enabled: boolean; push: boolean; sms: boolean; email: boolean; radiusKm: number;
   quietOn: boolean; quietFrom: number; quietTo: number; urgentBypass: boolean; dailyCap: number;
@@ -107,10 +107,10 @@ export function NotifyRail() {
     try { await api('/api/events/clear', {}); setEvents([]); flash('Журнал очищен'); } catch (e) { flash(e instanceof ApiError ? e.message : 'Не удалось очистить журнал'); }
   };
 
-  const open = (num: number | null) => {
-    if (!num) return;
+  const open = (href: string | null) => {
+    if (!href) return;
     setRail(null);
-    router.push('/?job=' + num);
+    router.push(href);
   };
 
   const changeBase = async () => {
@@ -150,8 +150,8 @@ export function NotifyRail() {
             </div>
             <div style={css('display: grid; gap: 5px; margin-top: 7px')}>
               {(events || []).map(ev => (
-                <button key={ev.id} onClick={() => open(ev.num)} disabled={!ev.num}
-                  style={css('text-align: left; cursor: ' + (ev.num ? 'pointer' : 'default') + '; background: transparent; border: 1px solid ' +
+                <button key={ev.id} onClick={() => open(ev.href)} disabled={!ev.href}
+                  style={css('text-align: left; cursor: ' + (ev.href ? 'pointer' : 'default') + '; background: transparent; border: 1px solid ' +
                     (!ev.read ? 'var(--color-accent)' : 'var(--color-divider)') + '; padding: 7px 9px; font-family: var(--font-body); color: inherit')}>
                   <span style={css('display: block; font-family: var(--font-heading); font-size: 12.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--color-accent-700)')}>
                     {ev.kind + (ev.muted ? ' · без доставки' : '')}
@@ -220,7 +220,7 @@ export function NotifyRail() {
                       <div style={css('font-size: 13px; margin-top: 9px; color: color-mix(in srgb, var(--color-text) 70%, transparent)')}>{'Рядом сейчас — ' + (near ? near.length : '…')}</div>
                       <div style={css('display: grid; gap: 5px; margin-top: 7px')}>
                         {(near || []).slice(0, 4).map(j => (
-                          <button key={j.num} onClick={() => open(j.num)} style={css('text-align: left; cursor: pointer; background: transparent; border: 1px solid var(--color-divider); padding: 7px 9px; font-family: var(--font-body); color: inherit')}>
+                          <button key={j.num} onClick={() => open('/?job=' + j.num)} style={css('text-align: left; cursor: pointer; background: transparent; border: 1px solid var(--color-divider); padding: 7px 9px; font-family: var(--font-body); color: inherit')}>
                             <span style={css('display: block; font-family: var(--font-heading); font-size: 14px; text-transform: uppercase; letter-spacing: .02em')}>{j.title}</span>
                             <span style={css('display: block; ' + NOTE)}>{(j.distanceKm != null ? j.distanceKm.toFixed(1).replace('.', ',') + ' км · ' : '') + money(j.pay, j.unit)}</span>
                           </button>

@@ -1,4 +1,5 @@
-// Фоновые задачи: автоприёмка через 7 дней, очистка устаревших служебных записей и брошенных файлов.
+// Фоновые задачи: автоприёмка через 7 дней, очистка устаревших служебных записей и брошенных файлов,
+// напоминания поддержке о сроке ответа.
 // Запускаются из процесса приложения (instrumentation.ts) раз в 10 минут или внешним cron: `npm run cron`.
 // pg_try_advisory_lock не даёт двум инстансам выполнять одно и то же одновременно.
 import { pool } from './db';
@@ -6,6 +7,7 @@ import { processOutbox } from './events';
 import { sweepFiles } from './files';
 import { recheckNpd } from './verify';
 import { autoAcceptDue } from './shifts';
+import { remindSla } from './support';
 
 const LOCK_KEY = 4242_0001;
 
@@ -31,6 +33,7 @@ export async function runDueTasks(): Promise<{ skipped: boolean; autoAccepted: n
       cleaned += await sweepFiles().catch(e => { console.error('[files]', (e as Error).message); return 0; });
       const { sent } = await processOutbox();
       await recheckNpd().catch(e => console.error('[npd]', (e as Error).message));
+      await remindSla().catch(e => console.error('[sla]', (e as Error).message));
       return { skipped: false, autoAccepted, cleaned, sent };
     } finally {
       await c.query('SELECT pg_advisory_unlock($1)', [LOCK_KEY]);

@@ -339,10 +339,13 @@ const loadTemplates = (fresh = false) => {
   return (templatesCache ??= api<{ templates: Template[] }>('/api/support/templates').then(r => r.templates).catch(() => { templatesCache = null; return []; }));
 };
 
-function slaText(deadline: string, overdue: boolean) {
+/** Подпись срока; hot — прошёл или истекает в течение суток (об этом же приходит напоминание). */
+function sla(deadline: string, overdue: boolean) {
   const h = Math.round((Date.parse(deadline) - Date.now()) / 3600_000);
-  if (overdue) return 'срок ответа прошёл ' + new Date(deadline).toLocaleDateString('ru-RU');
-  return h < 24 ? 'ответить в течение ' + Math.max(1, h) + ' ч' : 'ответить до ' + new Date(deadline).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+  if (overdue) return { text: 'срок ответа прошёл ' + new Date(deadline).toLocaleDateString('ru-RU'), hot: true };
+  return h < 24
+    ? { text: 'ответить в течение ' + Math.max(1, h) + ' ч', hot: true }
+    : { text: 'ответить до ' + new Date(deadline).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }), hot: false };
 }
 
 function Workflow({ kind, id, assignee, deadline, overdue, onChange }: {
@@ -351,13 +354,14 @@ function Workflow({ kind, id, assignee, deadline, overdue, onChange }: {
   const flash = useFlash();
   const [staff, setStaff] = useState<Staff[]>([]);
   useEffect(() => { loadStaff().then(setStaff); }, []);
+  const due = sla(deadline, overdue);
   const set = async (to: string | null | undefined) => {
     try { await api('/api/support/assign/' + kind + '/' + id, to === undefined ? {} : { to }); onChange(); }
     catch (e) { flash(e instanceof ApiError ? e.message : 'Не удалось назначить'); }
   };
   return (
     <div style={css('display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; font-size: 13px')}>
-      <span className={overdue ? 'tag tag-accent' : 'tag tag-outline'}>{slaText(deadline, overdue)}</span>
+      <span className={due.hot ? 'tag tag-accent' : 'tag tag-outline'}>{due.text}</span>
       <span style={css(MUTED)}>{assignee ? 'ведёт: ' + assignee.name : 'не назначено'}</span>
       {!assignee && <button className="btn btn-ghost" onClick={() => set(undefined)} style={css('height: 26px; font-size: 12.5px; padding: 0 6px')}>Взять себе</button>}
       {assignee && <button className="btn btn-ghost" onClick={() => set(null)} style={css('height: 26px; font-size: 12.5px; padding: 0 6px')}>Снять</button>}

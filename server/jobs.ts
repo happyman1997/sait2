@@ -216,30 +216,12 @@ async function loadJob(num: number, viewer: Viewer, db: Db): Promise<JobDetail> 
   // Телефон встречающего: владельцу и нанятому; в бригаде из нескольких человек — только старшему.
   const phoneForMe = owner || (!!meHired && (hired.length <= 1 || meHired.is_lead));
 
-  let applicantList: Applicant[] | null = null;
-  if (owner) {
-    const apps = await query<{ id: string; freelancer_id: string; name: string; status: AppStatus; created_at: Date; no_show_count: number; gear: string[] | null; rating: number | null; done: number; is_lead: boolean | null; npd: boolean | null }>(
-      `SELECT a.id, a.freelancer_id, u.name, a.status, a.created_at, u.no_show_count, fp.gear, (fp.npd_status = 'ok' AND fp.npd_checked_at > now() - interval '3 days') AS npd,
-              (SELECT avg(rating)::float8 FROM reviews WHERE target_id = u.id) AS rating,
-              (SELECT count(*) FROM hires h JOIN acceptances ac ON ac.job_id = h.job_id WHERE h.freelancer_id = u.id)::int AS done,
-              (SELECT is_lead FROM hires h WHERE h.job_id = a.job_id AND h.freelancer_id = u.id) AS is_lead
-         FROM applications a JOIN users u ON u.id = a.freelancer_id LEFT JOIN freelancer_profiles fp ON fp.user_id = u.id
-        WHERE a.job_id = $1 AND a.status IN ('sent', 'hired')
-        ORDER BY a.status = 'hired' DESC, a.created_at`,
-      [r.id],
-      db
-    );
-    applicantList = apps.rows.map(a => ({
-      id: a.id, thread: a.freelancer_id, name: shortName(a.name), initials: initialsOf(a.name), rating: a.rating == null ? null : Math.round(a.rating * 10) / 10, done: a.done,
-      noShows: a.no_show_count, gear: (a.gear || []).filter(g => g !== 'Ничего нет').slice(0, 2).join(', ') || 'свой инвентарь не указан',
-      status: a.status, isLead: !!a.is_lead, appliedAt: a.created_at.toISOString(), npd: !!a.npd
-    }));
-  }
-
-  const shift = viewer && (owner || meHired || r.my_status)
-    ? await loadShift(r.id, r.employer_id, empName, hired, viewer, owner, db)
-    : null;
-  const series = r.repeat ? await loadSeries(r, viewer, owner, !!meHired, db) : null;
+  // Отклики, блок смены и серия друг от друга не зависят — грузим одновременно.
+  const [applicantList, shift, series] = await Promise.all([
+    owner ? loadApplicants(r.id, db) : Promise.resolve(null),
+    viewer && (owner || meHired || r.my_status) ? loadShift(r.id, r.employer_id, empName, hired, viewer, owner, db) : Promise.resolve(null),
+    r.repeat ? loadSeries(r, viewer, owner, !!meHired, db) : Promise.resolve(null)
+  ]);
 
   return {
     ...toSummary(r, viewer),
@@ -261,6 +243,26 @@ async function loadJob(num: number, viewer: Viewer, db: Db): Promise<JobDetail> 
     shift,
     series
   };
+}
+
+/** Отклики на заказ — для работодателя: рейтинг, закрытые смены, «не вышел», инвентарь, статус НПД. */
+async function loadApplicants(jobId: string, db: Db): Promise<Applicant[]> {
+  const apps = await query<{ id: string; freelancer_id: string; name: string; status: AppStatus; created_at: Date; no_show_count: number; gear: string[] | null; rating: number | null; done: number; is_lead: boolean | null; npd: boolean | null }>(
+    `SELECT a.id, a.freelancer_id, u.name, a.status, a.created_at, u.no_show_count, fp.gear, (fp.npd_status = 'ok' AND fp.npd_checked_at > now() - interval '3 days') AS npd,
+            (SELECT avg(rating)::float8 FROM reviews WHERE target_id = u.id) AS rating,
+            (SELECT count(*) FROM hires h JOIN acceptances ac ON ac.job_id = h.job_id WHERE h.freelancer_id = u.id)::int AS done,
+            (SELECT is_lead FROM hires h WHERE h.job_id = a.job_id AND h.freelancer_id = u.id) AS is_lead
+       FROM applications a JOIN users u ON u.id = a.freelancer_id LEFT JOIN freelancer_profiles fp ON fp.user_id = u.id
+      WHERE a.job_id = $1 AND a.status IN ('sent', 'hired')
+      ORDER BY a.status = 'hired' DESC, a.created_at`,
+    [jobId],
+    db
+  );
+  return apps.rows.map(a => ({
+    id: a.id, thread: a.freelancer_id, name: shortName(a.name), initials: initialsOf(a.name), rating: a.rating == null ? null : Math.round(a.rating * 10) / 10, done: a.done,
+    noShows: a.no_show_count, gear: (a.gear || []).filter(g => g !== 'Ничего нет').slice(0, 2).join(', ') || 'свой инвентарь не указан',
+    status: a.status, isLead: !!a.is_lead, appliedAt: a.created_at.toISOString(), npd: !!a.npd
+  }));
 }
 
 /** Серия выходов: даты по правилу повтора; снятые дни — свои (исполнитель) или число снявших (работодатель). */

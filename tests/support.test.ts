@@ -163,6 +163,39 @@ describe('работа поддержки: срок, назначение, ша�
     await expectErr(sup.assign(staff, 'ticket', c.id, {}), /не найдена/);
   });
 
+  it('напоминания о сроке: за сутки и после срока — по разу; назначенное — только своему сотруднику', async () => {
+    const other = await mkUser('employer', 'support_2', '9168888888', 'Вторая Поддержка', true);
+    await query('UPDATE users SET email_verified_at = now() WHERE id = $1', [staff.id]);
+    await query('UPDATE notification_settings SET email = true WHERE user_id = $1', [staff.id]);
+    const num = await acceptedShift();
+    await sh.fileComplaint(num, { reason: 'не рассчитались', text: 'Перевод так и не пришёл' }, fl);
+    const [c] = await sup.listComplaints(staff, 'open');
+    const deadline = Date.parse(c.deadline);
+    const events = (id: string) => query<{ text: string; urgent: boolean }>(`SELECT text, urgent FROM events WHERE user_id = $1 AND kind = 'support' ORDER BY created_at`, [id]).then(r => r.rows);
+
+    expect(await sup.remindSla(new Date())).toBe(0);
+    expect(await sup.remindSla(new Date(deadline - 12 * 3600_000))).toBe(1);
+    expect(await sup.remindSla(new Date(deadline - 11 * 3600_000))).toBe(0);
+    for (const id of [staff.id, other.id]) {
+      expect(await events(id)).toEqual([{ text: expect.stringMatching(/истекает в течение суток: жалоба по заказу № \d+/), urgent: false }]);
+    }
+    // Письмо ведёт в кабинет поддержки, а не в карточку заказа.
+    expect((await one<{ body: string }>(`SELECT body FROM notification_outbox WHERE user_id = $1 AND channel = 'email'`, [staff.id]))!.body).toMatch(/\/support\n/);
+
+    expect(await sup.remindSla(new Date(deadline + 3600_000))).toBe(1);
+    expect((await events(staff.id)).at(-1)).toEqual({ text: expect.stringMatching(/^Срок ответа прошёл/), urgent: true });
+
+    // Передали другому — он получает своё напоминание, первый — нет.
+    await sup.assign(staff, 'complaint', c.id, { to: other.id });
+    expect(await sup.remindSla(new Date(deadline + 2 * 3600_000))).toBe(1);
+    expect(await events(other.id)).toHaveLength(3);
+    expect(await events(staff.id)).toHaveLength(2);
+    // Решённое больше не напоминает.
+    await sup.resolveComplaint(other, c.id, { decision: 'rejected', note: 'Перевод подтверждён выпиской' });
+    await query('UPDATE complaints SET sla_stage = 0');
+    expect(await sup.remindSla(new Date(deadline + 3 * 3600_000))).toBe(0);
+  });
+
   it('шаблоны ответов: создать, изменить, удалить', async () => {
     const t = await sup.saveTemplate(staff, { kind: 'complaint', title: 'Нет доказательств', body: 'Проверили переписку и фото — подтверждений нет.' });
     await sup.saveTemplate(staff, { title: 'Общий', body: 'Спасибо за обращение.' });

@@ -1,8 +1,8 @@
 // Кабинет поддержки: очередь жалоб, поиск пользователей, блокировка, журнал действий сотрудников.
 // Доступ — только у сотрудников (users.is_staff; выдаётся командой `npm run staff -- add <логин>`).
-import { jobNum } from '@/lib/jobs';
+import { disputeNum, jobNum } from '@/lib/jobs';
 import { config } from './config';
-import { one, query, tx, type Db } from './db';
+import { one, pool, query, tx, type Db } from './db';
 import { AppError } from './errors';
 import { addEvents } from './events';
 import { invalidateSearch, jobPeople } from './jobs';
@@ -55,6 +55,62 @@ export function slaDeadline(created: Date, days = SLA_BUSINESS_DAYS, tz = config
     if (w !== 'Sat' && w !== 'Sun') left--;
   }
   return d;
+}
+
+/** За сколько до срока напоминать поддержке. */
+export const SLA_WARN_HOURS = 24;
+const SLA_LIST = 5;
+
+type SlaItem = { kind: 'complaint' | 'dispute'; id: string; ref: string; created_at: Date; assigned_to: string | null; stage: number };
+
+/**
+ * Напоминания о сроке ответа (фоновая задача): за сутки до срока и когда срок прошёл — по одному разу на обращение.
+ * Назначенное — только своему сотруднику, остальные — всем сотрудникам. Одно сводное уведомление на сотрудника.
+ */
+export async function remindSla(now = new Date(), db: Db = pool()): Promise<number> {
+  const items = (await query<SlaItem>(
+    `SELECT 'complaint' AS kind, c.id, j.num::text AS ref, c.created_at, c.assigned_to, c.sla_stage AS stage
+       FROM complaints c JOIN jobs j ON j.id = c.job_id WHERE c.status = 'open' AND c.sla_stage < 2
+     UNION ALL
+     SELECT 'dispute', d.id, d.num::text, d.created_at, d.assigned_to, d.sla_stage
+       FROM disputes d WHERE d.status IN ('open', 'review') AND d.sla_stage < 2`, [], db)).rows;
+  const due = items.map(it => {
+    const left = slaDeadline(it.created_at).getTime() - now.getTime();
+    return { ...it, next: left <= 0 ? 2 : left <= SLA_WARN_HOURS * 3600_000 ? 1 : 0 };
+  }).filter(it => it.next > it.stage);
+  if (!due.length) return 0;
+
+  return tx(async (t) => {
+    // Отметка стадии — условным UPDATE: параллельный запуск не пришлёт второе такое же напоминание.
+    const marked = new Set<string>();
+    for (const [kind, table] of [['complaint', 'complaints'], ['dispute', 'disputes']] as const) {
+      const part = due.filter(d => d.kind === kind);
+      if (!part.length) continue;
+      const r = await query<{ id: string }>(
+        `UPDATE ${table} x SET sla_stage = u.stage FROM unnest($1::uuid[], $2::smallint[]) AS u(id, stage)
+          WHERE x.id = u.id AND x.sla_stage < u.stage RETURNING x.id`, [part.map(d => d.id), part.map(d => d.next)], t);
+      r.rows.forEach(x => marked.add(x.id));
+    }
+    const fresh = due.filter(d => marked.has(d.id));
+    if (!fresh.length) return 0;
+    const everyone = fresh.some(d => !d.assigned_to)
+      ? (await query<{ id: string }>(`SELECT id FROM users WHERE is_staff AND status = 'active'`, [], t)).rows.map(x => x.id) : [];
+    const byStaff = new Map<string, typeof fresh>();
+    for (const d of fresh) {
+      for (const id of d.assigned_to ? [d.assigned_to] : everyone) byStaff.set(id, [...(byStaff.get(id) || []), d]);
+    }
+    const label = (d: SlaItem) => d.kind === 'complaint' ? 'жалоба по заказу № ' + jobNum(Number(d.ref)) : 'спор ' + disputeNum(Number(d.ref));
+    const list = (xs: SlaItem[]) => xs.slice(0, SLA_LIST).map(label).join(', ') + (xs.length > SLA_LIST ? ' и ещё ' + (xs.length - SLA_LIST) : '');
+    await addEvents([...byStaff].map(([userId, xs]) => {
+      const late = xs.filter(d => d.next === 2), soon = xs.filter(d => d.next === 1);
+      const text = [
+        late.length ? 'Срок ответа прошёл: ' + list(late) + '.' : '',
+        soon.length ? 'Срок ответа истекает в течение суток: ' + list(soon) + '.' : ''
+      ].filter(Boolean).join(' ') + ' Кабинет поддержки — раздел «Поддержка».';
+      return { userId, kind: 'support', text, deliver: true, urgent: late.length > 0, path: '/support' };
+    }), t);
+    return fresh.length;
+  });
 }
 
 /** Жалоба исполнителя без адресата — на работодателя заказа. */
@@ -223,7 +279,10 @@ export async function assign(viewer: U, kind: unknown, id: string, raw: unknown)
   if (target && !(await one('SELECT 1 FROM users WHERE id = $1 AND is_staff', [target]))) throw new AppError(422, 'Назначить можно только сотрудника поддержки.');
   const table = kind === 'complaint' ? 'complaints' : 'disputes';
   const open = kind === 'complaint' ? "status = 'open'" : "status IN ('open', 'review')";
-  const r = await query(`UPDATE ${table} SET assigned_to = $2 WHERE id = $1 AND ${open}`, [id, target]);
+  // Новый ответственный получит своё напоминание о сроке, даже если прежнему оно уже приходило.
+  const r = await query(
+    `UPDATE ${table} SET sla_stage = CASE WHEN $2::uuid IS NOT NULL AND assigned_to IS DISTINCT FROM $2::uuid THEN 0 ELSE sla_stage END,
+            assigned_to = $2 WHERE id = $1 AND ${open}`, [id, target]);
   if (!r.rowCount) throw new AppError(409, 'Обращение уже закрыто.');
   await query('INSERT INTO staff_actions (staff_id, action, note) VALUES ($1, $2, $3)', [staff, 'assign_' + kind, id + ' → ' + (target ?? 'никому')]);
   return { ok: true };
