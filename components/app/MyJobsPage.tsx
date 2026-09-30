@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, api } from '@/lib/api';
 import { css } from '@/lib/css';
-import { dateLabel, isDatedSeries, jobNum, jobStatus, localISO, money, plural, seriesDayLabel, type JobDetail, type MyJob } from '@/lib/jobs';
+import { dateLabel, isSeries, jobNum, jobStatus, localISO, money, plural, seriesDayLabel, type JobDetail, type MyJob } from '@/lib/jobs';
 import { useFlash } from '@/components/Toast';
 import { useLive, useLiveEvent } from './Live';
 import { Corners } from './ui';
@@ -67,7 +67,7 @@ function track(j: MyJob, emp: boolean) {
   const notes = [
     emp ? 'Откликов пока нет — заказ виден на карте.' : 'Отклик у работодателя — ждём решения.',
     emp ? 'Выберите исполнителя во вкладке «Отклики».' : 'Работодатель ещё не принял решение. Чат откроется после найма.',
-    isDatedSeries(j.repeat)
+    isSeries(j.repeat)
       ? (emp ? 'Серия идёт: выходы сдаются и принимаются по дням в карточке заказа — там же «Завершить серию».' : 'Серия идёт: каждый выход сдаёте в карточке заказа — «Сдать день».')
       : emp
       ? (reported ? 'Исполнитель сдал работу. Примите её — осталось ' + left + ', потом смена закроется автоматически и будет засчитана исполнителю.' : 'Примите работу — смена закроется, и можно будет оценить исполнителя.')
@@ -153,7 +153,7 @@ export function MyJobsPage({ role }: { role: 'freelancer' | 'employer' }) {
                 <span style={css('font-size: 13.5px; line-height: 1.4; min-width: 0; flex: 1 1 260px; color: color-mix(in srgb, var(--color-text) 72%, transparent)')}>{t.note}</span>
                 {hasNext && (emp && t.cur === 1
                   ? <Link href="/apps" className="btn btn-primary" style={css('height: 40px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; padding: 0 16px; flex: none')}>Смотреть отклики</Link>
-                  : isDatedSeries(j.repeat)
+                  : isSeries(j.repeat)
                   ? <Link href={'/?job=' + j.num} className="btn btn-primary" style={css('height: 40px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; padding: 0 16px; flex: none; display: inline-flex; align-items: center; text-decoration: none')}>Серия выходов</Link>
                   : <button className="btn btn-primary" disabled={busy || (!emp && !j.repeat && j.date > localISO())}
                       onClick={() => (emp ? act(j.num, 'accept', 'Работа принята — оцените исполнителя') : act(j.num, 'report', 'Работа сдана — у работодателя 7 дней на приёмку'))}

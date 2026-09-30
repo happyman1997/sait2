@@ -2,7 +2,7 @@
 // Отметки выхода и геометки нет (решение заказчика), споры — в disputes.ts. Деньги идут напрямую между сторонами.
 import { CREW_ANY } from '@/lib/catalog';
 import {
-  SAFETY_ITEMS, dateLabel, isDatedSeries, seriesDates, seriesDayLabel, SERIES_STEP,
+  SAFETY_ITEMS, dateLabel, isOnCall, isSeries, MAX_CALLS, seriesDayLabel, SERIES_STEP,
   AUTO_ACCEPT_DAYS, COMPLAINT_KINDS, daysAhead, HIRE_GREETING, jobNum, LEAVE_REASONS, REPORT_MESSAGE, REVIEW_EDIT_MIN,
   type AppStatus, type ChatMessage, type ChatThread, type JobDetail, type JobStatus, type MyJob
 } from '@/lib/jobs';
@@ -10,7 +10,7 @@ import { badWordIn, findBadField } from '@/lib/moderation';
 import { one, pool, query, tx, type Db } from './db';
 import { AppError, ModerationError } from './errors';
 import { addEvents, localClock, mailSupport } from './events';
-import { clientToday, getJob, initialsOf, invalidateSearch, seriesHasHistory, SERIES_FIXED, shortName } from './jobs';
+import { clientToday, getJob, initialsOf, invalidateSearch, seriesDatesFor, seriesHasHistory, SERIES_FIXED, shortName } from './jobs';
 import { publish } from './live';
 import { limitOrThrow } from './rate-limit';
 import type { SessionUser } from './session';
@@ -234,7 +234,7 @@ export async function reportDone(num: number, viewer: Viewer): Promise<JobDetail
     if (j.status === 'cancelled') throw new AppError(409, 'Смена отменена — сдавать нечего.');
     if (j.status === 'reported') throw new AppError(409, 'Работа уже сдана — ждём приёмки.');
     if (j.status === 'accepted') throw new AppError(409, 'Работа уже принята.');
-    if (isDatedSeries(j.repeat)) throw new AppError(409, 'В серии каждый выход сдаётся отдельно — «Сдать день» в серии выходов.');
+    if (isSeries(j.repeat)) throw new AppError(409, 'В серии каждый выход сдаётся отдельно — «Сдать день» в серии выходов.');
     // До дня выхода сдавать нечего: иначе 7-дневный срок автоприёмки начался бы до самой работы.
     if (!j.repeat && j.date > localClock().day) throw new AppError(409, 'Сдать работу можно в день выхода или позже — ' + dateLabel(j.date) + '.');
     if (hired.length > 1 && !me.is_lead) {
@@ -263,7 +263,7 @@ async function acceptLocked(j: JobRow, auto: boolean, db: Db) {
   await query(`UPDATE jobs SET status = 'accepted', updated_at = now() WHERE id = $1`, [j.id], db);
   invalidateSearch();
   await query('INSERT INTO settlements (job_id) VALUES ($1) ON CONFLICT DO NOTHING', [j.id], db);
-  if (isDatedSeries(j.repeat)) {
+  if (isSeries(j.repeat)) {
     // «Завершить серию»: сданные дни принимаются, ждущие замены получают отказ, расчёт по заказу — сводка по дням.
     await query('UPDATE series_days SET accepted_at = now() WHERE job_id = $1 AND reported_at IS NOT NULL AND accepted_at IS NULL', [j.id], db);
     await query(`UPDATE series_subs SET status = 'rejected', decided_at = now() WHERE job_id = $1 AND status = 'sent'`, [j.id], db);
@@ -276,7 +276,7 @@ async function acceptLocked(j: JobRow, auto: boolean, db: Db) {
     ...hired.map(h => ({
       userId: h.freelancer_id, kind: 'accept', jobId: j.id, num: j.num, deliver: true,
       text: auto ? 'Смена закрыта автоматически: работодатель не ответил ' + AUTO_ACCEPT_DAYS + ' дней — засчитана вам · ' + t
-        : (isDatedSeries(j.repeat) ? 'Серия завершена · ' : 'Работа принята · ') + t + '. Оцените работодателя.'
+        : (isSeries(j.repeat) ? 'Серия завершена · ' : 'Работа принята · ') + t + '. Оцените работодателя.'
     })),
     ...(auto ? [{ userId: j.employer_id, kind: 'accept', jobId: j.id, num: j.num, deliver: true, text: 'Смена закрыта автоматически: работа сдана ' + AUTO_ACCEPT_DAYS + ' дней назад · ' + t }] : [])
   ], db);
@@ -352,7 +352,7 @@ export async function moveDate(num: number, raw: unknown, viewer: Viewer, todayR
     needOwner(j, viewer);
     if (j.status === 'cancelled' || j.status === 'accepted') throw new AppError(409, 'Смена закрыта или отменена — переносить нельзя.');
     if (j.date === date) throw new AppError(422, 'Это та же дата.', 'date');
-    if (j.repeat && (await seriesHasHistory(j.id, db))) throw new AppError(409, SERIES_FIXED, 'date');
+    if (j.repeat && !isOnCall(j.repeat) && (await seriesHasHistory(j.id, db))) throw new AppError(409, SERIES_FIXED, 'date');
     await query('UPDATE jobs SET date = $2, urgent = $3, updated_at = now() WHERE id = $1', [j.id, date, ahead <= 1], db);
     invalidateSearch();
     const people = [...(await hiredOf(j.id, db)).map(h => h.freelancer_id), ...(await openApplicants(j.id, db))];
@@ -376,7 +376,7 @@ export async function markSettled(num: number, viewer: Viewer): Promise<JobDetai
     const isOwner = u.id === j.employer_id;
     if (!isOwner && !hired.some(h => h.freelancer_id === u.id)) throw new AppError(403, 'Отметку ставят только стороны смены.');
     let s: { employer_marked: boolean; freelancer_marked: boolean } | null;
-    if (isDatedSeries(j.repeat)) {
+    if (isSeries(j.repeat)) {
       // Серия: отметка по заказу — за все принятые дни (у исполнителя — за дни, когда он выходил); итог — сводка по дням.
       await query(isOwner
         ? 'UPDATE series_days SET employer_paid_at = now() WHERE job_id = $1 AND accepted_at IS NOT NULL AND employer_paid_at IS NULL'
@@ -768,11 +768,9 @@ export async function toggleSeriesDay(num: number, raw: unknown, viewer: Viewer)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new AppError(422, 'Укажите день серии.', 'day');
   await tx(async (db) => {
     const j = await lockJob(num, db);
-    const row = await one<{ series_len: number }>('SELECT series_len FROM jobs WHERE id = $1', [j.id], db);
     if (!j.repeat) throw new AppError(409, 'Это разовый заказ — серии нет.');
-    const dates = seriesDates(j.repeat, j.date, row!.series_len);
-    if (!dates) throw new AppError(409, 'Выходы по снегопаду — по вызову, заранее снимать нечего.');
-    if (!dates.includes(day)) throw new AppError(422, 'Такого дня в серии нет.', 'day');
+    const dates = await datesOf(j, db);
+    if (!dates.includes(day)) throw new AppError(422, isOnCall(j.repeat) ? 'На этот день бригаду не вызывали.' : 'Такого дня в серии нет.', 'day');
     if (!(await one('SELECT 1 FROM hires WHERE job_id = $1 AND freelancer_id = $2', [j.id, u.id], db))) throw new AppError(403, 'Снять день может только нанятый исполнитель.');
     if (j.status === 'cancelled' || j.status === 'accepted') throw new AppError(409, 'Серия закрыта.');
     if (day < localClock().day) throw new AppError(409, 'Этот день уже прошёл.');
@@ -847,10 +845,9 @@ export async function seriesDayAction(num: number, raw: unknown, viewer: Viewer)
   if (!action) throw new AppError(422, 'Выберите действие с днём.');
   await tx(async (db) => {
     const j = await lockJob(num, db);
-    const row = await one<{ series_len: number }>('SELECT series_len FROM jobs WHERE id = $1', [j.id], db);
-    const dates = isDatedSeries(j.repeat) ? seriesDates(j.repeat!, j.date, row!.series_len) : null;
-    if (!dates) throw new AppError(409, j.repeat ? 'Выходы по вызову сдаются и принимаются заказом целиком.' : 'Это разовый заказ — дней серии нет.');
-    if (!dates.includes(day)) throw new AppError(422, 'Такого дня в серии нет.', 'day');
+    if (!isSeries(j.repeat)) throw new AppError(409, 'Это разовый заказ — дней серии нет.');
+    const dates = await datesOf(j, db);
+    if (!dates.includes(day)) throw new AppError(422, isOnCall(j.repeat) ? 'На этот день бригаду не вызывали.' : 'Такого дня в серии нет.', 'day');
     const owner = u.id === j.employer_id;
     const w = await one<{ reported_at: Date | null; accepted_at: Date | null; employer_paid_at: Date | null; freelancer_paid_at: Date | null; workers: string[] }>(
       'SELECT reported_at, accepted_at, employer_paid_at, freelancer_paid_at, workers FROM series_days WHERE job_id = $1 AND day = $2 FOR UPDATE', [j.id, day], db);
@@ -916,13 +913,67 @@ async function freeOnDay(jobId: string, day: string, db: Db) {
 async function seriesDay(num: number, day: unknown, db: Db) {
   if (typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new AppError(422, 'Укажите день серии.', 'day');
   const j = await lockJob(num, db);
-  const row = await one<{ series_len: number }>('SELECT series_len FROM jobs WHERE id = $1', [j.id], db);
-  const dates = j.repeat ? seriesDates(j.repeat, j.date, row!.series_len) : null;
-  if (!dates || !dates.includes(day)) throw new AppError(422, 'Такого дня в серии нет.', 'day');
+  const dates = await datesOf(j, db);
+  if (!dates.includes(day)) throw new AppError(422, 'Такого дня в серии нет.', 'day');
   if (j.status === 'cancelled' || j.status === 'accepted') throw new AppError(409, 'Серия закрыта.');
   if (day < localClock().day) throw new AppError(409, 'Этот день уже прошёл.');
   if (await dayClosed(j.id, day, db)) throw new AppError(409, 'Этот день уже сдан — замена не нужна.');
   return { j, day };
+}
+
+/** Даты серии заказа (по графику или вызовы «по снегопаду»). */
+async function datesOf(j: JobRow, db: Db) {
+  const row = await one<{ series_len: number }>('SELECT series_len FROM jobs WHERE id = $1', [j.id], db);
+  return seriesDatesFor({ ...j, series_len: row!.series_len }, db);
+}
+
+/**
+ * «По снегопаду»: вызвать бригаду на дату (не раньше сегодня и не дальше месяца) или отменить вызов, пока день не сдан.
+ * Вызов становится днём серии: его снимают, берут на замену, сдают и принимают как день по графику.
+ */
+export async function callSeries(num: number, raw: unknown, viewer: Viewer): Promise<JobDetail> {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const day = typeof r.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.day) ? r.day : '';
+  const cancel = r.cancel === true;
+  if (!day) throw new AppError(422, 'Выберите дату вызова.', 'day');
+  await tx(async (db) => {
+    const j = await lockJob(num, db);
+    needOwner(j, viewer);
+    if (!isOnCall(j.repeat)) throw new AppError(409, 'Вызов на дату — только для выходов «по снегопаду».');
+    if (j.status === 'cancelled' || j.status === 'accepted') throw new AppError(409, 'Серия закрыта.');
+    const today = localClock().day;
+    const ahead = daysAhead(day, today);
+    const label = seriesDayLabel(day) + ' · заказ № ' + jobNum(num) + ' «' + j.title + '»';
+    const crew = (await hiredOf(j.id, db)).map(h => h.freelancer_id);
+    if (!cancel) {
+      if (ahead == null || ahead < 0) throw new AppError(422, 'Эта дата уже прошла.', 'day');
+      if (ahead > 31) throw new AppError(422, 'Вызывать можно не дальше чем на месяц вперёд.', 'day');
+      if ((await one<{ n: number }>('SELECT count(*)::int AS n FROM series_calls WHERE job_id = $1', [j.id], db))!.n >= MAX_CALLS) {
+        throw new AppError(409, 'В серии уже ' + MAX_CALLS + ' вызовов — завершите её и опубликуйте новую.');
+      }
+      const ins = await query('INSERT INTO series_calls (job_id, day) VALUES ($1, $2) ON CONFLICT DO NOTHING', [j.id, day], db);
+      if (!ins.rowCount) throw new AppError(409, 'На этот день бригада уже вызвана.', 'day');
+      await addEvents(crew.map(id => ({ userId: id, kind: 'job', jobId: j.id, num, deliver: true, urgent: ahead <= 1,
+        text: 'Вызов после снегопада: ' + label + '. Если не сможете выйти — отметьте «Не смогу» в серии.' })), db);
+      await publish([j.employer_id, ...crew], { t: 'job', num }, db);
+    } else {
+      if (!(await one('SELECT 1 FROM series_calls WHERE job_id = $1 AND day = $2', [j.id, day], db))) throw new AppError(404, 'Такого вызова нет.');
+      if (day <= today) throw new AppError(409, 'День вызова уже наступил — отменять поздно; если работы не было, не принимайте день.');
+      if (await one('SELECT 1 FROM series_days WHERE job_id = $1 AND day = $2', [j.id, day], db)) throw new AppError(409, 'Этот день уже сдан.');
+      // Снятия и замены на этот день уходят вместе с вызовом; откликнувшиеся и взятые на замену узнают об отмене.
+      const subs = (await query<{ freelancer_id: string; status: string }>(
+        'DELETE FROM series_subs WHERE job_id = $1 AND day = $2 RETURNING freelancer_id, status', [j.id, day], db)).rows
+        .filter(x => x.status !== 'rejected').map(x => x.freelancer_id);
+      await query('DELETE FROM series_skips WHERE job_id = $1 AND day = $2', [j.id, day], db);
+      await query('DELETE FROM series_calls WHERE job_id = $1 AND day = $2', [j.id, day], db);
+      const people = [...new Set([...crew, ...subs])];
+      await addEvents(people.map(id => ({ userId: id, kind: 'cancel', jobId: j.id, num, deliver: true, urgent: (ahead ?? 9) <= 1,
+        text: 'Вызов на ' + label + ' отменён — в этот день выходить не нужно.' })), db);
+      await publish([j.employer_id, ...people], { t: 'job', num }, db);
+    }
+  });
+  invalidateSearch();
+  return getJob(num, viewer);
 }
 
 /** День серии уже сдан или принят — состав на него больше не меняется. */
@@ -992,6 +1043,7 @@ export async function extendSeries(num: number, viewer: Viewer): Promise<JobDeta
     const j = await lockJob(num, db);
     needOwner(j, viewer);
     if (!j.repeat) throw new AppError(409, 'Это разовый заказ — продлевать нечего.');
+    if (isOnCall(j.repeat)) throw new AppError(409, 'Выходы по снегопаду не продлевают — вызывайте бригаду на нужную дату.');
     if (j.status === 'cancelled' || j.status === 'accepted') throw new AppError(409, 'Серия закрыта.');
     const r = await query('UPDATE jobs SET series_len = series_len + $2, updated_at = now() WHERE id = $1 AND series_len + $2 <= 60', [j.id, SERIES_STEP], db);
     if (!r.rowCount) throw new AppError(409, 'Серия уже максимальной длины.');

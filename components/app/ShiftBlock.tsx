@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { css } from '@/lib/css';
 import { uploadForm } from '@/lib/image';
-import { COMPLAINT_KINDS, crewOf, dateLabel, DISPUTE_REASONS, isDatedSeries, LEAVE_REASONS, localISO, money, plural, type DisputeInfo, type JobDetail } from '@/lib/jobs';
+import { COMPLAINT_KINDS, crewOf, dateLabel, DISPUTE_REASONS, isSeries, LEAVE_REASONS, localISO, money, plural, type DisputeInfo, type JobDetail } from '@/lib/jobs';
 import { Corners, LABEL } from './ui';
 
 export type Act = (path: string, body: unknown, ok: string, method?: 'POST' | 'DELETE') => Promise<boolean>;
@@ -79,7 +79,7 @@ export function ShiftBlock({ job, isOwner, act, onChat, onReview, busy }: {
   // До дня выхода сдавать нечего (сервер проверяет то же самое).
   const early = !job.repeat && job.date > localISO();
   // Серия с датами сдаётся и принимается по дням (в «Серии выходов»); здесь — только «Завершить серию».
-  const series = isDatedSeries(job.repeat);
+  const series = isSeries(job.repeat);
   const canReport = !isOwner && job.myStatus === 'hired' && !reported && !accepted && job.status !== 'cancelled' && (!brigade || s.iAmLead) && !early;
 
   const line = accepted

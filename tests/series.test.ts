@@ -106,8 +106,45 @@ describe('серия в заказе', () => {
     expect((await jobs.getJob(once.num, emp)).series).toBeNull();
     const snow = await jobs.createJob(form({ repeat: 'по снегопаду' }), emp, today);
     const s = (await jobs.getJob(snow.num, emp)).series!;
-    expect(s.onCall).toBe(true);
-    expect(s.days[0].label).toMatch(/вызов 1/);
+    expect(s).toMatchObject({ onCall: true, days: [], canCall: true, canExtend: false });
+    await expectErr(sh.extendSeries(snow.num, emp), /вызывайте бригаду/);
+  });
+
+  it('«по снегопаду»: вызов на дату — день серии; снять, замена, сдать и принять как обычный день; отмена вызова', async () => {
+    const other = await mkUser('freelancer', 'olga_k', '9163333333', 'Ольга Кузнецова');
+    const j = await jobs.createJob(form({ repeat: 'по снегопаду' }), emp, today);
+    await jobs.applyToJob(j.num, { reqConfirmed: true }, fl, today);
+    await sh.staffAction(j.num, (await jobs.getJob(j.num, emp)).applicantList![0].id, 'hire', emp);
+    await expectErr(sh.toggleSeriesDay(j.num, { day: plus(today, 1) }, fl), /не вызывали/);
+    await expectErr(sh.callSeries(j.num, { day: plus(today, 1) }, fl), /работодатель/);
+    await expectErr(sh.callSeries(j.num, { day: plus(today, -1) }, emp), /прошла/);
+    await expectErr(sh.callSeries(j.num, { day: plus(today, 40) }, emp), /месяц/);
+    const called = await sh.callSeries(j.num, { day: plus(today, 1) }, emp);
+    await sh.callSeries(j.num, { day: plus(today, 3) }, emp);
+    await expectErr(sh.callSeries(j.num, { day: plus(today, 1) }, emp), /уже вызвана/);
+    expect(called.series!.days.map(d => d.date)).toEqual([plus(today, 1)]);
+    expect((await one<{ text: string; urgent: boolean }>(`SELECT text, urgent FROM events WHERE user_id = $1 AND text LIKE 'Вызов после снегопада%'`, [fl.id]))).toMatchObject({ urgent: true });
+
+    // Вызов — обычный день серии: снять, взять замену.
+    await sh.toggleSeriesDay(j.num, { day: plus(today, 3) }, fl);
+    await sh.offerSubstitute(j.num, { day: plus(today, 3) }, other);
+    expect((await jobs.getJob(j.num, emp)).series!.days.find(d => d.date === plus(today, 3))!.canUncall).toBe(true);
+    // Отмена вызова снимает и снятия, и замены; откликнувшаяся узнаёт.
+    const after = await sh.callSeries(j.num, { day: plus(today, 3), cancel: true }, emp);
+    expect(after.series!.days.map(d => d.date)).toEqual([plus(today, 1)]);
+    expect(await one('SELECT 1 FROM series_subs WHERE job_id = (SELECT id FROM jobs WHERE num = $1)', [j.num])).toBeNull();
+    expect((await one<{ text: string }>(`SELECT text FROM events WHERE user_id = $1 AND kind = 'cancel'`, [other.id]))!.text).toMatch(/отменён/);
+
+    // Наступил день вызова: сдать и принять, как день по графику; отменять поздно.
+    await query(`UPDATE series_calls SET day = day - 1`);
+    await expectErr(sh.callSeries(j.num, { day: today, cancel: true }, emp), /поздно/);
+    await expectErr(sh.reportDone(j.num, fl), /Сдать день/);
+    await sh.seriesDayAction(j.num, { day: today, action: 'report' }, fl);
+    const acc = await sh.seriesDayAction(j.num, { day: today, action: 'accept' }, emp);
+    expect(acc.series!.days[0].work).toMatchObject({ acceptedAt: expect.any(String), canPay: true, canReport: false });
+    // Набор снова открыт, но у серии есть история вызовов: смена графика — отказ.
+    await sh.leaveShift(j.num, { reason: 'заболел', notice: 'больше суток' }, fl);
+    await expectErr(jobs.updateJob(j.num, form({ repeat: 'раз в неделю' }), emp, today), /сдвинуть её даты нельзя/);
   });
 
   it('замена на день: свободное место после «Не смогу», отклик, найм на день, чат; вернуть занятый день нельзя', async () => {

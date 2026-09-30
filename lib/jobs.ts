@@ -104,7 +104,7 @@ export type DisputeInfo = {
 /** Серия выходов регулярного заказа (для карточки). */
 export type SeriesInfo = {
   rule: string;                 // «ежедневно, будни · до 9 утра»
-  onCall: boolean;              // по снегопаду — дни заранее неизвестны
+  onCall: boolean;              // по снегопаду — дни серии это вызовы работодателя на дату
   days: {
     i: number; date: string | null; label: string; skipped: boolean; skippedBy: number; past: boolean;
     free: number;                                   // мест на день: снявшие минус взятые на замену
@@ -112,10 +112,13 @@ export type SeriesInfo = {
     subs: { id: string; name: string; status: 'sent' | 'hired' | 'rejected' }[];  // отклики на замену (работодателю)
     /** Сдача, приёмка и расчёт дня — работодателю и тем, кто в серии или выходит в этот день. */
     work: SeriesDayWork | null;
+    /** Работодатель может отменить вызов (день ещё не наступил и не сдан). */
+    canUncall: boolean;
   }[];
   canSkip: boolean;             // нанятый исполнитель
   canSub: boolean;              // исполнитель не из смены может выйти на замену в свободный день
   canExtend: boolean;           // работодатель, серия не закрыта
+  canCall: boolean;             // работодатель может вызвать бригаду на дату («по снегопаду»)
 };
 
 export const SERIES_STEP = 4;   // «Продлить серию на месяц» — плюс 4 выхода (как в прототипе)
@@ -154,8 +157,12 @@ export type SeriesDayWork = {
   canPay: boolean;
 };
 
-/** Серия с датами (не «по снегопаду»): выходы сдаются, принимаются и рассчитываются по дням. */
-export const isDatedSeries = (repeat: string | null | undefined) => !!repeat && !/снегопад/.test(repeat);
+/** Серия (регулярный заказ): выходы сдаются, принимаются и рассчитываются по дням. */
+export const isSeries = (repeat: string | null | undefined) => !!repeat;
+/** «По снегопаду»: дни серии — вызовы работодателя на дату, а не расписание. */
+export const isOnCall = (repeat: string | null | undefined) => !!repeat && /снегопад/.test(repeat);
+/** Вызовов в одной серии «по снегопаду» — не больше. */
+export const MAX_CALLS = 60;
 
 /** Номер спора для людей: «СП-12». */
 export const disputeNum = (n: number) => 'СП-' + n;

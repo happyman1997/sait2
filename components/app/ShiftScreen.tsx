@@ -175,7 +175,7 @@ export function ShiftScreen() {
         )}
 
         {/* Серия: сдача, приёмка и расчёт по дням, снятие дня — прямо на экране смены. */}
-        {job.series && !job.series.onCall && (shift || subHired.length > 0) && <SeriesBlock job={job} act={act} busy={busy} />}
+        {job.series && (shift || subHired.length > 0) && <SeriesBlock job={job} act={act} busy={busy} />}
 
         <div style={css('margin-top: 16px; text-align: center')}>
           <Link href="/mine" style={css('font-size: 13.5px')}>{isEmp ? 'Все мои заказы →' : 'Все мои смены →'}</Link>

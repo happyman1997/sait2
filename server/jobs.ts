@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { CREW_ANY, MONTHS_GEN } from '@/lib/catalog';
 import {
   autoTitle, daysAhead, emptyJobForm, isKnownPayType, isKnownRepeat, isKnownTools, isKnownUnit, jobAllErrors, JOB_FIELD_STEP,
-  jobNum, payNumber, seriesDates, seriesDayLabel, SERIES_STEP, AUTO_ACCEPT_DAYS, type AppStatus, type Applicant, type JobDetail, type JobForm, type JobStatus, type JobSummary, type SeriesInfo, type ShiftInfo
+  isOnCall, jobNum, MAX_CALLS, payNumber, seriesDates, seriesDayLabel, SERIES_STEP, AUTO_ACCEPT_DAYS, type AppStatus, type Applicant, type JobDetail, type JobForm, type JobStatus, type JobSummary, type SeriesInfo, type ShiftInfo
 } from '@/lib/jobs';
 import { badWordIn, findBadField } from '@/lib/moderation';
 import { afterCommit, one, pool, query, tx, type Db } from './db';
@@ -265,13 +265,23 @@ async function loadApplicants(jobId: string, db: Db): Promise<Applicant[]> {
   }));
 }
 
-/** Серия выходов: даты по правилу повтора; снятые дни — свои (исполнитель) или число снявших (работодатель). */
+/** Даты серии: по правилу повтора, а «по снегопаду» — вызовы работодателя (по возрастанию). */
+export async function seriesDatesFor(j: { id: string; repeat: string | null; date: string; series_len: number }, db: Db): Promise<string[]> {
+  if (!j.repeat) return [];
+  if (isOnCall(j.repeat)) {
+    return (await query<{ day: string }>(`SELECT to_char(day, 'YYYY-MM-DD') AS day FROM series_calls WHERE job_id = $1 ORDER BY day`, [j.id], db)).rows.map(x => x.day);
+  }
+  return seriesDates(j.repeat, j.date, j.series_len) ?? [];
+}
+
+/** Серия выходов: даты по правилу повтора или вызовы; снятые дни — свои (исполнитель) или число снявших (работодатель). */
 async function loadSeries(r: { id: string; repeat: string | null; repeat_note: string | null; date: string; series_len: number; status: string },
   viewer: Viewer, owner: boolean, crew: { freelancer_id: string; is_lead: boolean }[], db: Db): Promise<SeriesInfo> {
-  const dates = seriesDates(r.repeat!, r.date, r.series_len);
+  const onCall = isOnCall(r.repeat);
+  const dates = await seriesDatesFor(r, db);
   const hired = !!viewer && crew.some(h => h.freelancer_id === viewer.id);
   // Кто снял какой день и кого взяли на замену; сдача и приёмка по дням. Считаем все — показываем по правам.
-  const [skips, subs, work] = dates ? await Promise.all([
+  const [skips, subs, work] = dates.length ? await Promise.all([
     query<{ day: string; freelancer_id: string }>(
       `SELECT to_char(day, 'YYYY-MM-DD') AS day, freelancer_id FROM series_skips WHERE job_id = $1`, [r.id], db).then(x => x.rows),
     query<{ day: string; freelancer_id: string; name: string; status: 'sent' | 'hired' | 'rejected' }>(
@@ -288,29 +298,28 @@ async function loadSeries(r: { id: string; repeat: string | null; repeat_note: s
   const lead = crew.find(h => h.is_lead);
   return {
     rule: r.repeat! + (r.repeat_note ? ' · ' + r.repeat_note : ''),
-    onCall: !dates,
-    days: Array.from({ length: r.series_len }, (_, i) => {
-      const date = dates ? dates[i] : null;
-      const off = date ? skips.filter(x => x.day === date) : [];
-      const daySubs = date ? subs.filter(x => x.day === date) : [];
+    onCall,
+    days: dates.map((date, i) => {
+      const off = skips.filter(x => x.day === date);
+      const daySubs = subs.filter(x => x.day === date);
       const subsHired = daySubs.filter(x => x.status === 'hired');
       const mine = viewer ? daySubs.find(x => x.freelancer_id === viewer.id) : undefined;
       const iSkipped = hired && off.some(x => x.freelancer_id === viewer!.id);
       // Выходят в этот день: состав минус снявшие (из нынешнего состава) плюс взятые на замену.
       const workers = crew.length - off.filter(x => crew.some(h => h.freelancer_id === x.freelancer_id)).length + subsHired.length;
       const iWork = (hired && !iSkipped) || mine?.status === 'hired';
-      const w = date ? work.find(x => x.day === date) : undefined;
-      const due = !!date && date <= today;
+      const w = work.find(x => x.day === date);
+      const due = date <= today;
       // В бригаде день сдаёт старший, если он в этот день выходит; иначе — любой, кто выходит.
       const leadWorks = !!lead && !off.some(x => x.freelancer_id === lead.freelancer_id);
       const reporter = workers <= 1 || !leadWorks || lead!.freelancer_id === viewer?.id;
       return {
-        i, date, label: date ? seriesDayLabel(date) : 'вызов ' + (i + 1) + ' · после снегопада',
-        skipped: iSkipped, skippedBy: owner ? off.length : 0, past: !!date && date < today,
+        i, date, label: seriesDayLabel(date),
+        skipped: iSkipped, skippedBy: owner ? off.length : 0, past: date < today,
         free: Math.max(0, off.length - subsHired.length),
         mySub: mine?.status ?? null,
         subs: owner ? daySubs.map(x => ({ id: x.freelancer_id, name: shortName(x.name), status: x.status })) : [],
-        work: date && (owner || hired || iWork || w?.i_worked) ? {
+        work: owner || hired || iWork || w?.i_worked ? {
           reportedAt: w?.reported_at?.toISOString() ?? null,
           acceptedAt: w?.accepted_at?.toISOString() ?? null,
           autoAccepted: !!w?.auto,
@@ -322,12 +331,15 @@ async function loadSeries(r: { id: string; repeat: string | null; repeat_note: s
           canAccept: live && due && owner && workers > 0 && !w?.accepted_at,
           // «Деньги получены» — тем, кто выходил в этот день (снимок при приёмке), даже если потом ушёл из серии.
           canPay: !!w?.accepted_at && (owner ? !w.employer_paid : w.i_worked && !w.freelancer_paid)
-        } : null
+        } : null,
+        // Вызов отменяется, пока день не наступил и не сдан (снятия и замены на него снимаются вместе с ним).
+        canUncall: onCall && owner && live && date > today && !w
       };
     }),
-    canSkip: hired && live && !!dates,
-    canSub: !!viewer && viewer.role === 'freelancer' && !hired && !owner && live && !!dates,
-    canExtend: owner && live && r.series_len + SERIES_STEP <= 60
+    canSkip: hired && live,
+    canSub: !!viewer && viewer.role === 'freelancer' && !hired && !owner && live,
+    canExtend: owner && live && !onCall && r.series_len + SERIES_STEP <= 60,
+    canCall: owner && live && onCall && dates.length < MAX_CALLS
   };
 }
 
@@ -519,7 +531,7 @@ export async function createJob(raw: unknown, viewer: Viewer, todayRaw: unknown)
 export async function seriesHasHistory(jobId: string, db: Db) {
   return !!(await one(
     `SELECT 1 WHERE EXISTS (SELECT 1 FROM series_skips WHERE job_id = $1) OR EXISTS (SELECT 1 FROM series_subs WHERE job_id = $1)
-        OR EXISTS (SELECT 1 FROM series_days WHERE job_id = $1)`, [jobId], db));
+        OR EXISTS (SELECT 1 FROM series_days WHERE job_id = $1) OR EXISTS (SELECT 1 FROM series_calls WHERE job_id = $1)`, [jobId], db));
 }
 export const SERIES_FIXED = 'По серии уже есть снятые дни, замены или сданные выходы — сдвинуть её даты нельзя. Отдельные дни снимают исполнители; чтобы начать заново, завершите серию и опубликуйте новую.';
 
@@ -547,7 +559,9 @@ export async function updateJob(num: number, raw: unknown, viewer: Viewer, today
     if (j.status === 'cancelled') throw new AppError(409, 'Заказ отменён — его уже не изменить.');
     if (j.status !== 'open' || j.hired > 0) throw new AppError(409, 'Исполнитель уже нанят — условия меняются только по договорённости в чате. Дату можно перенести.');
     const repeat = f.regular ? f.repeat : null;
-    if (j.repeat && (f.dateISO !== j.date || repeat !== j.repeat) && (await seriesHasHistory(j.id, db))) throw new AppError(409, SERIES_FIXED, 'date');
+    // «По снегопаду» дни — вызовы, от даты начала они не зависят; смена графика отрывает историю в любом случае.
+    const shifts = repeat !== j.repeat || (!isOnCall(j.repeat) && f.dateISO !== j.date);
+    if (j.repeat && shifts && (await seriesHasHistory(j.id, db))) throw new AppError(409, SERIES_FIXED, 'date');
     const type = await resolveType(f, viewer.id, db);
     const ahead = daysAhead(f.dateISO, today) ?? 99;
     const crew = parseInt(f.crew, 10) === CREW_ANY ? CREW_ANY : Math.min(12, Math.max(1, parseInt(f.crew, 10) || 1));

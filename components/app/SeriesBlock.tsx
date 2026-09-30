@@ -4,7 +4,7 @@
 // каждый выход сдаётся, принимается и рассчитывается отдельно; работодатель продлевает серию.
 import { useState } from 'react';
 import { css } from '@/lib/css';
-import type { JobDetail, SeriesInfo } from '@/lib/jobs';
+import { localISO, type JobDetail, type SeriesInfo } from '@/lib/jobs';
 import type { Act } from './ShiftBlock';
 import { Corners, LABEL } from './ui';
 
@@ -34,6 +34,7 @@ function dayStatus(d: Day, job: JobDetail, iAmIn: boolean): string {
 export function SeriesBlock({ job, act, busy }: { job: JobDetail; act: Act; busy: boolean }) {
   const s = job.series!;
   const [all, setAll] = useState(false);
+  const [callDay, setCallDay] = useState('');
   // Коротко — дни, где нужно действие или идёт приёмка/расчёт, и ближайшие пять; если ничего — последние пять.
   const upcoming = s.days.filter(d => !d.past && !hasAction(d) && !inProgress(d)).slice(0, 5);
   const short = s.days.filter(d => hasAction(d) || inProgress(d) || upcoming.includes(d));
@@ -50,7 +51,7 @@ export function SeriesBlock({ job, act, busy }: { job: JobDetail; act: Act; busy
       </div>
       <div style={css('font-size: 13px; line-height: 1.45; margin-top: 6px; color: color-mix(in srgb, var(--color-text) 72%, transparent)')}>
         {s.onCall
-          ? 'Выходы по вызову после снегопада — работодатель напишет в чат, когда выходить.'
+          ? 'Выходы по вызову после снегопада: работодатель вызывает бригаду на дату — приходит срочное уведомление. Каждый вызов сдаётся, принимается и рассчитывается отдельно.'
           : 'Заказ держит не один выход, а серию: каждый день — отдельная смена. Выход сдаётся, принимается и рассчитывается отдельно; отказ от одного дня не снимает остальные.'}
       </div>
       {(toAccept > 0 || toPay > 0) && (
@@ -64,13 +65,19 @@ export function SeriesBlock({ job, act, busy }: { job: JobDetail; act: Act; busy
           const hot = (d.free && !job.mine && !iAmIn && !d.past) || hasAction(d);
           return (
             <div key={d.i} style={css('padding: 7px 9px; border: 1px solid ' + (d.skipped ? 'color-mix(in srgb, var(--color-text) 14%, transparent)' : hot ? 'var(--color-accent)' : 'var(--color-divider)') + '; opacity: ' + ((d.skipped || d.past) && !hasAction(d) && !inProgress(d) ? '.55' : '1'))}>
-              <div style={css('display: flex; align-items: center; gap: 10px')}>
+              {/* В узкой панели статус и кнопки переносятся под дату, а не наезжают на неё. */}
+              <div style={css('display: flex; align-items: center; gap: 4px 10px; flex-wrap: wrap')}>
                 <span style={css('font-family: var(--font-heading); font-size: 12px; letter-spacing: .14em; color: color-mix(in srgb, var(--color-text) 62%, transparent)')}>{String(d.i + 1).padStart(2, '0')}</span>
-                <span style={css('flex: 1; min-width: 0; font-family: var(--font-heading); font-size: 14px; text-transform: uppercase; letter-spacing: .02em')}>{d.label}</span>
-                <span style={css('font-size: 12.5px; text-align: right; color: ' + ((job.mine && d.free && !d.past) || (!job.mine && d.free && !iAmIn && !d.past) ? 'var(--color-accent-900)' : 'color-mix(in srgb, var(--color-text) 64%, transparent)'))}>{dayStatus(d, job, iAmIn)}</span>
+                <span style={css('flex: 1 1 130px; min-width: 0; font-family: var(--font-heading); font-size: 14px; text-transform: uppercase; letter-spacing: .02em; white-space: nowrap')}>{d.label}</span>
+                <span style={css('margin-left: auto; font-size: 12.5px; text-align: right; color: ' + ((job.mine && d.free && !d.past) || (!job.mine && d.free && !iAmIn && !d.past) ? 'var(--color-accent-900)' : 'color-mix(in srgb, var(--color-text) 64%, transparent)'))}>{dayStatus(d, job, iAmIn)}</span>
                 {s.canSkip && !d.past && d.date && !w?.reportedAt && !w?.acceptedAt && (
                   <button className="btn btn-ghost" disabled={busy} onClick={() => act('series/skip', { day: d.date }, d.skipped ? 'Выход возвращён в серию' : 'Выход снят — остальные дни серии за вами')}
                     style={css('height: 26px; font-size: 12.5px; padding: 0 6px; flex: none')}>{d.skipped ? 'Вернуть' : 'Не смогу'}</button>
+                )}
+                {d.canUncall && (
+                  <button className="btn btn-ghost" disabled={busy}
+                    onClick={() => { if (window.confirm('Отменить вызов на ' + d.label + '? Бригада и замены получат уведомление.')) act('series/call', { day: d.date, cancel: true }, 'Вызов отменён — бригада предупреждена'); }}
+                    style={css('height: 26px; font-size: 12.5px; padding: 0 6px; flex: none')}>Отменить вызов</button>
                 )}
                 {s.canSub && !d.past && d.date && (d.mySub === 'sent' || (!d.mySub && d.free > 0)) && (
                   <button className="btn btn-ghost" disabled={busy} onClick={() => act('series/sub', { day: d.date }, d.mySub === 'sent' ? 'Отклик на замену отозван' : 'Отклик на замену отправлен работодателю')}
@@ -119,6 +126,20 @@ export function SeriesBlock({ job, act, busy }: { job: JobDetail; act: Act; busy
           );
         })}
       </div>
+      {s.onCall && !s.days.length && (
+        <div style={css('font-size: 13px; margin-top: 8px; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>
+          {job.mine ? 'Вызовов пока нет. После снегопада выберите дату — бригада получит срочное уведомление.' : 'Вызовов пока нет — работодатель вызовет бригаду после снегопада.'}
+        </div>
+      )}
+      {s.canCall && (
+        <div style={css('display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px')}>
+          <input type="date" aria-label="Дата вызова" value={callDay} min={localISO()} onChange={e => setCallDay(e.target.value)}
+            style={css('height: 38px; padding: 0 8px; border: 1px solid var(--color-divider); background: var(--color-neutral-100); font: inherit; font-size: 14px')} />
+          <button className="btn btn-primary" disabled={busy || !callDay}
+            onClick={async () => { if (await act('series/call', { day: callDay }, 'Бригада вызвана — придёт срочное уведомление')) setCallDay(''); }}
+            style={css('height: 38px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; padding: 0 14px')}>Вызвать бригаду</button>
+        </div>
+      )}
       {days.length < s.days.length || all ? (
         <button className="btn btn-ghost" onClick={() => setAll(a => !a)} style={css('margin-top: 6px; height: 28px; font-size: 12.5px; padding: 0 6px')}>{all ? 'Свернуть' : 'Все выходы — ' + s.days.length}</button>
       ) : null}
