@@ -8,6 +8,8 @@ const { migrate } = await import('@/server/migrate');
 const jobs = await import('@/server/jobs');
 const sh = await import('@/server/shifts');
 const support = await import('@/server/support');
+const disputes = await import('@/server/disputes');
+const { contractTemplate } = await import('@/server/contract');
 const { AppError } = await import('@/server/errors');
 const { seriesDates, seriesDayLabel } = await import('@/lib/jobs');
 const { localClock } = await import('@/server/events');
@@ -292,6 +294,27 @@ describe('сдача, приёмка и расчёт по дням серии', 
     expect((await one<{ workers: string[] }>('SELECT workers FROM series_days WHERE day = $1', [today]))!.workers.sort()).toEqual([fl.id, sub.id].sort());
     await act(num, sub, today, 'paid');
     await expectErr(act(num, other, today, 'paid'), /стороны смены этого дня/);
+    // Договор для замены — с её днём, а не со всей серией.
+    const c = await contractTemplate(num, { ...sub, name: 'Иван Петров' } as never);
+    expect(c.text).toMatch(new RegExp('Срок выполнения: ' + today.split('-').reverse().join('\\.')));
+  });
+
+  it('даты серии с историей не сдвигаются: перенос начала и смена графика — отказ; без истории — можно', async () => {
+    const j = await jobs.createJob(form(), emp, today);
+    await sh.moveDate(j.num, { date: plus(today, 3) }, emp, today);
+    await jobs.applyToJob(j.num, { reqConfirmed: true }, fl, today);
+    const app = (await jobs.getJob(j.num, emp)).applicantList![0].id;
+    await sh.staffAction(j.num, app, 'hire', emp);
+    await sh.toggleSeriesDay(j.num, { day: plus(today, 4) }, fl);
+    await expectErr(sh.moveDate(j.num, { date: plus(today, 5) }, emp, today), /сдвинуть её даты нельзя/);
+    // Исполнитель ушёл, набор снова открыт, но замена на день осталась — правка графика тоже не сдвигает даты.
+    const other = await mkUser('freelancer', 'olga_k', '9163333333', 'Ольга Кузнецова');
+    await sh.offerSubstitute(j.num, { day: plus(today, 4) }, other);
+    await sh.decideSubstitute(j.num, { day: plus(today, 4), freelancer: other.id, action: 'hire' }, emp);
+    await sh.leaveShift(j.num, { reason: 'заболел', notice: 'больше суток' }, fl);
+    await expectErr(jobs.updateJob(j.num, form({ dateISO: plus(today, 3), repeat: 'раз в неделю' }), emp, today), /сдвинуть её даты нельзя/);
+    const same = await jobs.updateJob(j.num, form({ dateISO: plus(today, 3), pay: '3500' }), emp, today);
+    expect(same.pay).toBe(3500);
   });
 
   it('сданный день без ответа засчитывается через 7 дней; «Завершить серию» принимает сданные и сводит расчёт', async () => {
@@ -303,8 +326,12 @@ describe('сдача, приёмка и расчёт по дням серии', 
     expect((await dayOf(num, emp, d1)).work).toMatchObject({ autoAccepted: true, acceptedAt: expect.any(String) });
     expect((await one<{ text: string }>(`SELECT text FROM events WHERE user_id = $1 AND kind = 'accept'`, [fl.id]))!.text).toMatch(/засчитан вам автоматически/);
     expect((await jobs.getJob(num, emp)).status).toBe('staffed');
-    // Спор по расчёту доступен после первого сданного дня.
+    // Спор по расчёту доступен после первого сданного дня; доказательства — по дням этого исполнителя.
     expect((await jobs.getJob(num, fl)).shift!.canDispute).toBe(true);
+    await disputes.openDispute(num, { reason: 'оплата не пришла в срок', sum: 3000, text: 'За первый день оплаты так и нет' }, fl);
+    const ev = (await one<{ evidence: { label: string }[] }>('SELECT evidence FROM disputes'))!.evidence.map(e => e.label);
+    expect(ev).toContain('Выходы серии: сдано 1, принято 1 (из них автоматически — 1)');
+    expect(ev).toContain('Работодатель отметил оплату за 0 из 1 принятых дней');
 
     await act(num, fl, d2, 'report');
     const closed = await sh.acceptWork(num, emp);

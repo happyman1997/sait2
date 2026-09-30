@@ -37,12 +37,28 @@ async function evidence(j: JobRow, freelancerId: string, db: Db) {
             (SELECT employer_marked FROM settlements WHERE job_id = $1) AS emp,
             (SELECT freelancer_marked FROM settlements WHERE job_id = $1) AS fl`, [j.id, freelancerId], db);
   const x = e!;
+  // Серия: приёмка и расчёт — по дням, в которые выходил этот исполнитель.
+  const d = (await one<{ days: number; reported: number; accepted: number; auto: number; emp: number; fl: number }>(
+    `SELECT count(*)::int AS days, count(reported_at)::int AS reported, count(accepted_at)::int AS accepted,
+            count(*) FILTER (WHERE accepted_at IS NOT NULL AND auto)::int AS auto,
+            count(*) FILTER (WHERE accepted_at IS NOT NULL AND employer_paid_at IS NOT NULL)::int AS emp,
+            count(*) FILTER (WHERE accepted_at IS NOT NULL AND freelancer_paid_at IS NOT NULL)::int AS fl
+       FROM series_days WHERE job_id = $1 AND $2::uuid = ANY(workers)`, [j.id, freelancerId], db))!;
+  const work = d.days
+    ? [
+      { ok: d.accepted > 0, label: 'Выходы серии: сдано ' + d.reported + ', принято ' + d.accepted + (d.auto ? ' (из них автоматически — ' + d.auto + ')' : '') },
+      { ok: d.accepted > 0 && d.emp === d.accepted, label: 'Работодатель отметил оплату за ' + d.emp + ' из ' + d.accepted + ' принятых дней' },
+      { ok: d.accepted > 0 && d.fl === d.accepted, label: 'Исполнитель отметил получение за ' + d.fl + ' из ' + d.accepted + ' принятых дней' }
+    ]
+    : [
+      { ok: x.accepted, label: x.accepted ? (x.auto ? 'Работа принята автоматически через 7 дней' : 'Приёмка работ отмечена работодателем') : 'Работа не отмечена как принятая' },
+      { ok: !!x.emp, label: x.emp ? 'Работодатель отметил: оплата передана' : 'Работодатель не отмечал передачу оплаты' },
+      { ok: !!x.fl, label: x.fl ? 'Исполнитель отметил: деньги получены' : 'Исполнитель не отмечал получение денег' }
+    ];
   return [
     { ok: x.before + x.after > 0, label: x.before + x.after ? 'Фото объекта: до — ' + x.before + ', после — ' + x.after : 'Фото до и после не приложены' },
     { ok: x.msgs > 0, label: x.msgs ? 'Переписка по заказу — ' + x.msgs + ' сообщ.' : 'Переписки в чате нет' },
-    { ok: x.accepted, label: x.accepted ? (x.auto ? 'Работа принята автоматически через 7 дней' : 'Приёмка работ отмечена работодателем') : 'Работа не отмечена как принятая' },
-    { ok: !!x.emp, label: x.emp ? 'Работодатель отметил: оплата передана' : 'Работодатель не отмечал передачу оплаты' },
-    { ok: !!x.fl, label: x.fl ? 'Исполнитель отметил: деньги получены' : 'Исполнитель не отмечал получение денег' },
+    ...work,
     { ok: true, label: 'Условия заказа: ' + money(j.pay, j.unit) + ', ' + (j.pay_type || 'способ оплаты не указан') }
   ];
 }

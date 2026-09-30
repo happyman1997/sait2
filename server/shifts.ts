@@ -10,7 +10,7 @@ import { badWordIn, findBadField } from '@/lib/moderation';
 import { one, pool, query, tx, type Db } from './db';
 import { AppError, ModerationError } from './errors';
 import { addEvents, localClock, mailSupport } from './events';
-import { clientToday, getJob, initialsOf, invalidateSearch, shortName } from './jobs';
+import { clientToday, getJob, initialsOf, invalidateSearch, seriesHasHistory, SERIES_FIXED, shortName } from './jobs';
 import { publish } from './live';
 import { limitOrThrow } from './rate-limit';
 import type { SessionUser } from './session';
@@ -352,6 +352,7 @@ export async function moveDate(num: number, raw: unknown, viewer: Viewer, todayR
     needOwner(j, viewer);
     if (j.status === 'cancelled' || j.status === 'accepted') throw new AppError(409, 'Смена закрыта или отменена — переносить нельзя.');
     if (j.date === date) throw new AppError(422, 'Это та же дата.', 'date');
+    if (j.repeat && (await seriesHasHistory(j.id, db))) throw new AppError(409, SERIES_FIXED, 'date');
     await query('UPDATE jobs SET date = $2, urgent = $3, updated_at = now() WHERE id = $1', [j.id, date, ahead <= 1], db);
     invalidateSearch();
     const people = [...(await hiredOf(j.id, db)).map(h => h.freelancer_id), ...(await openApplicants(j.id, db))];
@@ -592,7 +593,17 @@ export async function myJobs(viewer: Viewer): Promise<MyJob[]> {
   const u = needUser(viewer);
   const emp = u.role === 'employer';
   const r = await query<Record<string, unknown>>(
-    `SELECT j.num, j.title, j.type_id, t.label AS type_label, j.address, j.district, j.lat, j.lng, j.pay, j.unit, j.pay_type,
+    // Сначала узкой выборкой — 300 самых нужных заказов (у крупного работодателя их тысячи), потом детали только для них.
+    `WITH top AS (
+       -- Сверху то, что требует действия: сдано → набрано → открыто; закрытые — ниже, свежие первыми.
+       SELECT j.id, CASE j.status WHEN 'reported' THEN 0 WHEN 'staffed' THEN 1 WHEN 'open' THEN 2 WHEN 'accepted' THEN 3 ELSE 4 END AS k1,
+              CASE WHEN j.status IN ('accepted', 'cancelled') THEN NULL ELSE j.date END AS k2, j.date AS k3, j.created_at AS k4
+         FROM jobs j
+        -- Исполнитель: заказы с его откликом и серии, где он откликался на замену отдельного дня.
+        WHERE ${emp ? 'j.employer_id = $1' : 'j.id IN (SELECT job_id FROM applications WHERE freelancer_id = $1 UNION SELECT job_id FROM series_subs WHERE freelancer_id = $1)'}
+        ORDER BY k1, k2, k3 DESC, k4 DESC LIMIT 300
+     )
+     SELECT j.num, j.title, j.type_id, t.label AS type_label, j.address, j.district, j.lat, j.lng, j.pay, j.unit, j.pay_type,
             to_char(j.date, 'YYYY-MM-DD') AS date, j.volume, j.crew, j.urgent, j.repeat, j.status, j.created_at, j.employer_id,
             (SELECT count(*) FROM hires h WHERE h.job_id = j.id)::int AS hired,
             (SELECT count(*) FROM applications a WHERE a.job_id = j.id AND a.status IN ('sent', 'hired'))::int AS applicants,
@@ -609,18 +620,12 @@ export async function myJobs(viewer: Viewer): Promise<MyJob[]> {
             ${emp ? '(SELECT count(*) FROM hires h WHERE h.job_id = j.id)::int' : '(CASE WHEN EXISTS (SELECT 1 FROM hires h WHERE h.job_id = j.id AND h.freelancer_id = $1) THEN 1 ELSE 0 END)'} AS reviewable,
             ${emp ? 'NULL' : `(SELECT json_agg(json_build_object('day', to_char(ss.day, 'YYYY-MM-DD'), 'status', ss.status) ORDER BY ss.day)
                                 FROM series_subs ss WHERE ss.job_id = j.id AND ss.freelancer_id = $1)`} AS sub_days
-       FROM jobs j JOIN job_types t ON t.id = j.type_id
+       FROM top JOIN jobs j ON j.id = top.id JOIN job_types t ON t.id = j.type_id
        ${emp ? '' : 'LEFT JOIN applications a ON a.job_id = j.id AND a.freelancer_id = $1'}
        LEFT JOIN reports rp ON rp.job_id = j.id
        LEFT JOIN acceptances ac ON ac.job_id = j.id
        LEFT JOIN cancellations c ON c.job_id = j.id
-      -- Исполнитель: заказы с его откликом и серии, где он откликался на замену отдельного дня.
-      WHERE ${emp ? 'j.employer_id = $1' : 'j.id IN (SELECT job_id FROM applications WHERE freelancer_id = $1 UNION SELECT job_id FROM series_subs WHERE freelancer_id = $1)'}
-      -- Сверху то, что требует действия: сдано → набрано → открыто; закрытые — ниже, свежие первыми.
-      ORDER BY CASE j.status WHEN 'reported' THEN 0 WHEN 'staffed' THEN 1 WHEN 'open' THEN 2 WHEN 'accepted' THEN 3 ELSE 4 END,
-               CASE WHEN j.status IN ('accepted', 'cancelled') THEN NULL ELSE j.date END,
-               j.date DESC, j.created_at DESC
-      LIMIT 300`,
+      ORDER BY top.k1, top.k2, top.k3 DESC, top.k4 DESC`,
     [u.id]);
   return r.rows.map((x) => {
     const reported = x.reported_at as Date | null, accepted = x.accepted_at as Date | null;

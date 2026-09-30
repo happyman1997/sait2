@@ -512,9 +512,20 @@ export async function createJob(raw: unknown, viewer: Viewer, todayRaw: unknown)
   return getJob(num, viewer);
 }
 
+/**
+ * У серии уже есть история по датам (снятые дни, замены, сданные выходы) — даты больше не сдвигаются:
+ * перенос начала или смена графика оторвали бы эти записи от своих дней.
+ */
+export async function seriesHasHistory(jobId: string, db: Db) {
+  return !!(await one(
+    `SELECT 1 WHERE EXISTS (SELECT 1 FROM series_skips WHERE job_id = $1) OR EXISTS (SELECT 1 FROM series_subs WHERE job_id = $1)
+        OR EXISTS (SELECT 1 FROM series_days WHERE job_id = $1)`, [jobId], db));
+}
+export const SERIES_FIXED = 'По серии уже есть снятые дни, замены или сданные выходы — сдвинуть её даты нельзя. Отдельные дни снимают исполнители; чтобы начать заново, завершите серию и опубликуйте новую.';
+
 async function ownJob(num: number, viewer: NonNullable<Viewer>, db: Db, lock = false) {
-  const j = await one<{ id: string; employer_id: string; status: JobStatus; hired: number; date: string; title: string }>(
-    `SELECT j.id, j.employer_id, j.status, to_char(j.date, 'YYYY-MM-DD') AS date, j.title,
+  const j = await one<{ id: string; employer_id: string; status: JobStatus; hired: number; date: string; title: string; repeat: string | null }>(
+    `SELECT j.id, j.employer_id, j.status, to_char(j.date, 'YYYY-MM-DD') AS date, j.title, j.repeat,
             (SELECT count(*) FROM hires h WHERE h.job_id = j.id)::int AS hired
        FROM jobs j WHERE j.num = $1${lock ? ' FOR UPDATE OF j' : ''}`,
     [num],
@@ -535,6 +546,8 @@ export async function updateJob(num: number, raw: unknown, viewer: Viewer, today
     const j = await ownJob(num, viewer, db, true);
     if (j.status === 'cancelled') throw new AppError(409, 'Заказ отменён — его уже не изменить.');
     if (j.status !== 'open' || j.hired > 0) throw new AppError(409, 'Исполнитель уже нанят — условия меняются только по договорённости в чате. Дату можно перенести.');
+    const repeat = f.regular ? f.repeat : null;
+    if (j.repeat && (f.dateISO !== j.date || repeat !== j.repeat) && (await seriesHasHistory(j.id, db))) throw new AppError(409, SERIES_FIXED, 'date');
     const type = await resolveType(f, viewer.id, db);
     const ahead = daysAhead(f.dateISO, today) ?? 99;
     const crew = parseInt(f.crew, 10) === CREW_ANY ? CREW_ANY : Math.min(12, Math.max(1, parseInt(f.crew, 10) || 1));
@@ -544,7 +557,7 @@ export async function updateJob(num: number, raw: unknown, viewer: Viewer, today
               access = $19, tools = $20, meet_name = $21, meet_phone = $22, updated_at = now()
         WHERE id = $1`,
       [j.id, type.id, autoTitle(type.label, f.address), f.desc, f.address, f.lat, f.lng, f.district || null, payNumber(f.pay), f.unit,
-        f.payType || null, f.dateISO, f.volume || null, crew, f.urgent || ahead <= 1, f.regular ? f.repeat : null,
+        f.payType || null, f.dateISO, f.volume || null, crew, f.urgent || ahead <= 1, repeat,
         f.regular ? f.repeatNote || null : null, f.req || null, f.access, f.tools, f.meetName || null, f.meetPhone || null],
       db
     );
