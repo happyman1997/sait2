@@ -2,10 +2,17 @@
 import { one, pool } from './db';
 import { liveStats } from './live';
 
-type G = typeof globalThis & { __arenaMetrics?: { count: Record<string, number>; durSum: number; durCount: number; buckets: number[] } };
+type G = typeof globalThis & { __arenaMetrics?: { count: Record<string, number>; durSum: number; durCount: number; buckets: number[]; csp: Record<string, number> } };
 const g = globalThis as G;
 const BOUNDS = [0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5];
-const m = (g.__arenaMetrics ??= { count: {}, durSum: 0, durCount: 0, buckets: BOUNDS.map(() => 0) });
+const m = (g.__arenaMetrics ??= { count: {}, durSum: 0, durCount: 0, buckets: BOUNDS.map(() => 0), csp: {} });
+m.csp ??= {};
+
+/** Нарушение CSP, о котором сообщил браузер (по директиве; неизвестные сворачиваются в other). */
+export function cspViolation(directive: string) {
+  const d = /^[a-z-]{3,30}$/.test(directive) ? directive : 'other';
+  if (Object.keys(m.csp).length < 30 || m.csp[d]) m.csp[d] = (m.csp[d] || 0) + 1;
+}
 
 export function observe(status: number, seconds: number) {
   const cls = Math.floor(status / 100) + 'xx';
@@ -37,6 +44,7 @@ export async function renderMetrics(): Promise<string> {
     ...BOUNDS.map((b, i) => ['_bucket{le="' + b + '"}', m.buckets[i]] as [string, number]),
     ['_bucket{le="+Inf"}', m.durCount], ['_sum', Math.round(m.durSum * 1000) / 1000], ['_count', m.durCount]
   ]);
+  metric('arena_csp_violations_total', 'counter', 'Нарушения CSP по директивам (отчёты браузеров)', Object.entries(m.csp).map(([d, v]) => ['{directive="' + d + '"}', v]));
   metric('arena_db_pool', 'gauge', 'Соединения пула Postgres', [['{state="total"}', p.totalCount], ['{state="idle"}', p.idleCount], ['{state="waiting"}', p.waitingCount]]);
   metric('arena_live_streams', 'gauge', 'Открытые живые потоки (SSE) на инстансе', [['', live.streams]]);
   metric('arena_users', 'gauge', 'Пользователи по ролям', [['{role="freelancer"}', biz!.users_f], ['{role="employer"}', biz!.users_e]]);

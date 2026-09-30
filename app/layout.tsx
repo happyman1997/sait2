@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { connection } from 'next/server';
 import type { ReactNode } from 'react';
 import { ModerationGuard } from '@/components/ModerationGuard';
 import { ToastProvider } from '@/components/Toast';
@@ -11,7 +12,9 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover', themeColor: '#22282e' };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+// Строгая CSP (proxy.ts): nonce свой у каждого ответа, поэтому все страницы рендерятся по запросу.
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  await connection();
   return (
     <html lang="ru">
       <head>

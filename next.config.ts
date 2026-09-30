@@ -1,7 +1,7 @@
 import type { NextConfig } from 'next';
 
-// Заголовки безопасности для всех ответов. CSP ограничен тем, что не ломает карту и инлайн-стили прототипа:
-// запрет встраивания в чужие фреймы (кликджекинг), base-uri и отправку форм только на свой сайт.
+// Заголовки безопасности для всех ответов. Здесь — общая часть CSP (кликджекинг, base-uri, формы, плагины);
+// страницы дополнительно получают строгую CSP со скриптами по nonce (proxy.ts, server/csp.ts).
 const SECURITY_HEADERS = [
   { key: 'Content-Security-Policy', value: "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" },
   { key: 'X-Frame-Options', value: 'DENY' },
