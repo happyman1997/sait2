@@ -159,7 +159,7 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
 
       <div style={css('margin-top: 16px; font-size: 14px; line-height: 1.55; color: color-mix(in srgb, var(--color-text) 75%, transparent); text-wrap: pretty; white-space: pre-line')}>{job.description}</div>
 
-      {job.series && <SeriesBlock job={job} act={act} busy={busy} />}
+      {job.series && <SeriesBlock job={job} act={act} busy={busy} onReview={onReview} />}
 
       <button className="btn btn-ghost" onClick={() => setMore(m => !m)} style={css('margin-top: 12px; height: 32px; font-size: 13px; padding: 0 8px; margin-left: -8px')}>{more ? 'Скрыть условия заказа' : 'Все условия заказа →'}</button>
       {more && (

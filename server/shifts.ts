@@ -408,16 +408,26 @@ export async function markSettled(num: number, viewer: Viewer): Promise<JobDetai
 }
 
 /** Кому адресован отзыв/жалоба: работодатель выбирает нанятого (id отклика), исполнитель — работодателя. */
-async function resolveTarget(j: JobRow, u: U, target: unknown, db: Db): Promise<string> {
+/** Выходил ли исполнитель в принятый день серии (замена или ушедший из состава). */
+const workedAcceptedDay = (jobId: string, freelancerId: string, db: Db) =>
+  one('SELECT 1 FROM series_days WHERE job_id = $1 AND accepted_at IS NOT NULL AND $2::uuid = ANY(workers) LIMIT 1', [jobId, freelancerId], db);
+
+/**
+ * Кому адресован отзыв/жалоба: работодатель выбирает нанятого (id отклика) или замену на день (id исполнителя),
+ * исполнитель — работодателя. crew — исполнитель в составе (отзыв после приёмки заказа), иначе — замена (после приёмки её дня).
+ */
+async function resolveTarget(j: JobRow, u: U, target: unknown, db: Db): Promise<{ id: string; crew: boolean }> {
   const hired = await hiredOf(j.id, db);
   if (u.id === j.employer_id) {
     if (typeof target !== 'string' || !UUID_RE.test(target)) throw new AppError(422, 'Выберите исполнителя.', 'target');
     const a = await one<{ freelancer_id: string }>('SELECT freelancer_id FROM applications WHERE id = $1 AND job_id = $2', [target, j.id], db);
-    if (!a || !hired.some(h => h.freelancer_id === a.freelancer_id)) throw new AppError(422, 'Оценить можно только того, кто работал на смене.', 'target');
-    return a.freelancer_id;
+    if (a && hired.some(h => h.freelancer_id === a.freelancer_id)) return { id: a.freelancer_id, crew: true };
+    if (!a && isSeries(j.repeat) && (await workedAcceptedDay(j.id, target, db))) return { id: target, crew: false };
+    throw new AppError(422, 'Оценить можно только того, кто работал на смене.', 'target');
   }
-  if (!hired.some(h => h.freelancer_id === u.id)) throw new AppError(403, 'Оценку ставят только стороны смены.');
-  return j.employer_id;
+  if (hired.some(h => h.freelancer_id === u.id)) return { id: j.employer_id, crew: true };
+  if (isSeries(j.repeat) && (await workedAcceptedDay(j.id, u.id, db))) return { id: j.employer_id, crew: false };
+  throw new AppError(403, 'Оценку ставят только стороны смены.');
 }
 
 /** Отзыв: после приёмки, обе стороны, 1–5 + текст; изменить или удалить можно 10 минут. */
@@ -431,8 +441,10 @@ export async function saveReview(num: number, raw: unknown, viewer: Viewer): Pro
   if (cat) throw new ModerationError('text', 'Отзыв', cat);
   await tx(async (db) => {
     const j = await lockJob(num, db);
-    if (j.status !== 'accepted') throw new AppError(409, 'Отзыв оставляют после приёмки работы.');
-    const target = await resolveTarget(j, u, r.target, db);
+    const who = await resolveTarget(j, u, r.target, db);
+    // Состав оценивает после приёмки заказа (в серии — после её завершения), замена — уже после приёмки своего дня.
+    if (who.crew && j.status !== 'accepted') throw new AppError(409, 'Отзыв оставляют после приёмки работы.');
+    const target = who.id;
     const prev = await one<{ id: string; editable_until: Date }>(
       'SELECT id, editable_until FROM reviews WHERE job_id = $1 AND author_id = $2 AND target_id = $3 FOR UPDATE', [j.id, u.id, target], db);
     if (prev) {
@@ -454,7 +466,7 @@ export async function deleteReview(num: number, raw: unknown, viewer: Viewer): P
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   await tx(async (db) => {
     const j = await lockJob(num, db);
-    const target = await resolveTarget(j, u, r.target, db);
+    const target = (await resolveTarget(j, u, r.target, db)).id;
     const prev = await one<{ id: string; editable_until: Date }>(
       'SELECT id, editable_until FROM reviews WHERE job_id = $1 AND author_id = $2 AND target_id = $3 FOR UPDATE', [j.id, u.id, target], db);
     if (!prev) throw new AppError(404, 'Отзыва нет.');
@@ -478,8 +490,10 @@ export async function fileComplaint(num: number, raw: unknown, viewer: Viewer): 
   await limitOrThrow(`complaint:${u.id}`, 10, 86400, 'Слишком много жалоб за сутки — напишите в поддержку.');
   await tx(async (db) => {
     const j = await lockJob(num, db);
-    if (j.status !== 'accepted') throw new AppError(409, 'Жалобу подают после приёмки работы.');
-    const target = u.id === j.employer_id && r.target ? await resolveTarget(j, u, r.target, db) : u.id === j.employer_id ? null : await resolveTarget(j, u, null, db);
+    const who = u.id === j.employer_id && !r.target ? null : await resolveTarget(j, u, r.target ?? null, db);
+    // Как и отзыв: по заказу — после приёмки, замена (и жалоба на неё) — после приёмки её дня.
+    if ((!who || who.crew) && j.status !== 'accepted') throw new AppError(409, 'Жалобу подают после приёмки работы.');
+    const target = who?.id ?? null;
     try {
       await query('INSERT INTO complaints (job_id, author_id, target_id, reason, text) VALUES ($1, $2, $3, $4, $5)', [j.id, u.id, target, reason, text], db);
     } catch (e) {

@@ -119,6 +119,8 @@ export type SeriesInfo = {
   canSub: boolean;              // исполнитель не из смены может выйти на замену в свободный день
   canExtend: boolean;           // работодатель, серия не закрыта
   canCall: boolean;             // работодатель может вызвать бригаду на дату («по снегопаду»)
+  /** Отзывы о заменах: работодатель — о тех, кто выходил в принятые дни не из состава; замена — о работодателе. */
+  reviews: { target: string; name: string; mine: { rating: number; text: string; editable: boolean } | null }[];
 };
 
 export const SERIES_STEP = 4;   // «Продлить серию на месяц» — плюс 4 выхода (как в прототипе)

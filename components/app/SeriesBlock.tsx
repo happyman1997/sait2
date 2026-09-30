@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { css } from '@/lib/css';
 import { localISO, type JobDetail, type SeriesInfo } from '@/lib/jobs';
-import type { Act } from './ShiftBlock';
+import type { Act, ReviewOpen } from './ShiftBlock';
 import { Corners, LABEL } from './ui';
 
 type Day = SeriesInfo['days'][number];
@@ -31,7 +31,7 @@ function dayStatus(d: Day, job: JobDetail, iAmIn: boolean): string {
   return d.free ? 'свободно мест: ' + d.free : 'открыт';
 }
 
-export function SeriesBlock({ job, act, busy }: { job: JobDetail; act: Act; busy: boolean }) {
+export function SeriesBlock({ job, act, busy, onReview }: { job: JobDetail; act: Act; busy: boolean; onReview?: ReviewOpen }) {
   const s = job.series!;
   const [all, setAll] = useState(false);
   const [callDay, setCallDay] = useState('');
@@ -143,6 +143,18 @@ export function SeriesBlock({ job, act, busy }: { job: JobDetail; act: Act; busy
       {days.length < s.days.length || all ? (
         <button className="btn btn-ghost" onClick={() => setAll(a => !a)} style={css('margin-top: 6px; height: 28px; font-size: 12.5px; padding: 0 6px')}>{all ? 'Свернуть' : 'Все выходы — ' + s.days.length}</button>
       ) : null}
+      {onReview && s.reviews.map(r => (
+        <div key={r.target} style={css('display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; margin-top: 10px; border-top: 1px solid var(--color-divider); padding-top: 9px')}>
+          <span style={css('font-family: var(--font-heading); font-size: 11.5px; letter-spacing: .18em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 58%, transparent)')}>{(job.mine ? 'замена · ' : 'отзыв · ') + r.name}</span>
+          {r.mine && <span style={css('font-size: 13.5px; line-height: 1.35; min-width: 0; color: var(--color-accent-900)')}>{r.mine.rating}/5 · {r.mine.text || 'без комментария'}</span>}
+          <span style={{ flex: 1 }} />
+          {(!r.mine || r.mine.editable) && (
+            <button className="btn btn-secondary" onClick={() => onReview({ target: r.target, name: r.name, rating: r.mine?.rating, text: r.mine?.text })} style={css('height: 32px; font-size: 13px; flex: none')}>
+              {r.mine ? 'Изменить отзыв' : job.mine ? 'Оценить замену' : 'Оценить работодателя'}
+            </button>
+          )}
+        </div>
+      ))}
       {s.canExtend && (
         <button className="btn btn-secondary btn-block" disabled={busy} onClick={() => act('series/extend', {}, 'Серия продлена — добавлено 4 выхода')}
           style={css('margin-top: 10px; height: 40px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Продлить серию на месяц</button>

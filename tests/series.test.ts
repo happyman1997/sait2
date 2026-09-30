@@ -336,6 +336,30 @@ describe('сдача, приёмка и расчёт по дням серии', 
     expect(c.text).toMatch(new RegExp('Срок выполнения: ' + today.split('-').reverse().join('\\.')));
   });
 
+  it('отзывы для замены: после приёмки её дня, не дожидаясь конца серии; состав — после завершения', async () => {
+    const other = await mkUser('freelancer', 'olga_k', '9163333333', 'Ольга Кузнецова');
+    const num = await running();
+    await sh.toggleSeriesDay(num, { day: today }, fl);
+    await sh.offerSubstitute(num, { day: today }, other);
+    await sh.decideSubstitute(num, { day: today, freelancer: other.id, action: 'hire' }, emp);
+    expect((await jobs.getJob(num, other)).series!.reviews).toEqual([]);
+    await expectErr(sh.saveReview(num, { rating: 5, text: 'Всё чётко' }, other), /стороны смены/);
+    await act(num, other, today, 'report');
+    await act(num, emp, today, 'accept');
+    expect((await jobs.getJob(num, other)).series!.reviews).toEqual([{ target: 'employer', name: 'Айгуль Т.', mine: null }]);
+    expect((await jobs.getJob(num, emp)).series!.reviews).toEqual([{ target: other.id, name: 'Ольга К.', mine: null }]);
+    await sh.saveReview(num, { rating: 5, text: 'Всё чётко, рассчитались сразу' }, other);
+    await sh.saveReview(num, { target: other.id, rating: 4, text: 'Вышла вовремя' }, emp);
+    expect((await jobs.getJob(num, other)).series!.reviews[0].mine).toMatchObject({ rating: 5, editable: true });
+    expect((await one<{ n: number }>('SELECT count(*)::int AS n FROM reviews WHERE target_id = $1', [other.id]))!.n).toBe(1);
+    // Основной состав оценивает после завершения серии.
+    await expectErr(sh.saveReview(num, { rating: 5, text: 'Хорошо' }, fl), /после приёмки/);
+    await expectErr(sh.saveReview(num, { target: fl.id, rating: 5 }, emp), /работал на смене/);
+    // Жалоба на замену — тоже после приёмки её дня и адресуется ей.
+    await sh.fileComplaint(num, { reason: 'грубое общение', text: 'Грубила в чате', target: other.id }, emp);
+    expect((await one<{ target_id: string }>('SELECT target_id FROM complaints'))!.target_id).toBe(other.id);
+  });
+
   it('даты серии с историей не сдвигаются: перенос начала и смена графика — отказ; без истории — можно', async () => {
     const j = await jobs.createJob(form(), emp, today);
     await sh.moveDate(j.num, { date: plus(today, 3) }, emp, today);

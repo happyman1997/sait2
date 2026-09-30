@@ -220,7 +220,7 @@ async function loadJob(num: number, viewer: Viewer, db: Db): Promise<JobDetail> 
   const [applicantList, shift, series] = await Promise.all([
     owner ? loadApplicants(r.id, db) : Promise.resolve(null),
     viewer && (owner || meHired || r.my_status) ? loadShift(r.id, r.employer_id, empName, hired, viewer, owner, db) : Promise.resolve(null),
-    r.repeat ? loadSeries(r, viewer, owner, hired, db) : Promise.resolve(null)
+    r.repeat ? loadSeries(r, viewer, owner, hired, empName, db) : Promise.resolve(null)
   ]);
 
   return {
@@ -275,8 +275,8 @@ export async function seriesDatesFor(j: { id: string; repeat: string | null; dat
 }
 
 /** Серия выходов: даты по правилу повтора или вызовы; снятые дни — свои (исполнитель) или число снявших (работодатель). */
-async function loadSeries(r: { id: string; repeat: string | null; repeat_note: string | null; date: string; series_len: number; status: string },
-  viewer: Viewer, owner: boolean, crew: { freelancer_id: string; is_lead: boolean }[], db: Db): Promise<SeriesInfo> {
+async function loadSeries(r: { id: string; repeat: string | null; repeat_note: string | null; date: string; series_len: number; status: string; employer_id: string },
+  viewer: Viewer, owner: boolean, crew: { freelancer_id: string; is_lead: boolean }[], empName: string, db: Db): Promise<SeriesInfo> {
   const onCall = isOnCall(r.repeat);
   const dates = await seriesDatesFor(r, db);
   const hired = !!viewer && crew.some(h => h.freelancer_id === viewer.id);
@@ -296,6 +296,7 @@ async function loadSeries(r: { id: string; repeat: string | null; repeat_note: s
   const today = localClock().day;
   const live = r.status !== 'cancelled' && r.status !== 'accepted';
   const lead = crew.find(h => h.is_lead);
+  const reviews = await loadSubReviews(r, viewer, owner, crew, empName, work.some(w => w.accepted_at && w.i_worked), db);
   return {
     rule: r.repeat! + (r.repeat_note ? ' · ' + r.repeat_note : ''),
     onCall,
@@ -339,8 +340,32 @@ async function loadSeries(r: { id: string; repeat: string | null; repeat_note: s
     canSkip: hired && live,
     canSub: !!viewer && viewer.role === 'freelancer' && !hired && !owner && live,
     canExtend: owner && live && !onCall && r.series_len + SERIES_STEP <= 60,
-    canCall: owner && live && onCall && dates.length < MAX_CALLS
+    canCall: owner && live && onCall && dates.length < MAX_CALLS,
+    reviews
   };
+}
+
+/** Отзывы о заменах: оценить можно после приёмки дня, в который замена выходила (состав — после завершения серии). */
+async function loadSubReviews(r: { id: string; employer_id: string }, viewer: Viewer, owner: boolean, crew: { freelancer_id: string }[],
+  empName: string, iWorkedAccepted: boolean, db: Db): Promise<SeriesInfo['reviews']> {
+  if (!viewer) return [];
+  let targets: { key: string; id: string; name: string }[] = [];
+  if (owner) {
+    const rows = await query<{ id: string; name: string }>(
+      `SELECT DISTINCT w.id, u.name FROM series_days d CROSS JOIN LATERAL unnest(d.workers) AS w(id) JOIN users u ON u.id = w.id
+        WHERE d.job_id = $1 AND d.accepted_at IS NOT NULL`, [r.id], db);
+    targets = rows.rows.filter(x => !crew.some(h => h.freelancer_id === x.id)).map(x => ({ key: x.id, id: x.id, name: shortName(x.name) }));
+  } else if (iWorkedAccepted && !crew.some(h => h.freelancer_id === viewer.id)) {
+    targets = [{ key: 'employer', id: r.employer_id, name: empName }];
+  }
+  if (!targets.length) return [];
+  const mine = await query<{ target_id: string; rating: number; text: string; editable_until: Date }>(
+    'SELECT target_id, rating, text, editable_until FROM reviews WHERE job_id = $1 AND author_id = $2', [r.id, viewer.id], db);
+  const now = Date.now();
+  return targets.map(t => {
+    const v = mine.rows.find(x => x.target_id === t.id);
+    return { target: t.key, name: t.name, mine: v ? { rating: v.rating, text: v.text, editable: v.editable_until.getTime() > now } : null };
+  });
 }
 
 type HiredRow = { freelancer_id: string; is_lead: boolean; name: string; app_id: string | null };
