@@ -24,7 +24,7 @@ nginx без сертификата не стартует, поэтому пер
 
 ```sh
 docker run --rm -p 80:80 -v /etc/letsencrypt:/etc/letsencrypt certbot/certbot \
-  certonly --standalone -d arena-raboty.ru -m admin@arena-raboty.ru --agree-tos -n
+  certonly --standalone -d arenarabot.ru -m admin@arenarabot.ru --agree-tos -n
 ```
 
 Продление — раз в сутки из cron (через nginx, без остановки):
@@ -40,7 +40,7 @@ docker run --rm -p 80:80 -v /etc/letsencrypt:/etc/letsencrypt certbot/certbot \
 ```sh
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 docker compose -f docker-compose.prod.yml --env-file .env.production ps     # app и db — healthy
-curl https://arena-raboty.ru/api/health                                    # {"ok":true,...}
+curl https://arenarabot.ru/api/health                                    # {"ok":true,...}
 ```
 
 Первый сотрудник поддержки (после его регистрации на сайте):
@@ -99,7 +99,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.production exec -T db 
    ```
 2. **Стиль, шрифты подписей, значки** (стиль liberty, адреса переписываются на ваш сайт):
    ```sh
-   docker run --rm -v "$PWD:/work" -w /work node:22-bookworm-slim node deploy/map-setup.mjs https://arena-raboty.ru
+   docker run --rm -v "$PWD:/work" -w /work node:22-bookworm-slim node deploy/map-setup.mjs https://arenarabot.ru
    ```
 3. В `.env.production`: `NEXT_PUBLIC_MAP_STYLE_URL=/map/style.json` (и `CSP_CONNECT_SRC=` пустой), затем пересборка:
    ```sh

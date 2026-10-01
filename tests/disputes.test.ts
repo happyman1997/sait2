@@ -80,7 +80,7 @@ describe('споры по расчёту', () => {
     const empView = await jobs.getJob(num, emp);
     expect(empView.shift!.disputes[0]).toMatchObject({ mine: false, other: 'Данияр С.' });
     expect((await one<{ text: string }>(`SELECT text FROM events WHERE user_id = $1 AND kind = 'dispute'`, [emp.id]))!.text).toMatch(/Открыт спор/);
-    expect((await one<{ n: number }>(`SELECT count(*)::int AS n FROM notification_outbox WHERE to_addr = 'support@arena-raboty.ru'`))!.n).toBe(1);
+    expect((await one<{ n: number }>(`SELECT count(*)::int AS n FROM notification_outbox WHERE to_addr = 'support@arenarabot.ru'`))!.n).toBe(1);
     // Незакрытый спор виден в профиле обеих сторон.
     expect((await prof.getProfile(emp)).marks[0].label).toMatch(/Незакрытый спор/);
     expect((await prof.getProfile(fl)).marks[0].label).toMatch(/Незакрытый спор/);

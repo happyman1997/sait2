@@ -1,5 +1,5 @@
 // Подготовка своей карты (без обращений к зарубежным серверам из браузера пользователя):
-//   node deploy/map-setup.mjs https://arena-raboty.ru [папка=deploy/map]
+//   node deploy/map-setup.mjs https://arenarabot.ru [папка=deploy/map]
 // Скачивает стиль liberty (OpenFreeMap), шрифты подписей и значки, переписывает адреса в стиле на свой сайт:
 // стиль — /map/style.json, тайлы — /map/russia.pmtiles (собирает Planetiler, см. DEPLOY.md), шрифты и значки — /map/…
 // Нужен Node 18+ и доступ в интернет на время подготовки. Повторный запуск докачивает недостающее.
@@ -9,7 +9,7 @@ import path from 'node:path';
 const publicUrl = (process.argv[2] || '').replace(/\/$/, '');
 const dir = process.argv[3] || 'deploy/map';
 const SOURCE_STYLE = process.env.MAP_SOURCE_STYLE || 'https://tiles.openfreemap.org/styles/liberty';
-if (!/^https?:\/\//.test(publicUrl)) { console.error('Укажите адрес сайта: node deploy/map-setup.mjs https://arena-raboty.ru'); process.exit(1); }
+if (!/^https?:\/\//.test(publicUrl)) { console.error('Укажите адрес сайта: node deploy/map-setup.mjs https://arenarabot.ru'); process.exit(1); }
 
 const get = async (url) => {
   for (let i = 0; i < 3; i++) {

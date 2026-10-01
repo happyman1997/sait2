@@ -26,8 +26,8 @@ export const config = {
   // Почта: console (в лог) | smtp (SMTP_URL, например smtps://user:pass@smtp.yandex.ru:465).
   emailProvider: () => env('EMAIL_PROVIDER', isProd ? undefined : 'console') as 'console' | 'smtp',
   smtpUrl: () => env('SMTP_URL'),
-  emailFrom: () => env('EMAIL_FROM', 'Арена Работы <no-reply@arena-raboty.ru>'),
-  supportEmail: () => env('SUPPORT_EMAIL', 'support@arena-raboty.ru'),
+  emailFrom: () => env('EMAIL_FROM', 'Арена Работы <no-reply@arenarabot.ru>'),
+  supportEmail: () => env('SUPPORT_EMAIL', 'support@arenarabot.ru'),
   // Часовой пояс для тихих часов и суточного лимита уведомлений.
   timeZone: () => env('APP_TIME_ZONE', 'Europe/Moscow'),
   publicUrl: () => env('PUBLIC_URL', 'http://localhost:3000'),
@@ -35,7 +35,7 @@ export const config = {
   // Веб-пуш: ключи VAPID (npx web-push generate-vapid-keys). Без них пуш в браузер выключен.
   vapidPublic: () => env('VAPID_PUBLIC_KEY', ''),
   vapidPrivate: () => env('VAPID_PRIVATE_KEY', ''),
-  vapidSubject: () => env('VAPID_SUBJECT', 'mailto:support@arena-raboty.ru'),
+  vapidSubject: () => env('VAPID_SUBJECT', 'mailto:support@arenarabot.ru'),
   // Объектное хранилище S3 (если задан S3_BUCKET — файлы там, иначе в UPLOAD_DIR).
   s3Bucket: () => env('S3_BUCKET', ''),
   s3Endpoint: () => env('S3_ENDPOINT', 'https://storage.yandexcloud.net'),
