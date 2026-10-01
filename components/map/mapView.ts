@@ -48,24 +48,6 @@ export const kmBetween = (la1: number, lo1: number, la2: number, lo2: number) =>
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
 };
 
-function injectSkin() {
-  if (document.getElementById('season-map-skin')) return;
-  const st = document.createElement('style');
-  st.id = 'season-map-skin';
-  st.textContent = [
-    '.maplibregl-map{font-family:var(--font-body,sans-serif)}',
-    '.maplibregl-ctrl-group{border-radius:0!important;border:1px solid ' + ACCENT + ';box-shadow:none;background:' + PAPER + '}',
-    '.maplibregl-ctrl-group button{border-radius:0!important;width:30px;height:30px;background:' + PAPER + '}',
-    '.maplibregl-ctrl-group button+button{border-top:1px solid ' + ACCENT + '}',
-    '.maplibregl-ctrl-group button:hover{background:color-mix(in srgb,' + ACCENT + ' 14%,' + PAPER + ')}',
-    '.maplibregl-ctrl-group button:focus-visible{outline:2px solid ' + ACCENT + ';outline-offset:2px;box-shadow:none}',
-    '.maplibregl-ctrl-attrib{display:none!important}',
-    '.maplibregl-ctrl-scale{border-radius:0;border:1px solid ' + ACCENT + ';border-top:0;color:' + INK +
-      ';background:color-mix(in srgb,' + PAPER + ' 82%,transparent);font-size:10px}'
-  ].join('');
-  document.head.appendChild(st);
-}
-
 export class SeasonMapView {
   private root: HTMLElement;
   private host: HTMLDivElement;
@@ -99,7 +81,6 @@ export class SeasonMapView {
     root.appendChild(this.overlay);
     // Один обработчик на слой меток вместо обработчика на каждую плашку при каждой перерисовке.
     this.overlay.addEventListener('click', (ev) => this.onOverlayClick(ev));
-    injectSkin();
     this.boot();
   }
 

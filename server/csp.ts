@@ -1,6 +1,8 @@
 // Content-Security-Policy страниц: скрипты — только с одноразовым nonce этого ответа ('strict-dynamic' пропускает
-// то, что они подгружают сами). Стили — 'unsafe-inline': интерфейс прототипа задаёт их атрибутами style,
-// на которые nonce не действует. Внешние источники — шрифты Google и стиль/тайлы карты.
+// то, что они подгружают сами). Теги <style> и таблицы стилей — тоже по nonce или со своего сайта (CSS-инъекция
+// с селекторами не пройдёт); атрибуты style разрешены — ими интерфейс прототипа задаёт оформление, nonce на них
+// не действует. Старым браузерам без style-src-elem/attr остаётся общий style-src. Внешние источники — шрифты Google
+// и стиль/тайлы карты.
 const MAP_STYLE = process.env.NEXT_PUBLIC_MAP_STYLE_URL || 'https://tiles.openfreemap.org/styles/liberty';
 
 function origin(url: string): string | null {
@@ -13,6 +15,9 @@ export function buildCsp(nonce: string, opts: { dev?: boolean; connectExtra?: st
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${opts.dev ? " 'unsafe-eval'" : ''}`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    // В разработке стили вставляются тегами без nonce (горячая перезагрузка).
+    `style-src-elem 'self' ${opts.dev ? "'unsafe-inline'" : `'nonce-${nonce}'`} https://fonts.googleapis.com`,
+    "style-src-attr 'unsafe-inline'",
     "font-src 'self' data: https://fonts.gstatic.com",
     "img-src 'self' data: blob:",
     'connect-src ' + [...new Set(connect)].join(' '),

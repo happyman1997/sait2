@@ -1,6 +1,7 @@
 'use client';
 
 import 'maplibre-gl/dist/maplibre-gl.css';
+import './map-skin.css';
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { SeasonMapView, type LatLng, type MapCallbacks, type Pin } from './mapView';
 
