@@ -13,6 +13,7 @@ import { useLive, useLiveEvent } from './Live';
 import { SeriesBlock } from './SeriesBlock';
 import { ShiftBlock } from './ShiftBlock';
 import { Chip, Corners, LABEL, MUTED } from './ui';
+import sty from './ShiftScreen.module.css';
 
 const TIP_KEY = 'arena:first-tip-hidden';
 
@@ -52,14 +53,14 @@ export function ShiftScreen() {
 
   if (!job) {
     return (
-      <div style={css('flex: 1; overflow: auto; padding: 26px 16px')}>
+      <div className={sty.c17015ae}>
         <div style={css('max-width: 560px; margin: 0 auto; text-align: center; font-size: 14.5px; line-height: 1.5; ' + MUTED)}>
           {isEmp
             ? 'Идущих смен нет. Опубликуйте заказ на карте и наймите исполнителя — здесь соберутся чек-лист, сдача работы, фото и расчёт.'
             : 'Активной смены нет. Откликнитесь на заказ на карте — экран смены соберётся сам: чек-лист, сдача работы, фото и расчёт.'}
-          <div style={css('display: flex; gap: 8px; justify-content: center; margin-top: 16px; flex-wrap: wrap')}>
-            <Link href="/" className="btn btn-primary" style={css('height: 44px; padding: 0 18px; display: inline-flex; align-items: center; text-decoration: none')}>К карте</Link>
-            <Link href="/mine" className="btn btn-secondary" style={css('height: 44px; padding: 0 18px; display: inline-flex; align-items: center; text-decoration: none')}>{isEmp ? 'Мои заказы' : 'Мои смены'}</Link>
+          <div className={sty.c610998e}>
+            <Link href="/" className={'btn btn-primary ' + sty.c9216731}>К карте</Link>
+            <Link href="/mine" className={'btn btn-secondary ' + sty.c9216731}>{isEmp ? 'Мои заказы' : 'Мои смены'}</Link>
           </div>
         </div>
       </div>
@@ -82,28 +83,28 @@ export function ShiftScreen() {
   const allDone = (items: string[]) => SAFETY_ITEMS.every(i => items.includes(i.id));
 
   return (
-    <div style={css('flex: 1; min-height: 0; overflow: auto; padding: 14px 12px 22px')}>
-      <div style={css('max-width: 640px; margin: 0 auto')}>
+    <div className={sty.cca0d1b9}>
+      <div className={sty.c69859bc}>
         <div style={css(LABEL + '; font-size: 12px')}>{'Смена ' + jobNum(job.num) + ' · ' + when}</div>
-        <h1 style={css('font-family: var(--font-heading); font-size: 24px; line-height: 1.1; text-transform: uppercase; letter-spacing: .02em; margin: 3px 0 0')}>{job.title}</h1>
+        <h1 className={'fh ' + sty.cf2e09da}>{job.title}</h1>
         <div style={css('font-size: 13.5px; line-height: 1.4; margin-top: 3px; ' + MUTED)}>{job.address}</div>
-        <div style={css('display: flex; align-items: center; gap: 8px; margin-top: 9px; flex-wrap: wrap')}>
+        <div className={sty.c70c55fd}>
           <span className={s.cls}>{s.label}</span>
-          <span style={css('font-family: var(--font-heading); font-size: 20px')}>{money(job.pay, job.unit)}</span>
+          <span className={'fh ' + sty.cd653512}>{money(job.pay, job.unit)}</span>
           <span style={{ flex: 1 }} />
-          <Link href={'/?job=' + job.num} style={css('font-size: 13px')}>Заказ на карте →</Link>
+          <Link href={'/?job=' + job.num} className={sty.ca541880}>Заказ на карте →</Link>
         </div>
 
         {!shift && subHired.length > 0 && (
-          <div className="blueprint" style={css('margin-top: 14px; padding: 12px')}>
+          <div className={'blueprint ' + sty.c8562f72}>
             <Corners />
             <div style={css(LABEL + '; font-size: 12px')}>Замена</div>
-            <div style={css('font-size: 13.5px; line-height: 1.45; margin-top: 5px')}>
+            <div className={sty.ccad6f89}>
               Вы выходите на замену {subHired.map(d => seriesDayLabel(d.date!)).join(', ')}. Время и место встречи уточните в чате — работу за смену сдаёт основной состав.
               {subSent.length > 0 && ' Ждём решения по: ' + subSent.map(d => seriesDayLabel(d.date!)).join(', ') + '.'}
             </div>
             {live.me && (
-              <button className="btn btn-secondary" onClick={() => live.openChat(job.num, live.me!.id)} style={css('height: 38px; margin-top: 10px; font-size: 13px')}>Чат с работодателем</button>
+              <button className={'btn btn-secondary ' + sty.c0264645} onClick={() => live.openChat(job.num, live.me!.id)}>Чат с работодателем</button>
             )}
             <div style={css('font-size: 13px; margin-top: 8px; ' + MUTED)}>
               <a href={'/api/contract-template?job=' + job.num} download>Шаблон договора ГПХ</a> на ваши дни — заполняете и подписываете сами.
@@ -112,26 +113,26 @@ export function ShiftScreen() {
         )}
 
         {!shift && !subHired.length && (
-          <div className="blueprint" style={css('margin-top: 14px; padding: 12px')}>
+          <div className={'blueprint ' + sty.c8562f72}>
             <Corners />
             <div style={css(LABEL + '; font-size: 12px')}>Отклик</div>
-            <div style={css('font-size: 13.5px; line-height: 1.45; margin-top: 5px')}>Отклик отправлен — ждём решения работодателя. Когда вас наймут, здесь появятся чек-лист, телефон встречающего и сдача работы.</div>
+            <div className={sty.ccad6f89}>Отклик отправлен — ждём решения работодателя. Когда вас наймут, здесь появятся чек-лист, телефон встречающего и сдача работы.</div>
           </div>
         )}
 
         {shift && shift.safety.length > 0 && (
-          <div className="blueprint" style={css('margin-top: 14px; padding: 12px; background: var(--color-neutral-100)')}>
+          <div className={'blueprint ' + sty.caeb40d8}>
             <Corners />
             <div style={css(LABEL + '; font-size: 12px')}>Перед выходом</div>
             {isEmp ? shift.safety.map(p => (
-              <div key={p.name} style={css('margin-top: 8px')}>
-                <div style={css('font-size: 13px; margin-bottom: 4px')}>{p.name}</div>
-                <div style={css('display: flex; flex-wrap: wrap; gap: 6px')}>
+              <div key={p.name} className={sty.c0d69e4b}>
+                <div className={sty.c025e659}>{p.name}</div>
+                <div className={sty.c2bf69bb}>
                   {SAFETY_ITEMS.map(i => <span key={i.id} className={'tag ' + (p.items.includes(i.id) ? 'tag-accent' : 'tag-outline')}>{i.label}</span>)}
                 </div>
               </div>
             )) : (
-              <div style={css('display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px')}>
+              <div className={sty.c520f760}>
                 {SAFETY_ITEMS.map(i => (
                   <Chip key={i.id} active={!!meSafety?.items.includes(i.id)} onClick={() => canCheck && !busy && toggle(i.id)} extra="min-height: 34px">{i.label}</Chip>
                 ))}
@@ -146,14 +147,14 @@ export function ShiftScreen() {
         )}
 
         {!isEmp && shift && !tipHidden && job.status !== 'accepted' && (
-          <div className="blueprint" style={css('margin-top: 10px; padding: 12px; background: color-mix(in srgb, var(--color-accent) 6%, transparent)')}>
+          <div className={'blueprint ' + sty.c666c58d}>
             <Corners />
-            <div style={css('display: flex; justify-content: space-between; align-items: baseline; gap: 8px')}>
-              <span style={css('font-family: var(--font-heading); font-size: 12px; letter-spacing: .2em; text-transform: uppercase; color: var(--color-accent-900)')}>Первый выход</span>
+            <div className={sty.cad948e3}>
+              <span className={'fh ' + sty.c2e2088c}>Первый выход</span>
               <button onClick={() => { setTipHidden(true); try { localStorage.setItem(TIP_KEY, '1'); } catch { /* не критично */ } }} aria-label="Скрыть подсказку"
                 style={css('all: unset; cursor: pointer; font-size: 17px; line-height: 1; padding: 4px; ' + MUTED)}>×</button>
             </div>
-            <div style={css('display: grid; gap: 7px; margin-top: 8px')}>
+            <div className={sty.cb80f41a}>
               {[
                 { label: 'Взять с собой', value: job.tools === 'инвентарь есть на объекте' ? 'рабочую одежду по погоде — инвентарь на месте' : 'свой инвентарь и рабочую одежду по погоде' },
                 { label: 'Фотоотчёт', value: 'Фото до и после — работодателю проще принять работу.' },
@@ -161,7 +162,7 @@ export function ShiftScreen() {
               ].map(t => (
                 <div key={t.label}>
                   <div style={css('font-family: var(--font-heading); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; ' + MUTED)}>{t.label}</div>
-                  <div style={css('font-size: 13px; line-height: 1.45; margin-top: 1px')}>{t.value}</div>
+                  <div className={sty.c618512c}>{t.value}</div>
                 </div>
               ))}
             </div>
@@ -180,8 +181,8 @@ export function ShiftScreen() {
             onReview={t => live.openReview({ ...t, num: job.num, title: job.title + ' · ' + dateLabel(job.date), onSaved: setJob })} />
         )}
 
-        <div style={css('margin-top: 16px; text-align: center')}>
-          <Link href="/mine" style={css('font-size: 13.5px')}>{isEmp ? 'Все мои заказы →' : 'Все мои смены →'}</Link>
+        <div className={sty.ca6b48a0}>
+          <Link href="/mine" className={sty.ce41405c}>{isEmp ? 'Все мои заказы →' : 'Все мои смены →'}</Link>
         </div>
       </div>
     </div>

@@ -1,0 +1,290 @@
+/* Статичные стили прототипа (scripts/css-modules.mjs): :where — специфичность атрибута style, !important — его приоритет. */
+:where(.ca2b78a5) {
+  position: absolute !important;
+  left: 14px !important;
+  bottom: 100% !important;
+  margin-bottom: 12px !important;
+  width: 232px !important;
+  box-sizing: border-box !important;
+  padding: 11px 12px !important;
+  background: var(--ink) !important;
+  color: #f2efec !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+:where(.cfb36ef6) {
+  font-family: var(--font-heading) !important;
+  font-size: 11.5px !important;
+  letter-spacing: .22em !important;
+  text-transform: uppercase !important;
+  color: rgba(242, 239, 236, .66) !important;
+}
+:where(.c8388489) {
+  font-size: 13.5px !important;
+  line-height: 1.4 !important;
+  margin-top: 4px !important;
+}
+:where(.cd99d3cf) {
+  position: absolute !important;
+  left: 18px !important;
+  top: 100% !important;
+  font-size: 20px !important;
+  line-height: 1 !important;
+  color: var(--ink) !important;
+}
+:where(.ced0a3ae) {
+  flex: none !important;
+  font-family: var(--font-heading) !important;
+  font-weight: 600 !important;
+  font-size: 16px !important;
+  letter-spacing: .14em !important;
+  text-transform: uppercase !important;
+  white-space: nowrap !important;
+}
+:where(.cbf6add9) {
+  flex: none !important;
+  min-width: 21px !important;
+  height: 21px !important;
+  box-sizing: border-box !important;
+  padding: 0 6px !important;
+  display: grid !important;
+  place-items: center !important;
+  background: #fff !important;
+  color: var(--color-accent-900) !important;
+  font-family: var(--font-heading) !important;
+  font-size: 13px !important;
+  letter-spacing: .04em !important;
+}
+:where(.c074b79a) {
+  flex: none !important;
+  margin-left: auto !important;
+  font-size: 12.5px !important;
+  letter-spacing: .1em !important;
+  text-transform: uppercase !important;
+  font-family: var(--font-heading) !important;
+  opacity: .85 !important;
+  white-space: nowrap !important;
+}
+:where(.ce04d486) {
+  flex: 1 !important;
+  min-height: 0 !important;
+  overflow: auto !important;
+}
+:where(.c1ef22c9) {
+  padding: 12px 14px 8px !important;
+  font-family: var(--font-heading) !important;
+  font-size: 11.5px !important;
+  letter-spacing: .22em !important;
+  text-transform: uppercase !important;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent) !important;
+}
+:where(.cbc4626e) {
+  display: flex !important;
+  align-items: stretch !important;
+  border-bottom: 1px solid var(--color-divider) !important;
+}
+:where(.cdd3e782) {
+  flex: 1 !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  text-align: left !important;
+  cursor: pointer !important;
+  padding: 10px 14px !important;
+  border: 0 !important;
+  font-family: var(--font-body) !important;
+  color: inherit !important;
+  background: transparent !important;
+}
+:where(.cf0a9aae) {
+  flex: none !important;
+  width: 34px !important;
+  height: 34px !important;
+  display: grid !important;
+  place-items: center !important;
+  background: var(--color-accent) !important;
+  color: #fff !important;
+  font-family: var(--font-heading) !important;
+  font-size: 13px !important;
+  letter-spacing: .04em !important;
+}
+:where(.cba2e0b7) {
+  min-width: 0 !important;
+  display: block !important;
+  flex: 1 !important;
+}
+:where(.c7d1228b) {
+  display: block !important;
+  font-family: var(--font-heading) !important;
+  font-weight: 600 !important;
+  font-size: 15.5px !important;
+  text-transform: uppercase !important;
+  letter-spacing: .02em !important;
+  line-height: 1.15 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+:where(.cb335980) {
+  display: block !important;
+  font-size: 12.5px !important;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent) !important;
+  margin-top: 2px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+:where(.c164bdf3) {
+  flex: none !important;
+  min-width: 20px !important;
+  height: 20px !important;
+  padding: 0 5px !important;
+  display: grid !important;
+  place-items: center !important;
+  background: var(--color-accent) !important;
+  color: #fff !important;
+  font-family: var(--font-heading) !important;
+  font-size: 12px !important;
+}
+:where(.c854d3df) {
+  flex: none !important;
+  color: var(--color-accent-900) !important;
+  font-size: 15px !important;
+}
+:where(.c4e0813c) {
+  padding: 14px !important;
+  font-size: 13.5px !important;
+  line-height: 1.45 !important;
+  color: color-mix(in srgb, var(--color-text) 66%, transparent) !important;
+}
+:where(.c30bd7cc) {
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+  height: 100% !important;
+}
+:where(.cc2dfd1f) {
+  flex: none !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 9px 12px !important;
+  border-bottom: 1px solid var(--color-divider) !important;
+  background: var(--color-neutral-100) !important;
+}
+:where(.c30a4f79) {
+  flex: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  border: 1px solid var(--color-divider) !important;
+  background: transparent !important;
+  cursor: pointer !important;
+  padding: 5px 9px !important;
+  font-family: var(--font-heading) !important;
+  font-size: 11.5px !important;
+  letter-spacing: .14em !important;
+  text-transform: uppercase !important;
+  color: inherit !important;
+}
+:where(.cb741258) {
+  flex: none !important;
+  width: 30px !important;
+  height: 30px !important;
+  display: grid !important;
+  place-items: center !important;
+  background: var(--color-accent) !important;
+  color: #fff !important;
+  font-family: var(--font-heading) !important;
+  font-size: 12px !important;
+}
+:where(.c33f2a66) {
+  min-width: 0 !important;
+}
+:where(.c0b950a1) {
+  font-family: var(--font-heading) !important;
+  font-weight: 600 !important;
+  font-size: 15px !important;
+  text-transform: uppercase !important;
+  letter-spacing: .02em !important;
+  line-height: 1.1 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+:where(.cef05be1) {
+  display: block !important;
+  font-size: 12px !important;
+  color: color-mix(in srgb, var(--color-text) 66%, transparent) !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+:where(.c1c558ba) {
+  flex: 1 !important;
+  min-height: 0 !important;
+  overflow: auto !important;
+  padding: 12px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+}
+:where(.c1645d7b) {
+  font-size: 13px !important;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent) !important;
+}
+:where(.c9088c99) {
+  font-size: 13.5px !important;
+  line-height: 1.45 !important;
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere !important;
+}
+:where(.c8cd2397) {
+  flex: none !important;
+  padding: 8px 12px !important;
+  font-size: 13px !important;
+  color: var(--color-accent-900) !important;
+  border-top: 1px solid var(--color-accent) !important;
+}
+:where(.c6374bad) {
+  flex: none !important;
+  border-top: 1px solid var(--color-divider) !important;
+  padding: 10px 12px !important;
+}
+:where(.c1ce46b9) {
+  font-size: 13px !important;
+  line-height: 1.4 !important;
+  color: color-mix(in srgb, var(--color-text) 66%, transparent) !important;
+}
+:where(.c969623c) {
+  display: flex !important;
+  gap: 6px !important;
+  overflow-x: auto !important;
+  margin-bottom: 8px !important;
+  padding-bottom: 2px !important;
+}
+:where(.c43790e9) {
+  flex: none !important;
+  cursor: pointer !important;
+  border-width: 1px !important;
+  border-style: solid !important;
+  white-space: nowrap !important;
+}
+:where(.c09a5cc8) {
+  display: flex !important;
+  gap: 7px !important;
+}
+:where(.c6611d9c) {
+  flex: 1 !important;
+  min-width: 0 !important;
+  height: 40px !important;
+}
+:where(.c74c97d9) {
+  height: 40px !important;
+  font-size: 12.5px !important;
+  letter-spacing: .08em !important;
+  text-transform: uppercase !important;
+  padding: 0 14px !important;
+  flex: none !important;
+}

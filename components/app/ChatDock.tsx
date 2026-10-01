@@ -10,6 +10,7 @@ import { useNarrow } from '@/components/useNarrow';
 import { useLive, useLiveEvent } from './Live';
 import { NAV_H } from './MobileShell';
 import { initialsOf } from './ui';
+import sty from './ChatDock.module.css';
 
 type Thread = { messages: ChatMessage[]; canSend: boolean; who: string; initials: string; title: string };
 
@@ -76,60 +77,59 @@ export function ChatDock({ place }: { place: 'map' | 'form' | 'page' }) {
   return (
     <div className={narrow ? '' : 'blueprint'} style={css(style)} aria-label="Сообщения">
       {!dock.open && unread > 0 && !narrow && (
-        <div style={css('position: absolute; left: 14px; bottom: 100%; margin-bottom: 12px; width: 232px; box-sizing: border-box; padding: 11px 12px; background: var(--ink); color: #f2efec; box-shadow: var(--shadow-lg)')}>
-          <div style={css('font-family: var(--font-heading); font-size: 11.5px; letter-spacing: .22em; text-transform: uppercase; color: rgba(242, 239, 236, .66)')}>новое сообщение</div>
-          <div style={css('font-size: 13.5px; line-height: 1.4; margin-top: 4px')}>Переписка живёт здесь — откройте «Сообщения».</div>
-          <div style={css('position: absolute; left: 18px; top: 100%; font-size: 20px; line-height: 1; color: var(--ink)')}>▼</div>
+        <div className={sty.ca2b78a5}>
+          <div className={'fh ' + sty.cfb36ef6}>новое сообщение</div>
+          <div className={sty.c8388489}>Переписка живёт здесь — откройте «Сообщения».</div>
+          <div className={sty.cd99d3cf}>▼</div>
         </div>
       )}
       {!narrow && <><i className="corner tl" /><i className="corner tr" /></>}
       <button onClick={() => setDock({ open: !dock.open })} aria-expanded={dock.open} title="Переписка с работодателями и исполнителями"
         style={css('width: 100%; box-sizing: border-box; display: flex; align-items: center; gap: 11px; padding: 0 14px; min-height: ' + (narrow ? '48px' : '52px') + '; border: 0; background: var(--color-accent); color: #fff; cursor: pointer; text-align: left')}>
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ flex: 'none' }}><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>
-        <span style={css('flex: none; font-family: var(--font-heading); font-weight: 600; font-size: 16px; letter-spacing: .14em; text-transform: uppercase; white-space: nowrap')}>Сообщения</span>
-        {unread > 0 && <span style={css('flex: none; min-width: 21px; height: 21px; box-sizing: border-box; padding: 0 6px; display: grid; place-items: center; background: #fff; color: var(--color-accent-900); font-family: var(--font-heading); font-size: 13px; letter-spacing: .04em')}>{unread}</span>}
-        <span style={css('flex: none; margin-left: auto; font-size: 12.5px; letter-spacing: .1em; text-transform: uppercase; font-family: var(--font-heading); opacity: .85; white-space: nowrap')}>{dock.open ? 'свернуть ▾' : 'открыть ▴'}</span>
+        <span className={'fh ' + sty.ced0a3ae}>Сообщения</span>
+        {unread > 0 && <span className={'fh ' + sty.cbf6add9}>{unread}</span>}
+        <span className={'fh ' + sty.c074b79a}>{dock.open ? 'свернуть ▾' : 'открыть ▴'}</span>
       </button>
 
       {dock.open && (
         <div style={css('display: flex; flex-direction: column; min-height: 0; ' + (narrow ? 'flex: 1' : 'height: min(620px, 72vh)') + '; background: var(--color-bg)')}>
           {!showChat && (
-            <div style={css('flex: 1; min-height: 0; overflow: auto')}>
-              <div style={css('padding: 12px 14px 8px; font-family: var(--font-heading); font-size: 11.5px; letter-spacing: .22em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 60%, transparent)')}>Выберите диалог</div>
+            <div className={sty.ce04d486}>
+              <div className={'fh ' + sty.c1ef22c9}>Выберите диалог</div>
               {chats.map(c => (
-                <div key={c.num + ':' + c.thread} style={css('display: flex; align-items: stretch; border-bottom: 1px solid var(--color-divider)')}>
-                  <button onClick={() => setDock({ view: 'chat', num: c.num, thread: c.thread })} className="job-row"
-                    style={css('flex: 1; min-width: 0; box-sizing: border-box; display: flex; align-items: center; gap: 10px; text-align: left; cursor: pointer; padding: 10px 14px; border: 0; font-family: var(--font-body); color: inherit; background: transparent')}>
-                    <span style={css('flex: none; width: 34px; height: 34px; display: grid; place-items: center; background: var(--color-accent); color: #fff; font-family: var(--font-heading); font-size: 13px; letter-spacing: .04em')}>{initialsOf(c.who)}</span>
-                    <span style={css('min-width: 0; display: block; flex: 1')}>
-                      <span style={css('display: block; font-family: var(--font-heading); font-weight: 600; font-size: 15.5px; text-transform: uppercase; letter-spacing: .02em; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap')}>{c.who} · {jobNum(c.num)}</span>
-                      <span style={css('display: block; font-size: 12.5px; color: color-mix(in srgb, var(--color-text) 70%, transparent); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap')}>{(c.lastMine ? 'Вы: ' : '') + c.last}</span>
+                <div key={c.num + ':' + c.thread} className={sty.cbc4626e}>
+                  <button onClick={() => setDock({ view: 'chat', num: c.num, thread: c.thread })} className={'job-row ' + sty.cdd3e782}>
+                    <span className={'fh ' + sty.cf0a9aae}>{initialsOf(c.who)}</span>
+                    <span className={sty.cba2e0b7}>
+                      <span className={'fh ' + sty.c7d1228b}>{c.who} · {jobNum(c.num)}</span>
+                      <span className={sty.cb335980}>{(c.lastMine ? 'Вы: ' : '') + c.last}</span>
                     </span>
-                    {c.unread > 0 && <span style={css('flex: none; min-width: 20px; height: 20px; padding: 0 5px; display: grid; place-items: center; background: var(--color-accent); color: #fff; font-family: var(--font-heading); font-size: 12px')}>{c.unread}</span>}
-                    <span style={css('flex: none; color: var(--color-accent-900); font-size: 15px')}>→</span>
+                    {c.unread > 0 && <span className={'fh ' + sty.c164bdf3}>{c.unread}</span>}
+                    <span className={sty.c854d3df}>→</span>
                   </button>
                 </div>
               ))}
-              {!chats.length && <div style={css('padding: 14px; font-size: 13.5px; line-height: 1.45; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>Переписка открывается после найма — тогда диалог появится здесь.</div>}
+              {!chats.length && <div className={sty.c4e0813c}>Переписка открывается после найма — тогда диалог появится здесь.</div>}
             </div>
           )}
 
           {showChat && (
-            <div style={css('display: flex; flex-direction: column; min-height: 0; height: 100%')}>
-              <div style={css('flex: none; display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--color-divider); background: var(--color-neutral-100)')}>
-                <button onClick={() => setDock({ view: 'list' })} style={css('flex: none; display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--color-divider); background: transparent; cursor: pointer; padding: 5px 9px; font-family: var(--font-heading); font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: inherit')}>← все</button>
-                <span style={css('flex: none; width: 30px; height: 30px; display: grid; place-items: center; background: var(--color-accent); color: #fff; font-family: var(--font-heading); font-size: 12px')}>{thread?.initials || initialsOf(active?.who || '')}</span>
-                <div style={css('min-width: 0')}>
-                  <div style={css('font-family: var(--font-heading); font-weight: 600; font-size: 15px; text-transform: uppercase; letter-spacing: .02em; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap')}>{thread?.who || active?.who || ''}</div>
-                  <a href={'/?job=' + dock.num} style={css('display: block; font-size: 12px; color: color-mix(in srgb, var(--color-text) 66%, transparent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap')}>Заказ {jobNum(dock.num!)} · {thread?.title || active?.title || ''}</a>
+            <div className={sty.c30bd7cc}>
+              <div className={sty.cc2dfd1f}>
+                <button onClick={() => setDock({ view: 'list' })} className={'fh ' + sty.c30a4f79}>← все</button>
+                <span className={'fh ' + sty.cb741258}>{thread?.initials || initialsOf(active?.who || '')}</span>
+                <div className={sty.c33f2a66}>
+                  <div className={'fh ' + sty.c0b950a1}>{thread?.who || active?.who || ''}</div>
+                  <a href={'/?job=' + dock.num} className={sty.cef05be1}>Заказ {jobNum(dock.num!)} · {thread?.title || active?.title || ''}</a>
                 </div>
               </div>
-              <div ref={listRef} style={css('flex: 1; min-height: 0; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px')}>
-                {!thread && !error && <div style={css('font-size: 13px; color: color-mix(in srgb, var(--color-text) 60%, transparent)')}>Загружаем переписку…</div>}
+              <div ref={listRef} className={sty.c1c558ba}>
+                {!thread && !error && <div className={sty.c1645d7b}>Загружаем переписку…</div>}
                 {thread?.messages.map(m => (
                   <div key={m.id} style={css('display: flex; justify-content: ' + (m.mine ? 'flex-end' : 'flex-start'))}>
                     <div style={css('max-width: 74%; padding: 9px 12px; border: 1px solid ' + (m.mine ? 'var(--color-accent)' : 'var(--color-divider)') + (m.mine ? '; background: color-mix(in srgb, var(--color-accent) 12%, transparent)' : ''))}>
-                      <div style={css('font-size: 13.5px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere')}>{m.text}</div>
+                      <div className={sty.c9088c99}>{m.text}</div>
                       <div style={css('font-size: 12px; letter-spacing: .14em; text-transform: uppercase; margin-top: 5px; color: ' + (m.mine ? 'var(--color-accent-700)' : 'color-mix(in srgb, var(--color-text) 62%, transparent)'))}>
                         {time(m.at) + (m.mine ? (m.read ? ' · прочитано' : ' · отправлено') : '')}
                       </div>
@@ -137,20 +137,20 @@ export function ChatDock({ place }: { place: 'map' | 'form' | 'page' }) {
                   </div>
                 ))}
               </div>
-              {error && <div role="alert" style={css('flex: none; padding: 8px 12px; font-size: 13px; color: var(--color-accent-900); border-top: 1px solid var(--color-accent)')}>{error}</div>}
-              <div style={css('flex: none; border-top: 1px solid var(--color-divider); padding: 10px 12px')}>
+              {error && <div role="alert" className={sty.c8cd2397}>{error}</div>}
+              <div className={sty.c6374bad}>
                 {thread && !thread.canSend
-                  ? <div style={css('font-size: 13px; line-height: 1.4; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>Смена отменена или исполнитель снят — переписка только для чтения.</div>
+                  ? <div className={sty.c1ce46b9}>Смена отменена или исполнитель снят — переписка только для чтения.</div>
                   : (
                     <>
-                    <div style={css('display: flex; gap: 6px; overflow-x: auto; margin-bottom: 8px; padding-bottom: 2px')}>
+                    <div className={sty.c969623c}>
                       {QUICK_REPLIES.map(q => (
-                        <button key={q} className="tag tag-outline" onClick={() => send(q)} disabled={sending} style={css('flex: none; cursor: pointer; border-width: 1px; border-style: solid; white-space: nowrap')}>{q}</button>
+                        <button key={q} className={'tag tag-outline ' + sty.c43790e9} onClick={() => send(q)} disabled={sending}>{q}</button>
                       ))}
                     </div>
-                    <div style={css('display: flex; gap: 7px')}>
-                      <input className="input" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={onKey} placeholder="Напишите сообщение…" aria-label="Сообщение" style={css('flex: 1; min-width: 0; height: 40px')} />
-                      <button className="btn btn-primary" onClick={() => send()} disabled={sending || !draft.trim()} style={css('height: 40px; font-size: 12.5px; letter-spacing: .08em; text-transform: uppercase; padding: 0 14px; flex: none')}>Отправить</button>
+                    <div className={sty.c09a5cc8}>
+                      <input className={'input ' + sty.c6611d9c} value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={onKey} placeholder="Напишите сообщение…" aria-label="Сообщение" />
+                      <button className={'btn btn-primary ' + sty.c74c97d9} onClick={() => send()} disabled={sending || !draft.trim()}>Отправить</button>
                     </div>
                     </>
                   )}

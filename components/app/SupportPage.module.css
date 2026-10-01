@@ -1,0 +1,261 @@
+/* Статичные стили прототипа (scripts/css-modules.mjs): :where — специфичность атрибута style, !important — его приоритет. */
+:where(.c41b76db) {
+  flex: 1 !important;
+  min-height: 0 !important;
+  overflow: auto !important;
+  padding: 22px max(clamp(16px, 2.4vw, 40px), calc((100% - 1100px) / 2)) 48px !important;
+}
+:where(.c0799f7f) {
+  margin: 4px 0 16px !important;
+  font-size: clamp(26px, 2.6vw, 34px) !important;
+  text-transform: uppercase !important;
+  letter-spacing: .01em !important;
+}
+:where(.c7e024ba) {
+  display: flex !important;
+  gap: 6px !important;
+  flex-wrap: wrap !important;
+  margin-bottom: 18px !important;
+}
+:where(.c719de8d) {
+  display: flex !important;
+  gap: 6px !important;
+  flex-wrap: wrap !important;
+  margin-bottom: 14px !important;
+}
+:where(.cef57bf5) {
+  display: grid !important;
+  gap: 12px !important;
+}
+:where(.c6dea25b) {
+  padding: 14px 15px !important;
+}
+:where(.ca7d1012) {
+  display: flex !important;
+  gap: 10px !important;
+  align-items: baseline !important;
+  flex-wrap: wrap !important;
+}
+:where(.c0553864) {
+  font-family: var(--font-heading) !important;
+  font-size: 18px !important;
+  text-transform: uppercase !important;
+  letter-spacing: .02em !important;
+}
+:where(.ca541880) {
+  font-size: 13px !important;
+}
+:where(.ca6eccda) {
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  margin-top: 8px !important;
+  white-space: pre-wrap !important;
+}
+:where(.c1f1c3b4) {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
+  gap: 8px 16px !important;
+  margin-top: 10px !important;
+  font-size: 13.5px !important;
+}
+:where(.c0d69e4b) {
+  margin-top: 8px !important;
+}
+:where(.cc3e1454) {
+  min-height: 60px !important;
+  padding: 8px 10px !important;
+  resize: vertical !important;
+}
+:where(.cb358ebe) {
+  display: flex !important;
+  gap: 8px !important;
+  margin-top: 10px !important;
+  flex-wrap: wrap !important;
+}
+:where(.c1d41128) {
+  height: 38px !important;
+  font-size: 13px !important;
+}
+:where(.cff7cd1c) {
+  font-size: 13.5px !important;
+  margin-top: 10px !important;
+  border-top: 1px solid var(--color-divider) !important;
+  padding-top: 8px !important;
+}
+:where(.c6708c96) {
+  display: flex !important;
+  gap: 6px !important;
+  max-width: 560px !important;
+}
+:where(.c8b4ab7f) {
+  flex: 1 !important;
+  min-width: 0 !important;
+}
+:where(.cc505aaf) {
+  height: 42px !important;
+  padding: 0 16px !important;
+}
+:where(.ca5849bc) {
+  display: grid !important;
+  gap: 10px !important;
+  margin-top: 14px !important;
+}
+:where(.cec41197) {
+  font-family: var(--font-heading) !important;
+  font-size: 17px !important;
+  text-transform: uppercase !important;
+}
+:where(.c2cb7c8c) {
+  display: flex !important;
+  gap: 6px !important;
+  margin-top: 9px !important;
+  flex-wrap: wrap !important;
+}
+:where(.c0c5fdec) {
+  flex: 1 !important;
+  min-width: 200px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  font-size: 13px !important;
+}
+:where(.c921d83b) {
+  height: 36px !important;
+  font-size: 13px !important;
+}
+:where(.c65408e7) {
+  display: flex !important;
+  gap: 10px !important;
+  align-items: flex-end !important;
+  flex-wrap: wrap !important;
+}
+:where(.cf0ee752) {
+  height: 42px !important;
+}
+:where(.c615feae) {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  margin-top: 14px !important;
+  font-size: 13.5px !important;
+}
+:where(.c198c058) {
+  padding: 6px 8px !important;
+  border-bottom: 1px solid var(--color-divider) !important;
+  font-weight: 600 !important;
+}
+:where(.c44196b3) {
+  padding: 6px 8px !important;
+  border-bottom: 1px solid var(--color-divider) !important;
+}
+:where(.ca5a3068) {
+  padding: 6px 8px !important;
+  border-bottom: 1px solid var(--color-divider) !important;
+  text-align: right !important;
+}
+:where(.c4f3a4e3) {
+  font-family: var(--font-heading) !important;
+  font-size: 18px !important;
+  text-transform: uppercase !important;
+}
+:where(.ce9e3e3c) {
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  margin-top: 8px !important;
+}
+:where(.c3467092) {
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  margin-top: 6px !important;
+}
+:where(.c0f86b34) {
+  display: grid !important;
+  gap: 2px !important;
+  margin-top: 8px !important;
+  font-size: 13px !important;
+}
+:where(.c2f8ac49) {
+  font-size: 13.5px !important;
+  margin-top: 8px !important;
+}
+:where(.cb360823) {
+  min-height: 56px !important;
+  padding: 8px 10px !important;
+  resize: vertical !important;
+}
+:where(.c10ef7a5) {
+  display: flex !important;
+  gap: 8px !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  margin-top: 10px !important;
+  font-size: 13px !important;
+}
+:where(.c9056b60) {
+  height: 26px !important;
+  font-size: 12.5px !important;
+  padding: 0 6px !important;
+}
+:where(.c620faee) {
+  height: 28px !important;
+  min-height: 28px !important;
+  font-size: 12.5px !important;
+  padding: 0 6px !important;
+  width: auto !important;
+}
+:where(.c2af44f9) {
+  display: flex !important;
+  gap: 6px !important;
+  flex-wrap: wrap !important;
+  margin-top: 10px !important;
+}
+:where(.c4008c14) {
+  cursor: pointer !important;
+  border-width: 1px !important;
+  border-style: solid !important;
+}
+:where(.c78f5715) {
+  padding: 14px 15px !important;
+  margin-bottom: 14px !important;
+  display: grid !important;
+  gap: 10px !important;
+  max-width: 640px !important;
+}
+:where(.c454c221) {
+  display: flex !important;
+  gap: 6px !important;
+  flex-wrap: wrap !important;
+}
+:where(.c638bf70) {
+  min-height: 70px !important;
+  padding: 8px 10px !important;
+  resize: vertical !important;
+}
+:where(.cb9b7b53) {
+  display: flex !important;
+  gap: 8px !important;
+}
+:where(.cbff87c3) {
+  display: grid !important;
+  gap: 8px !important;
+  margin-top: 12px !important;
+}
+:where(.c6417eb2) {
+  border: 1px solid var(--color-divider) !important;
+  padding: 10px 12px !important;
+}
+:where(.c9bb37d5) {
+  display: flex !important;
+  gap: 8px !important;
+  align-items: baseline !important;
+  flex-wrap: wrap !important;
+}
+:where(.c01b74d1) {
+  font-family: var(--font-heading) !important;
+  font-size: 15px !important;
+  text-transform: uppercase !important;
+}
+:where(.cf69864e) {
+  font-size: 13.5px !important;
+  line-height: 1.45 !important;
+  margin-top: 4px !important;
+  white-space: pre-wrap !important;
+}

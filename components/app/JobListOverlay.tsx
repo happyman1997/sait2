@@ -1,10 +1,10 @@
 'use client';
 
 // «Все заказы списком» — выезжающая слева панель с поиском.
-import { css } from '@/lib/css';
 import { Fragment } from 'react';
 import { dateLabel, jobNum, jobStatus, money, type JobSummary } from '@/lib/jobs';
 import { AdSlot } from './AdSlot';
+import sty from './JobListOverlay.module.css';
 
 export function JobListOverlay({ jobs, q, setQ, onClose, onOpen, onHover, role }: {
   jobs: JobSummary[]; q: string; setQ: (q: string) => void; onClose: () => void; onOpen: (num: number) => void;
@@ -12,43 +12,42 @@ export function JobListOverlay({ jobs, q, setQ, onClose, onOpen, onHover, role }
 }) {
   return (
     <div style={{ display: 'contents' }}>
-      <div onClick={onClose} style={css('position: absolute; inset: 0; z-index: 70; background: rgba(24, 30, 36, .35)')} />
-      <div role="dialog" aria-label="Заказы на карте" style={css('position: absolute; top: 0; left: 0; bottom: 0; z-index: 71; width: min(420px, 92vw); box-sizing: border-box; padding: 20px 18px 26px; overflow-y: auto; overflow-x: hidden; background: var(--color-neutral-100); border-right: 1px solid var(--color-accent); box-shadow: 0 0 60px rgba(20, 26, 32, .28)')}>
-        <div style={css('display: flex; justify-content: space-between; align-items: baseline; gap: 10px')}>
-          <div style={css('display: flex; align-items: baseline; gap: 9px; min-width: 0')}>
-            <div style={css('font-family: var(--font-heading); font-weight: 600; font-size: 12.5px; letter-spacing: .2em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 64%, transparent)')}>Заказы на карте</div>
-            <div style={css('font-family: var(--font-heading); font-weight: 600; font-size: 24px; line-height: 1; color: var(--color-accent-900)')}>{jobs.length}</div>
+      <div onClick={onClose} className={sty.c9a3a89e} />
+      <div role="dialog" aria-label="Заказы на карте" className={sty.cc2d836c}>
+        <div className={sty.cf5c1e62}>
+          <div className={sty.c7cf5cb6}>
+            <div className={'fh ' + sty.c90624d9}>Заказы на карте</div>
+            <div className={'fh ' + sty.c278f073}>{jobs.length}</div>
           </div>
-          <button className="btn btn-ghost" onClick={onClose} style={css('height: 28px; font-size: 13px; flex: none')}>Закрыть</button>
+          <button className={'btn btn-ghost ' + sty.c5074ec5} onClick={onClose}>Закрыть</button>
         </div>
-        <div style={css('display: flex; gap: 6px; align-items: center; margin-top: 12px')}>
-          <input className="input" type="search" value={q} onChange={e => setQ(e.target.value)} aria-label="Поиск" placeholder="Поиск: тип работы, адрес, город" style={css('flex: 1; min-width: 0; height: 38px; min-height: 38px; font-size: 13px; padding: 0 10px')} />
-          {q.trim() && <button className="btn btn-ghost" onClick={() => setQ('')} style={css('height: 38px; font-size: 13px; flex: none')}>Сброс</button>}
+        <div className={sty.cb76e636}>
+          <input className={'input ' + sty.c168acf6} type="search" value={q} onChange={e => setQ(e.target.value)} aria-label="Поиск" placeholder="Поиск: тип работы, адрес, город" />
+          {q.trim() && <button className={'btn btn-ghost ' + sty.c07b4ee6} onClick={() => setQ('')}>Сброс</button>}
         </div>
-        <div style={css('display: grid; gap: 8px; margin-top: 14px; min-width: 0')}>
+        <div className={sty.cf7fdbae}>
           {jobs.map((j, i) => {
             const s = jobStatus(j, role);
             return (
               <Fragment key={j.num}>
               {i === 3 && <AdSlot place="feed" />}
-              <button onClick={() => onOpen(j.num)} onMouseEnter={() => onHover(j.num)} onMouseLeave={() => onHover(null)} className="job-row"
-                style={css('min-width: 0; box-sizing: border-box; text-align: left; cursor: pointer; background: var(--color-bg); border: 1px solid var(--color-divider); padding: 13px 14px; font-family: var(--font-body); color: inherit')}>
-                <span style={css('display: flex; justify-content: space-between; gap: 8px; align-items: baseline')}>
-                  <span style={css('font-family: var(--font-heading); font-weight: 600; font-size: 14px; letter-spacing: .16em; color: color-mix(in srgb, var(--color-text) 58%, transparent)')}>{jobNum(j.num)}</span>
-                  <span style={css('font-family: var(--font-heading); font-weight: 600; font-size: 20px; white-space: nowrap; color: var(--color-accent-900)')}>{money(j.pay, j.unit)}</span>
+              <button onClick={() => onOpen(j.num)} onMouseEnter={() => onHover(j.num)} onMouseLeave={() => onHover(null)} className={'job-row ' + sty.c38739c6}>
+                <span className={sty.c99ccaca}>
+                  <span className={'fh ' + sty.c12af3c0}>{jobNum(j.num)}</span>
+                  <span className={'fh ' + sty.c36d7f6a}>{money(j.pay, j.unit)}</span>
                 </span>
-                <span style={css('display: block; font-family: var(--font-heading); font-weight: 600; font-size: 19px; line-height: 1.15; text-transform: uppercase; letter-spacing: .02em; margin-top: 5px')}>{j.title}</span>
-                <span style={css('display: block; font-size: 14.5px; line-height: 1.4; margin-top: 4px; color: color-mix(in srgb, var(--color-text) 68%, transparent)')}>
+                <span className={'fh ' + sty.c0177dc8}>{j.title}</span>
+                <span className={sty.c5774fa4}>
                   {j.address} · {j.repeat ? 'с ' + dateLabel(j.date) : dateLabel(j.date)}{j.distanceKm != null ? ' · ' + (j.distanceKm < 10 ? j.distanceKm.toFixed(1) : Math.round(j.distanceKm)) + ' км' : ''}
                 </span>
-                <span style={css('display: block; margin-top: 7px')}><span className={s.cls}>{s.label}</span></span>
+                <span className={sty.c222d138}><span className={s.cls}>{s.label}</span></span>
               </button>
               </Fragment>
             );
           })}
         </div>
         {!jobs.length && (
-          <div style={css('font-size: 13px; line-height: 1.45; margin-top: 12px; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>
+          <div className={sty.c9c9e240}>
             Под фильтр ничего не попало — снимите «сегодня и завтра», порог оплаты или расстояние в панели фильтров сверху.
           </div>
         )}

@@ -1,0 +1,83 @@
+/* Статичные стили прототипа (scripts/css-modules.mjs): :where — специфичность атрибута style, !important — его приоритет. */
+:where(.c0b95095) {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 145 !important;
+  display: grid !important;
+  place-items: center !important;
+  padding: 20px !important;
+  background: rgba(24, 30, 36, .48) !important;
+}
+:where(.ccd59aab) {
+  position: absolute !important;
+  inset: 0 !important;
+}
+:where(.c28112cd) {
+  position: relative !important;
+  z-index: 146 !important;
+  width: min(440px, 94vw) !important;
+  padding: 20px 22px !important;
+  background: var(--color-bg) !important;
+  box-shadow: 0 24px 60px rgba(20, 26, 32, .3) !important;
+}
+:where(.c4afa4c3) {
+  font-family: var(--font-heading) !important;
+  font-size: 11.5px !important;
+  letter-spacing: .2em !important;
+  text-transform: uppercase !important;
+  color: color-mix(in srgb, var(--color-text) 58%, transparent) !important;
+}
+:where(.c8d769bb) {
+  font-family: var(--font-heading) !important;
+  font-size: 22px !important;
+  line-height: 1.05 !important;
+  text-transform: uppercase !important;
+  letter-spacing: .02em !important;
+  margin-top: 3px !important;
+}
+:where(.c6666a72) {
+  font-size: 13.5px !important;
+  line-height: 1.35 !important;
+  margin-top: 3px !important;
+  color: color-mix(in srgb, var(--color-text) 66%, transparent) !important;
+}
+:where(.cf65377f) {
+  display: flex !important;
+  gap: 5px !important;
+  margin-top: 14px !important;
+}
+:where(.c04583f7) {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  margin-top: 12px !important;
+}
+:where(.cda9536f) {
+  font-size: 12.5px !important;
+  line-height: 1.4 !important;
+  margin-top: 8px !important;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent) !important;
+}
+:where(.c4ee8292) {
+  font-size: 13px !important;
+  line-height: 1.4 !important;
+  margin-top: 8px !important;
+  color: var(--color-accent-900) !important;
+  border: 1px solid var(--color-accent) !important;
+  padding: 7px 9px !important;
+}
+:where(.c5c223c4) {
+  display: flex !important;
+  gap: 8px !important;
+  margin-top: 12px !important;
+}
+:where(.ca96b295) {
+  flex: 1 !important;
+  height: 42px !important;
+  font-size: 13px !important;
+  letter-spacing: .08em !important;
+  text-transform: uppercase !important;
+}
+:where(.c308e88a) {
+  height: 42px !important;
+  font-size: 13px !important;
+}

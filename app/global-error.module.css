@@ -1,0 +1,17 @@
+/* Статичные стили прототипа (scripts/css-modules.mjs): :where — специфичность атрибута style, !important — его приоритет. */
+:where(.c7de79f3) {
+  max-width: 560px !important;
+  margin: 0 auto !important;
+  padding: 48px 16px !important;
+  font-size: 15px !important;
+  line-height: 1.6 !important;
+}
+:where(.c452fe45) {
+  font-size: 26px !important;
+  text-transform: uppercase !important;
+  letter-spacing: .02em !important;
+}
+:where(.cfd54dbe) {
+  height: 42px !important;
+  padding: 0 18px !important;
+}

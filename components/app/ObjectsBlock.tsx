@@ -10,6 +10,7 @@ import { dateLabel, jobNum } from '@/lib/jobs';
 import { showModeration } from '@/components/ModerationGuard';
 import { useFlash } from '@/components/Toast';
 import { Chip, Corners, FIELD_ERR, LABEL, MUTED } from './ui';
+import sty from './ObjectsBlock.module.css';
 
 export type ObjectCard = {
   id: string; name: string; address: string; lat: number; lng: number; area: string; contact: string;
@@ -20,7 +21,7 @@ const STATUS: Record<string, string> = { open: 'идёт набор', staffed: '
 
 export function ObjectsList({ objects, onMark, onEdit }: { objects: ObjectCard[]; onMark: (o: ObjectCard) => void; onEdit: (o: ObjectCard) => void }) {
   return (
-    <div className="blueprint" style={css('margin-top: 20px; padding: 13px 12px')}>
+    <div className={'blueprint ' + sty.c57daa0f}>
       <Corners />
       <div style={css(LABEL)}>Мои объекты</div>
       {!objects.length && (
@@ -28,18 +29,18 @@ export function ObjectsList({ objects, onMark, onEdit }: { objects: ObjectCard[]
           Объектов пока нет. В форме заказа нажмите «Сохранить адрес как объект» — дальше заказ с этого адреса создаётся в один клик.
         </div>
       )}
-      <div style={css('display: grid; gap: 6px; margin-top: 9px')}>
+      <div className={sty.c39b0f5c}>
         {objects.map(o => (
-          <div key={o.id} style={css('border: 1px solid var(--color-divider); padding: 8px 10px')}>
-            <div style={css('font-family: var(--font-heading); font-size: 14px; text-transform: uppercase; letter-spacing: .02em')}>{o.name}</div>
+          <div key={o.id} className={sty.ccfa1a69}>
+            <div className={'fh ' + sty.c583964a}>{o.name}</div>
             <div style={css('font-size: 12.5px; ' + MUTED)}>{o.address + (o.area ? ' · ' + o.area : '')}</div>
             <div style={css('font-size: 12.5px; margin-top: 3px; ' + MUTED)}>
               {(o.access.length ? o.access.join(', ') : 'доступ не указан') + ' · ' + (o.tools || 'инвентарь не указан') +
                 (o.shifts ? ' · смен: ' + o.shifts : '')}
             </div>
-            <div style={css('display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap')}>
-              <button className="btn btn-secondary" onClick={() => onMark(o)} style={css('height: 32px; font-size: 12.5px; padding: 0 12px')}>Создать заказ</button>
-              <button className="btn btn-ghost" onClick={() => onEdit(o)} style={css('height: 32px; font-size: 12.5px; padding: 0 12px')}>Карточка</button>
+            <div className={sty.cd0ad396}>
+              <button className={'btn btn-secondary ' + sty.cbf21556} onClick={() => onMark(o)}>Создать заказ</button>
+              <button className={'btn btn-ghost ' + sty.cbf21556} onClick={() => onEdit(o)}>Карточка</button>
             </div>
           </div>
         ))}
@@ -87,7 +88,7 @@ export function ObjectCardPanel({ object, onClose, onSaved, onDeleted, onOpenJob
     catch (e) { flash(e instanceof ApiError ? e.message : 'Не удалось удалить'); }
   };
   const field = (k: 'name' | 'address' | 'area' | 'contact', label: string, ph: string) => (
-    <div className="field" style={css('margin-top: 10px')}>
+    <div className={'field ' + sty.ce5a6d3c}>
       <label htmlFor={'obj-' + k}>{label}</label>
       <input id={'obj-' + k} className="input" value={d[k]} onChange={e => setD({ ...d, [k]: e.target.value })} placeholder={ph} />
       {err?.field === k && <div role="alert" style={css(FIELD_ERR)}>{err.message}</div>}
@@ -96,36 +97,36 @@ export function ObjectCardPanel({ object, onClose, onSaved, onDeleted, onOpenJob
 
   return (
     <div>
-      <div style={css('display: flex; justify-content: space-between; align-items: baseline; gap: 10px')}>
-        <div style={css('font-family: var(--font-heading); font-size: 21px; text-transform: uppercase; letter-spacing: .02em')}>Карточка объекта</div>
-        <button className="btn btn-ghost" onClick={onClose} style={css('height: 30px; font-size: 13px; flex: none')}>Закрыть</button>
+      <div className={sty.cf5c1e62}>
+        <div className={'fh ' + sty.c41db1e5}>Карточка объекта</div>
+        <button className={'btn btn-ghost ' + sty.c165129c} onClick={onClose}>Закрыть</button>
       </div>
       {field('name', 'Название', 'Двор на Гиляровского')}
       {field('address', 'Адрес', 'ул. Гиляровского, 24')}
       {field('area', 'Объём', '320 м²')}
       {field('contact', 'Кто встречает', 'консьерж — вход со двора')}
       <div style={css(LABEL + '; margin-top: 14px; margin-bottom: 7px')}>Доступ</div>
-      <div style={css('display: flex; flex-wrap: wrap; gap: 6px')}>
+      <div className={sty.c2bf69bb}>
         {ACCESS.map(a => <Chip key={a} active={d.access.includes(a)} onClick={() => setD({ ...d, access: d.access.includes(a) ? d.access.filter(x => x !== a) : [...d.access, a] })}>{a}</Chip>)}
       </div>
       <div style={css(LABEL + '; margin-top: 14px; margin-bottom: 7px')}>Инвентарь</div>
-      <div style={css('display: flex; flex-wrap: wrap; gap: 6px')}>
+      <div className={sty.c2bf69bb}>
         {TOOLS.map(t => <Chip key={t} active={d.tools === t} onClick={() => setD({ ...d, tools: d.tools === t ? '' : t })}>{t}</Chip>)}
       </div>
       <div style={css(LABEL + '; margin-top: 16px; margin-bottom: 7px')}>Смены по объекту</div>
       {shifts === null && <div style={css('font-size: 13px; ' + MUTED)}>Загружаем…</div>}
       {shifts?.length === 0 && <div style={css('font-size: 13px; ' + MUTED)}>Смен по этому объекту пока не было.</div>}
-      <div style={css('display: grid; gap: 5px')}>
+      <div className={sty.cab743e8}>
         {shifts?.map(s => (
-          <button key={s.num} onClick={() => onOpenJob(s.num)} style={css('text-align: left; cursor: pointer; background: transparent; border: 1px solid var(--color-divider); padding: 7px 9px; font-family: var(--font-body); color: inherit')}>
-            <span style={css('display: block; font-family: var(--font-heading); font-size: 14px; text-transform: uppercase; letter-spacing: .02em')}>{jobNum(s.num) + ' · ' + s.title}</span>
+          <button key={s.num} onClick={() => onOpenJob(s.num)} className={sty.cf1cae7a}>
+            <span className={'fh ' + sty.c532e21a}>{jobNum(s.num) + ' · ' + s.title}</span>
             <span style={css('display: block; font-size: 12.5px; ' + MUTED)}>{dateLabel(s.date) + ' · ' + (STATUS[s.status] || s.status) + (s.hired ? ' · нанято ' + s.hired : '')}</span>
           </button>
         ))}
       </div>
       {err && !['name', 'address', 'area', 'contact'].includes(err.field || '') && <div role="alert" style={css(FIELD_ERR)}>{err.message}</div>}
-      <button className="btn btn-primary btn-block" onClick={save} disabled={busy} style={css('margin-top: 16px; height: 42px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Сохранить объект</button>
-      <button className="btn btn-ghost btn-block" onClick={remove} style={css('margin-top: 8px; height: 36px; font-size: 13px')}>Удалить объект</button>
+      <button className={'btn btn-primary btn-block ' + sty.c8ab760c} onClick={save} disabled={busy}>Сохранить объект</button>
+      <button className={'btn btn-ghost btn-block ' + sty.c0945196} onClick={remove}>Удалить объект</button>
     </div>
   );
 }

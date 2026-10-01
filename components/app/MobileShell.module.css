@@ -1,0 +1,77 @@
+/* Статичные стили прототипа (scripts/css-modules.mjs): :where — специфичность атрибута style, !important — его приоритет. */
+:where(.cd052a46) {
+  flex: none !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: max(8px, env(safe-area-inset-top)) 10px 8px 16px !important;
+  border-bottom: 1px solid var(--color-divider) !important;
+  background: var(--color-bg) !important;
+}
+:where(.c03ad802) {
+  font-family: var(--font-heading) !important;
+  font-weight: 600 !important;
+  font-size: 18px !important;
+  letter-spacing: .14em !important;
+  text-transform: uppercase !important;
+  color: inherit !important;
+  text-decoration: none !important;
+  white-space: nowrap !important;
+}
+:where(.cee04050) {
+  font-size: 12px !important;
+  letter-spacing: .18em !important;
+  text-transform: uppercase !important;
+  color: color-mix(in srgb, var(--color-text) 62%, transparent) !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+:where(.c4012f9c) {
+  flex: none !important;
+  position: relative !important;
+  width: 44px !important;
+  height: 44px !important;
+  display: grid !important;
+  place-items: center !important;
+  border: 1px solid var(--color-divider) !important;
+  background: transparent !important;
+  cursor: pointer !important;
+  color: inherit !important;
+}
+:where(.c13cd613) {
+  position: absolute !important;
+  top: 3px !important;
+  right: 3px !important;
+  min-width: 16px !important;
+  height: 16px !important;
+  padding: 0 4px !important;
+  box-sizing: border-box !important;
+  background: var(--color-accent) !important;
+  color: #fff !important;
+  font-family: var(--font-heading) !important;
+  font-size: 11px !important;
+  line-height: 16px !important;
+  text-align: center !important;
+}
+:where(.c4b8dcc6) {
+  position: fixed !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  z-index: 85 !important;
+  padding-bottom: env(safe-area-inset-bottom) !important;
+  border-top: 1px solid var(--color-divider) !important;
+  background: var(--color-neutral-100) !important;
+}
+:where(.cedbcc9d) {
+  min-width: 16px !important;
+  height: 16px !important;
+  padding: 0 4px !important;
+  box-sizing: border-box !important;
+  background: var(--color-accent) !important;
+  color: #fff !important;
+  font-size: 11px !important;
+  line-height: 16px !important;
+  text-align: center !important;
+}

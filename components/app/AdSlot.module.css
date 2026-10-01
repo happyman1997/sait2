@@ -1,0 +1,54 @@
+/* Статичные стили прототипа (scripts/css-modules.mjs): :where — специфичность атрибута style, !important — его приоритет. */
+:where(.cebf0f9b) {
+  display: flex !important;
+  justify-content: space-between !important;
+  gap: 10px !important;
+  align-items: baseline !important;
+  flex-wrap: wrap !important;
+}
+:where(.ce000444) {
+  font-family: var(--font-heading) !important;
+  font-size: 11px !important;
+  letter-spacing: .18em !important;
+  text-transform: uppercase !important;
+  color: var(--color-accent-900) !important;
+}
+:where(.c4e38bd9) {
+  font-size: 11.5px !important;
+  color: color-mix(in srgb, var(--color-text) 62%, transparent) !important;
+}
+:where(.ce5110ac) {
+  font-family: var(--font-heading) !important;
+  font-size: 17px !important;
+  line-height: 1.05 !important;
+  text-transform: uppercase !important;
+  letter-spacing: .02em !important;
+  margin-top: 4px !important;
+}
+:where(.c262f3c9) {
+  font-size: 12.5px !important;
+  line-height: 1.4 !important;
+  margin-top: 4px !important;
+  color: color-mix(in srgb, var(--color-text) 78%, transparent) !important;
+}
+:where(.ce83fbc7) {
+  display: flex !important;
+  gap: 8px !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  margin-top: 9px !important;
+}
+:where(.c0f0fc35) {
+  height: 32px !important;
+  font-size: 12px !important;
+  letter-spacing: .06em !important;
+  text-transform: uppercase !important;
+  padding: 0 12px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  text-decoration: none !important;
+}
+:where(.ceb20a7e) {
+  font-size: 11.5px !important;
+  color: color-mix(in srgb, var(--color-text) 66%, transparent) !important;
+}

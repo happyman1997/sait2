@@ -7,6 +7,7 @@ import { css } from '@/lib/css';
 import { uploadForm } from '@/lib/image';
 import { COMPLAINT_KINDS, crewOf, dateLabel, DISPUTE_REASONS, isSeries, LEAVE_REASONS, localISO, money, plural, type DisputeInfo, type JobDetail } from '@/lib/jobs';
 import { Corners, LABEL } from './ui';
+import sty from './ShiftBlock.module.css';
 
 export type Act = (path: string, body: unknown, ok: string, method?: 'POST' | 'DELETE') => Promise<boolean>;
 export type ReviewOpen = (t: { target: string; name: string; rating?: number; text?: string }) => void;
@@ -24,32 +25,31 @@ export function ApplicantsBlock({ job, act, onChat, busy }: { job: JobDetail; ac
   const open = job.status === 'open' || job.status === 'staffed';
   const sent = list.filter(a => a.status === 'sent');
   return (
-    <div style={css('margin-top: 18px')}>
+    <div className={sty.c6840f0a}>
       <div style={css(LABEL + '; margin-bottom: 10px')}>Откликнулись — {list.length}{crew > 1 ? ' · нанято ' + job.hired + (crew === Infinity ? '' : ' из ' + crew) : ''}</div>
-      <div style={css('display: grid; gap: 8px')}>
+      <div className={sty.cd726313}>
         {list.map(a => (
           <div key={a.id} style={css('display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border: 1px solid ' + (a.status === 'hired' ? 'var(--color-accent)' : 'var(--color-divider)') + '; padding: 9px 11px')}>
-            <div style={css('width: 32px; height: 32px; border: 1px solid var(--color-divider); display: grid; place-items: center; font-family: var(--font-heading); font-size: 13px; color: var(--color-accent-700); flex: none')}>{a.initials}</div>
-            <div style={css('flex: 1; min-width: 140px')}>
-              <div style={css('display: flex; align-items: center; gap: 6px; flex-wrap: wrap')}>
-                <span style={css('font-family: var(--font-heading); font-weight: 600; font-size: 16px; text-transform: uppercase; letter-spacing: .02em')}>{a.name}</span>
+            <div className={'fh ' + sty.c9e20072}>{a.initials}</div>
+            <div className={sty.c9f3d743}>
+              <div className={sty.cc6d16d8}>
+                <span className={'fh ' + sty.c9a3bf7a}>{a.name}</span>
                 {a.status === 'hired' && <span className="tag tag-accent" style={{ whiteSpace: 'nowrap' }}>{a.isLead ? 'старший' : 'нанят'}</span>}
                 {a.npd && <span className="tag tag-outline" title="Статус НПД подтверждён ФНС" style={{ whiteSpace: 'nowrap' }}>самозанятый ✓</span>}
               </div>
               <div style={css('font-size: 13px; ' + MUTED)}>{a.rating != null ? 'рейтинг ' + a.rating.toFixed(1) : 'пока без оценок'} · {a.done} смен{a.noShows ? ' · невыходов ' + a.noShows : ''}</div>
               <div style={css('font-size: 13px; ' + MUTED)}>{a.gear}</div>
             </div>
-            <div style={css('display: flex; gap: 6px; flex-wrap: wrap; flex: none')}>
+            <div className={sty.c33d0c28}>
               {a.status === 'sent' && open && <>
-                <button className="btn btn-secondary" disabled={busy || full} onClick={() => act('applicants/' + a.id + '/hire', {}, 'Вы наняли ' + a.name + ' — чат открыт')} title={full ? 'Смена уже набрана' : ''} style={css('height: 30px; font-size: 13px; white-space: nowrap')}>Нанять</button>
-                <button className="btn btn-ghost" disabled={busy} onClick={() => act('applicants/' + a.id + '/reject', {}, 'Отказ отправлен — ' + a.name)} style={css('height: 30px; font-size: 13px')}>Отказ</button>
+                <button className={'btn btn-secondary ' + sty.c93bbd0b} disabled={busy || full} onClick={() => act('applicants/' + a.id + '/hire', {}, 'Вы наняли ' + a.name + ' — чат открыт')} title={full ? 'Смена уже набрана' : ''}>Нанять</button>
+                <button className={'btn btn-ghost ' + sty.c932c509} disabled={busy} onClick={() => act('applicants/' + a.id + '/reject', {}, 'Отказ отправлен — ' + a.name)}>Отказ</button>
               </>}
               {a.status === 'hired' && <>
-                <button className="btn btn-secondary" onClick={() => onChat(a.thread)} style={css('height: 30px; font-size: 13px')}>Чат</button>
-                {crew > 1 && !a.isLead && open && <button className="btn btn-ghost" disabled={busy} onClick={() => act('applicants/' + a.id + '/lead', {}, a.name + ' назначен старшим')} style={css('height: 30px; font-size: 13px; white-space: nowrap')}>Сделать старшим</button>}
-                {open && <button className="btn btn-ghost" disabled={busy}
-                  onClick={() => { if (window.confirm('Снять ' + a.name + ' со смены? Остальные останутся, набор откроется на одно место, у исполнителя +1 к неявкам.')) act('applicants/' + a.id + '/no-show', {}, a.name + ' снят со смены — набор открыт'); }}
-                  style={css('height: 30px; font-size: 13px; white-space: nowrap')}>Не вышел</button>}
+                <button className={'btn btn-secondary ' + sty.c932c509} onClick={() => onChat(a.thread)}>Чат</button>
+                {crew > 1 && !a.isLead && open && <button className={'btn btn-ghost ' + sty.c93bbd0b} disabled={busy} onClick={() => act('applicants/' + a.id + '/lead', {}, a.name + ' назначен старшим')}>Сделать старшим</button>}
+                {open && <button className={'btn btn-ghost ' + sty.c93bbd0b} disabled={busy}
+                  onClick={() => { if (window.confirm('Снять ' + a.name + ' со смены? Остальные останутся, набор откроется на одно место, у исполнителя +1 к неявкам.')) act('applicants/' + a.id + '/no-show', {}, a.name + ' снят со смены — набор открыт'); }}>Не вышел</button>}
               </>}
             </div>
           </div>
@@ -57,7 +57,7 @@ export function ApplicantsBlock({ job, act, onChat, busy }: { job: JobDetail; ac
       </div>
       {!list.length && <div style={css('font-size: 13.5px; line-height: 1.45; ' + MUTED)}>Откликов пока нет — заказ виден исполнителям на карте и в списке.</div>}
       {sent.length > 0 && job.hired > 0 && open && (
-        <button className="btn btn-ghost" disabled={busy} onClick={() => act('reject-rest', {}, 'Остальным отправлен отказ — ' + sent.length)} style={css('height: 34px; font-size: 13px; margin-top: 8px')}>Отказать остальным</button>
+        <button className={'btn btn-ghost ' + sty.c742db4c} disabled={busy} onClick={() => act('reject-rest', {}, 'Остальным отправлен отказ — ' + sent.length)}>Отказать остальным</button>
       )}
     </div>
   );
@@ -110,16 +110,16 @@ export function ShiftBlock({ job, isOwner, act, onChat, onReview, busy }: {
   const settleDone = s.settle ? (isOwner ? s.settle.employer : s.settle.freelancer) : false;
 
   return (
-    <div className="blueprint" style={css('margin-top: 18px; padding: 13px 12px')}>
+    <div className={'blueprint ' + sty.c07f350a}>
       <Corners />
       <div style={css(LABEL)}>Смена</div>
-      <div style={css('font-size: 14px; line-height: 1.45; margin-top: 7px')}>{line}</div>
+      <div className={sty.c7275f29}>{line}</div>
 
       {!accepted && (
-        <div style={css('display: flex; gap: 8px 14px; flex-wrap: wrap; align-items: baseline; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--color-divider)')}>
-          <span style={css('font-family: var(--font-heading); font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 64%, transparent)')}>Встречающий</span>
+        <div className={sty.c46f6613}>
+          <span className={'fh ' + sty.c1e8c242}>Встречающий</span>
           {meet
-            ? <><span style={css('font-size: 14px')}>{meet.who}</span><a href={'tel:' + meet.phone.replace(/[^\d+]/g, '')} style={css('font-family: var(--font-heading); font-size: 16px; letter-spacing: .02em; white-space: nowrap')}>{meet.phone}</a></>
+            ? <><span className={sty.c05854e5}>{meet.who}</span><a href={'tel:' + meet.phone.replace(/[^\d+]/g, '')} className={'fh ' + sty.ceec6d73}>{meet.phone}</a></>
             : <span style={css('font-size: 14px; ' + MUTED)}>{brigade ? (s.leadName ? 'телефон у старшего — ' + s.leadName : 'старший не назначен — телефон откроется ему') : 'телефон не указан — уточните в чате'}</span>}
         </div>
       )}
@@ -145,10 +145,9 @@ export function ShiftBlock({ job, isOwner, act, onChat, onReview, busy }: {
       )}
       {isOwner && !accepted && s.hired.length > 0 && job.status !== 'cancelled' && (
         series
-          ? <button className="btn btn-secondary btn-block" disabled={busy}
-              onClick={() => { if (window.confirm('Завершить серию? Сданные дни будут приняты, оставшиеся выходы отменятся, откроются отзывы.')) act('accept', {}, 'Серия завершена — оцените исполнителей'); }}
-              style={css('margin-top: 12px; height: 40px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase')}>Завершить серию</button>
-          : <button className="btn btn-primary btn-block" disabled={busy} onClick={() => act('accept', {}, 'Работа принята — оцените исполнителя')} style={css('margin-top: 12px; height: 40px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase')}>Принять работу</button>
+          ? <button className={'btn btn-secondary btn-block ' + sty.cb97e580} disabled={busy}
+              onClick={() => { if (window.confirm('Завершить серию? Сданные дни будут приняты, оставшиеся выходы отменятся, откроются отзывы.')) act('accept', {}, 'Серия завершена — оцените исполнителей'); }}>Завершить серию</button>
+          : <button className={'btn btn-primary btn-block ' + sty.cb97e580} disabled={busy} onClick={() => act('accept', {}, 'Работа принята — оцените исполнителя')}>Принять работу</button>
       )}
 
       {(s.canChat && (isOwner ? s.hired.length === 1 : true)) && (
@@ -158,11 +157,11 @@ export function ShiftBlock({ job, isOwner, act, onChat, onReview, busy }: {
       )}
 
       {accepted && s.settle && (
-        <div style={css('margin-top: 12px; border: 1px solid var(--color-divider); padding: 11px 12px')}>
+        <div className={sty.ce2d5c19}>
           <div style={css(LABEL)}>Расчёт</div>
-          <div style={css('font-size: 14px; line-height: 1.45; margin-top: 6px')}>{settleLine}</div>
+          <div className={sty.c8786171}>{settleLine}</div>
           {series && <div style={css('font-size: 13px; line-height: 1.4; margin-top: 4px; ' + MUTED)}>Расчёт по серии — по дням, в «Серии выходов». Отметка здесь ставится сразу за все принятые дни.</div>}
-          <button className="btn btn-secondary btn-block" disabled={busy || settleDone} onClick={() => act('settle', {}, isOwner ? 'Отмечено: оплата передана' : 'Отмечено: деньги получены')} style={css('margin-top: 10px; height: 42px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>
+          <button className={'btn btn-secondary btn-block ' + sty.c23091ad} disabled={busy || settleDone} onClick={() => act('settle', {}, isOwner ? 'Отмечено: оплата передана' : 'Отмечено: деньги получены')}>
             {isOwner ? (settleDone ? 'Оплата передана' : 'Отметить: оплата передана') : (settleDone ? 'Деньги получены' : 'Отметить: деньги получены')}
           </button>
           <div style={css('font-size: 13px; line-height: 1.4; margin-top: 8px; ' + MUTED)}>Деньги идут напрямую между сторонами — площадка только фиксирует отметки обеих сторон.</div>
@@ -174,12 +173,12 @@ export function ShiftBlock({ job, isOwner, act, onChat, onReview, busy }: {
       {accepted && s.reviewTargets.map(t => {
         const mine = s.myReviews.find(r => r.target === t.target);
         return (
-          <div key={t.target} style={css('display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; border-top: 1px solid var(--color-divider); padding-top: 10px')}>
-            <span style={css('font-family: var(--font-heading); font-size: 11.5px; letter-spacing: .18em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 58%, transparent)')}>отзыв · {t.name}</span>
-            {mine && <span style={css('font-size: 13.5px; line-height: 1.35; min-width: 0; color: var(--color-accent-900)')}>{mine.rating}/5 · {mine.text || 'без комментария'}</span>}
+          <div key={t.target} className={sty.cefdb4bb}>
+            <span className={'fh ' + sty.cbf81ab7}>отзыв · {t.name}</span>
+            {mine && <span className={sty.ca5b8ed1}>{mine.rating}/5 · {mine.text || 'без комментария'}</span>}
             <span style={{ flex: 1 }} />
             {(!mine || mine.editable) && (
-              <button className="btn btn-secondary" onClick={() => onReview({ target: t.target, name: t.name, rating: mine?.rating, text: mine?.text })} style={css('height: 36px; font-size: 13px; flex: none')}>
+              <button className={'btn btn-secondary ' + sty.cd45276d} onClick={() => onReview({ target: t.target, name: t.name, rating: mine?.rating, text: mine?.text })}>
                 {mine ? 'Изменить отзыв' : isOwner ? 'Оценить исполнителя' : 'Оценить работодателя'}
               </button>
             )}
@@ -188,7 +187,7 @@ export function ShiftBlock({ job, isOwner, act, onChat, onReview, busy }: {
       })}
 
       {accepted && s.myComplaint && (
-        <div style={css('margin-top: 12px; border: 1px solid var(--color-divider); padding: 10px 12px; font-size: 14px; line-height: 1.45')}>
+        <div className={sty.ca8d24f8}>
           Жалоба «{s.myComplaint.reason}» от {new Date(s.myComplaint.at).toLocaleDateString('ru-RU')} — на рассмотрении, ответ за 3 рабочих дня.
         </div>
       )}
@@ -216,28 +215,28 @@ export function ComplaintForm({ role, targets, act, busy, onClose, title = 'Жа
   const [target, setTarget] = useState(targets[0]?.id ?? '');
   const id = useId();
   return (
-    <div className="blueprint" style={css('margin-top: 12px; padding: 13px 12px')}>
+    <div className={'blueprint ' + sty.c0a5aa83}>
       <Corners />
       <div style={css(LABEL)}>{title}</div>
       {targets.length > 1 && (
-        <div className="field" style={css('margin-top: 10px')}>
+        <div className={'field ' + sty.ce5a6d3c}>
           <label htmlFor={id + 't'}>На кого</label>
           <select id={id + 't'} className="input" value={target} onChange={e => setTarget(e.target.value)}>
             {targets.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </div>
       )}
-      <div className="field" style={css('margin-top: 10px')}>
+      <div className={'field ' + sty.ce5a6d3c}>
         <label htmlFor={id + 'k'}>Тема</label>
         <select id={id + 'k'} className="input" value={kind} onChange={e => setKind(e.target.value)}>
           {kinds.map(k => <option key={k}>{k}</option>)}
         </select>
       </div>
-      <textarea className="input" rows={3} value={text} onChange={e => setText(e.target.value)} aria-label="Жалоба" placeholder="Что произошло, с датами и суммами" style={css('width: 100%; box-sizing: border-box; margin-top: 10px')} />
-      <div style={css('font-size: 13px; line-height: 1.45; margin-top: 10px; color: color-mix(in srgb, var(--color-text) 70%, transparent)')}>Площадка не возвращает деньги — она разбирает поведение на площадке: ответ за 3 рабочих дня, санкции — пометка, понижение в выдаче, блокировка.</div>
-      <div style={css('display: flex; gap: 8px; margin-top: 12px')}>
+      <textarea className={'input ' + sty.c0d7b06f} rows={3} value={text} onChange={e => setText(e.target.value)} aria-label="Жалоба" placeholder="Что произошло, с датами и суммами" />
+      <div className={sty.cd225a54}>Площадка не возвращает деньги — она разбирает поведение на площадке: ответ за 3 рабочих дня, санкции — пометка, понижение в выдаче, блокировка.</div>
+      <div className={sty.c5c223c4}>
         <button className="btn btn-primary" disabled={busy} onClick={async () => { if (await act('complaint', { reason: kind, text, target: target || undefined }, 'Жалоба принята — ответ за 3 рабочих дня')) onClose(); }} style={css('flex: 1; ' + BTN)}>Отправить жалобу</button>
-        <button className="btn btn-ghost" onClick={onClose} style={css('height: 42px; font-size: 13px; padding: 0 14px')}>Назад</button>
+        <button className={'btn btn-ghost ' + sty.c4066974} onClick={onClose}>Назад</button>
       </div>
     </div>
   );
@@ -249,23 +248,23 @@ export function LeaveShiftForm({ act, busy, onClose }: { act: Act; busy: boolean
   const [notice, setNotice] = useState('больше суток');
   const late = notice !== 'больше суток';
   return (
-    <div className="blueprint" style={css('margin-top: 12px; padding: 13px 12px')}>
+    <div className={'blueprint ' + sty.c0a5aa83}>
       <Corners />
       <div style={css(LABEL)}>Отказ от смены</div>
-      <div className="field" style={css('margin-top: 10px')}>
+      <div className={'field ' + sty.ce5a6d3c}>
         <label htmlFor="lv-reason">Причина</label>
         <select id="lv-reason" className="input" value={reason} onChange={e => setReason(e.target.value)}>{LEAVE_REASONS.map(r => <option key={r}>{r}</option>)}</select>
       </div>
-      <div className="field" style={css('margin-top: 10px')}>
+      <div className={'field ' + sty.ce5a6d3c}>
         <label htmlFor="lv-notice">За сколько до выхода</label>
         <select id="lv-notice" className="input" value={notice} onChange={e => setNotice(e.target.value)}><option>больше суток</option><option>меньше суток</option></select>
       </div>
-      <div style={css('font-size: 13px; line-height: 1.45; margin-top: 10px; color: var(--color-accent-900); border: 1px solid var(--color-accent); padding: 9px 10px')}>
+      <div className={sty.c3e92d4d}>
         {late ? 'Поздний отказ: пометка в профиле на 90 дней и понижение в выдаче по срочным заказам. Денежных штрафов платформа не взимает.' : 'Отказ заранее: заказ вернётся в поиск, на рейтинг не влияет.'}
       </div>
-      <div style={css('display: flex; gap: 8px; margin-top: 12px')}>
+      <div className={sty.c5c223c4}>
         <button className="btn btn-primary" disabled={busy} onClick={async () => { if (await act('leave', { reason, notice }, 'Вы отказались от смены')) onClose(); }} style={css('flex: 1; ' + BTN)}>Подтвердить отказ</button>
-        <button className="btn btn-ghost" onClick={onClose} style={css('height: 42px; font-size: 13px; padding: 0 14px')}>Назад</button>
+        <button className={'btn btn-ghost ' + sty.c4066974} onClick={onClose}>Назад</button>
       </div>
     </div>
   );
@@ -275,17 +274,17 @@ export function LeaveShiftForm({ act, busy, onClose }: { act: Act; busy: boolean
 export function MoveDateForm({ job, act, busy, onClose }: { job: JobDetail; act: Act; busy: boolean; onClose: () => void }) {
   const [date, setDate] = useState(job.date >= localISO() ? job.date : localISO());
   return (
-    <div className="blueprint" style={css('margin-top: 12px; padding: 13px 12px')}>
+    <div className={'blueprint ' + sty.c0a5aa83}>
       <Corners />
       <div style={css(LABEL)}>Перенос даты</div>
-      <div className="field" style={css('margin-top: 10px')}>
+      <div className={'field ' + sty.ce5a6d3c}>
         <label htmlFor="mv-date">Новая дата выхода</label>
         <input id="mv-date" className="input" type="date" min={localISO()} value={date} onChange={e => setDate(e.target.value)} />
       </div>
       <div style={css('font-size: 13px; line-height: 1.45; margin-top: 10px; ' + MUTED)}>Нанятые и откликнувшиеся получат уведомление с новой датой.</div>
-      <div style={css('display: flex; gap: 8px; margin-top: 12px')}>
+      <div className={sty.c5c223c4}>
         <button className="btn btn-primary" disabled={busy || !date} onClick={async () => { if (await act('move', { date, today: localISO() }, 'Дата перенесена — исполнители уведомлены')) onClose(); }} style={css('flex: 1; ' + BTN)}>Перенести</button>
-        <button className="btn btn-ghost" onClick={onClose} style={css('height: 42px; font-size: 13px; padding: 0 14px')}>Назад</button>
+        <button className={'btn btn-ghost ' + sty.c4066974} onClick={onClose}>Назад</button>
       </div>
     </div>
   );
@@ -309,24 +308,24 @@ function ShiftPhotos({ job, act, busy }: { job: JobDetail; act: Act; busy: boole
     const list = photos.filter(p => p.kind === kind);
     return (
       <div style={{ minWidth: 0 }}>
-        <div style={css('font-family: var(--font-heading); font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 64%, transparent); margin-bottom: 5px')}>{title}</div>
-        <div style={css('display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 4px')}>
+        <div className={'fh ' + sty.c8b8c614}>{title}</div>
+        <div className={sty.c58e741b}>
           {list.map(p => (
-            <div key={p.id} style={css('position: relative; aspect-ratio: 1; border: 1px solid var(--color-divider); overflow: hidden; background: var(--color-bg)')}>
+            <div key={p.id} className={sty.c991ba27}>
               <a href={p.url} target="_blank" rel="noreferrer" title="Открыть фото">
-                <img src={p.url} alt={title} loading="lazy" style={css('width: 100%; height: 100%; object-fit: cover; display: block')} />
+                <img src={p.url} alt={title} loading="lazy" className={sty.c8ccc26b} />
               </a>
               {p.mine && !locked && (
                 <button onClick={() => act('photos/' + p.id, null, 'Фото убрано', 'DELETE')} disabled={busy} title="Убрать фото" aria-label="Убрать фото"
-                  style={css('position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; padding: 0; border: 0; cursor: pointer; background: rgba(20, 26, 32, .7); color: #fff; font-size: 14px; line-height: 20px')}>×</button>
+                  className={sty.c20b9d26}>×</button>
               )}
             </div>
           ))}
           {!locked && (
-            <label title={'Приложить ' + title.toLowerCase()} style={css('position: relative; aspect-ratio: 1; min-height: 64px; display: grid; place-items: center; text-align: center; cursor: pointer; border: 1px dashed var(--color-accent); font-size: 12px; line-height: 1.2; padding: 4px; color: var(--color-accent-900); background: color-mix(in srgb, var(--color-accent) 5%, transparent)')}>
+            <label title={'Приложить ' + title.toLowerCase()} className={sty.c9a0a9d2}>
               {loading === kind ? 'загрузка…' : list.length ? '+ ещё' : '+ приложить'}
               <input type="file" accept="image/jpeg,image/png,image/webp,image/heic" multiple disabled={!!loading} aria-label={'Приложить ' + title.toLowerCase()}
-                onChange={e => { upload(kind, e.target.files); e.target.value = ''; }} style={css('position: absolute; inset: 0; opacity: 0; cursor: pointer')} />
+                onChange={e => { upload(kind, e.target.files); e.target.value = ''; }} className={sty.cfa58977} />
             </label>
           )}
           {locked && !list.length && <div style={css('font-size: 12.5px; ' + MUTED)}>нет фото</div>}
@@ -335,7 +334,7 @@ function ShiftPhotos({ job, act, busy }: { job: JobDetail; act: Act; busy: boole
     );
   };
   return (
-    <div style={css('display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px')}>
+    <div className={sty.cf661f70}>
       {col('before', 'Фото до')}
       {col('after', 'Фото после')}
     </div>
@@ -371,53 +370,51 @@ function Disputes({ job, isOwner, act, busy }: { job: JobDetail; isOwner: boolea
         return (
           <div key={d.id} className="blueprint" style={css('margin-top: 12px; padding: 11px 12px; ' + (live ? 'border-color: var(--color-accent)' : ''))}>
             <Corners />
-            <div style={css('display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap')}>
-              <span style={css('font-family: var(--font-heading); font-size: 12.5px; letter-spacing: .2em; text-transform: uppercase; color: var(--color-accent-900)')}>{'Спор ' + d.num}</span>
+            <div className={sty.c9bb37d5}>
+              <span className={'fh ' + sty.c717ed17}>{'Спор ' + d.num}</span>
               <span className={live ? 'tag tag-accent' : 'tag tag-outline'}>{DISPUTE_STATUS[d.status] + (d.resolvedFor ? ' · в пользу ' + (d.resolvedFor === 'employer' ? 'работодателя' : 'исполнителя') : '')}</span>
             </div>
-            <div style={css('font-size: 14px; line-height: 1.5; margin-top: 6px')}>
+            <div className={sty.c3467092}>
               {(d.openedBy === 'employer' ? 'Открыт работодателем ' : 'Открыт исполнителем ') + new Date(d.at).toLocaleDateString('ru-RU') + ' · ' + d.reason + ' · ' +
                 d.sum.toLocaleString('ru-RU') + ' ₽' + (isOwner ? ' · ' + d.other : '') + '. ' + d.text}
             </div>
-            {d.response && <div style={css('font-size: 13.5px; line-height: 1.45; margin-top: 6px')}><span style={css(MUTED)}>Ответ второй стороны: </span>{d.response}</div>}
-            {d.resolution && <div style={css('font-size: 13.5px; line-height: 1.45; margin-top: 6px; color: var(--color-accent-900)')}>{'Решение поддержки: ' + d.resolution}</div>}
+            {d.response && <div className={sty.cabe90eb}><span style={css(MUTED)}>Ответ второй стороны: </span>{d.response}</div>}
+            {d.resolution && <div className={sty.cfc8e9aa}>{'Решение поддержки: ' + d.resolution}</div>}
             {live && (
-              <div style={css('font-size: 13px; line-height: 1.45; margin-top: 6px; color: var(--color-accent-900)')}>
+              <div className={sty.c4586af7}>
                 {'Поддержка отвечает в течение 3 рабочих дней. ' + (iOpened
                   ? (d.openedBy === 'freelancer' ? 'Работодатель может закрыть спор раньше — оплатив или дав пояснение.' : 'Исполнитель может дать пояснение раньше, вы — снять спор по договорённости.')
                   : 'Ответьте раньше — это ускорит разбор.') + ' Незакрытый спор виден в профиле обеих сторон.'}
               </div>
             )}
-            <div style={css('display: grid; gap: 3px; margin-top: 8px')}>
+            <div className={sty.c2e6f483}>
               {d.evidence.map((e, i) => (
-                <div key={i} style={css('display: flex; gap: 8px; font-size: 13px; line-height: 1.4')}>
+                <div key={i} className={sty.cd25a586}>
                   <span style={css('flex: none; width: 14px; color: ' + (e.ok ? 'var(--color-accent-700)' : 'color-mix(in srgb, var(--color-text) 50%, transparent)'))}>{e.ok ? '✓' : '—'}</span>
                   <span>{e.label}</span>
                 </div>
               ))}
             </div>
             {live && d.status === 'open' && !iOpened && explainFor !== d.id && (
-              <div style={css('display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px')}>
+              <div className={sty.cadaaa9a}>
                 {isOwner && d.openedBy === 'freelancer' && (
-                  <button className="btn btn-secondary" disabled={busy} onClick={() => act('dispute/' + d.id, { action: 'paid' }, 'Спор закрыт — оплата отправлена')} style={css('height: 40px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Оплата отправлена — закрыть спор</button>
+                  <button className={'btn btn-secondary ' + sty.cad84e51} disabled={busy} onClick={() => act('dispute/' + d.id, { action: 'paid' }, 'Спор закрыт — оплата отправлена')}>Оплата отправлена — закрыть спор</button>
                 )}
-                <button className="btn btn-ghost" onClick={() => { setExplainFor(d.id); setExplain(''); }} style={css('height: 38px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Не согласен, дать пояснение</button>
+                <button className={'btn btn-ghost ' + sty.cf8f6389} onClick={() => { setExplainFor(d.id); setExplain(''); }}>Не согласен, дать пояснение</button>
               </div>
             )}
             {explainFor === d.id && (
-              <div style={css('margin-top: 10px')}>
-                <textarea className="input" rows={3} value={explain} onChange={e => setExplain(e.target.value)} aria-label="Пояснение" maxLength={2000}
-                  placeholder="Что произошло с вашей стороны — прочитает поддержка" style={css('width: 100%; box-sizing: border-box; min-height: 70px; padding: 8px 10px; resize: vertical')} />
-                <div style={css('display: flex; gap: 8px; margin-top: 8px')}>
-                  <button className="btn btn-primary" disabled={busy} onClick={async () => { if (await act('dispute/' + d.id, { action: 'explain', text: explain }, 'Пояснение отправлено — решение примет поддержка')) setExplainFor(null); }}
-                    style={css('height: 38px; font-size: 13px')}>Отправить пояснение</button>
-                  <button className="btn btn-ghost" onClick={() => setExplainFor(null)} style={css('height: 38px; font-size: 13px')}>Отмена</button>
+              <div className={sty.ce5a6d3c}>
+                <textarea className={'input ' + sty.c58439e6} rows={3} value={explain} onChange={e => setExplain(e.target.value)} aria-label="Пояснение" maxLength={2000}
+                  placeholder="Что произошло с вашей стороны — прочитает поддержка" />
+                <div className={sty.cf2fe7f3}>
+                  <button className={'btn btn-primary ' + sty.c1d41128} disabled={busy} onClick={async () => { if (await act('dispute/' + d.id, { action: 'explain', text: explain }, 'Пояснение отправлено — решение примет поддержка')) setExplainFor(null); }}>Отправить пояснение</button>
+                  <button className={'btn btn-ghost ' + sty.c1d41128} onClick={() => setExplainFor(null)}>Отмена</button>
                 </div>
               </div>
             )}
             {live && iOpened && (
-              <button className="btn btn-secondary btn-block" disabled={busy} onClick={() => act('dispute/' + d.id, { action: 'withdraw' }, 'Спор снят')}
-                style={css('margin-top: 12px; height: 40px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>
+              <button className={'btn btn-secondary btn-block ' + sty.c72a8236} disabled={busy} onClick={() => act('dispute/' + d.id, { action: 'withdraw' }, 'Спор снят')}>
                 {d.openedBy === 'employer' ? 'Вопрос закрыт — снять спор' : 'Деньги пришли — снять спор'}
               </button>
             )}
@@ -426,41 +423,41 @@ function Disputes({ job, isOwner, act, busy }: { job: JobDetail; isOwner: boolea
       })}
 
       {s.canDispute && !open && (
-        <button className="btn btn-ghost btn-block" onClick={() => { setOpen(true); setTarget(free[0]?.appId || ''); }} style={css('margin-top: 8px; height: 40px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>
+        <button className={'btn btn-ghost btn-block ' + sty.caa11ec4} onClick={() => { setOpen(true); setTarget(free[0]?.appId || ''); }}>
           {isOwner ? 'Открыть спор по расчёту' : 'Оплата не пришла — открыть спор'}
         </button>
       )}
       {open && (
-        <div className="blueprint" style={css('margin-top: 12px; padding: 12px')}>
+        <div className={'blueprint ' + sty.c687fe46}>
           <Corners />
           <div style={css(LABEL)}>Спор об оплате</div>
           {isOwner && free.length > 1 && (
-            <div className="field" style={css('margin-top: 10px')}>
+            <div className={'field ' + sty.ce5a6d3c}>
               <label htmlFor="dsp-target">С кем спор</label>
               <select id="dsp-target" className="input" value={target} onChange={e => setTarget(e.target.value)}>
                 {free.map(h => <option key={h.appId!} value={h.appId!}>{h.name}</option>)}
               </select>
             </div>
           )}
-          <div className="field" style={css('margin-top: 10px')}>
+          <div className={'field ' + sty.ce5a6d3c}>
             <label htmlFor="dsp-reason">Что произошло</label>
             <select id="dsp-reason" className="input" value={reason} onChange={e => setReason(e.target.value)}>
               {DISPUTE_REASONS[side].map(r => <option key={r} value={r}>{r}</option>)}
             </select>
           </div>
-          <div className="field" style={css('margin-top: 10px')}>
+          <div className={'field ' + sty.ce5a6d3c}>
             <label htmlFor="dsp-sum">Сумма, о которой спор, ₽</label>
             <input id="dsp-sum" className="input" inputMode="numeric" value={sum} onChange={e => setSum(e.target.value.replace(/[^\d ]/g, ''))} placeholder={String(job.pay)} />
           </div>
-          <div className="field" style={css('margin-top: 10px')}>
+          <div className={'field ' + sty.ce5a6d3c}>
             <label htmlFor="dsp-text">Что уточнить</label>
-            <textarea id="dsp-text" className="input" rows={3} value={text} onChange={e => setText(e.target.value)} maxLength={2000}
-              placeholder="Работа принята в 14:20, денег нет третий день, на звонки не отвечают" style={css('min-height: 70px; padding: 8px 10px; resize: vertical')} />
+            <textarea id="dsp-text" className={'input ' + sty.c638bf70} rows={3} value={text} onChange={e => setText(e.target.value)} maxLength={2000}
+              placeholder="Работа принята в 14:20, денег нет третий день, на звонки не отвечают" />
           </div>
           <div style={css('font-size: 13px; line-height: 1.45; margin-top: 8px; ' + MUTED)}>В спор уйдут: фото до и после, переписка по заказу, отметки о приёмке и расчёте, условия заказа ({money(job.pay, job.unit)}, {job.payType || 'способ оплаты не указан'}).</div>
-          <div style={css('display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap')}>
-            <button className="btn btn-primary" disabled={busy} onClick={submit} style={css('height: 42px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Передать в поддержку</button>
-            <button className="btn btn-ghost" onClick={() => setOpen(false)} style={css('height: 42px; font-size: 13px')}>Отмена</button>
+          <div className={sty.cb358ebe}>
+            <button className={'btn btn-primary ' + sty.c98c3d34} disabled={busy} onClick={submit}>Передать в поддержку</button>
+            <button className={'btn btn-ghost ' + sty.c308e88a} onClick={() => setOpen(false)}>Отмена</button>
           </div>
         </div>
       )}

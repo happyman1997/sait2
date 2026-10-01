@@ -1,0 +1,13 @@
+/* Статичные стили прототипа (scripts/css-modules.mjs): :where — специфичность атрибута style, !important — его приоритет. */
+:where(.caea80b7) {
+  display: flex !important;
+  gap: 8px !important;
+  flex-wrap: wrap !important;
+}
+:where(.c51c739b) {
+  height: 42px !important;
+  padding: 0 18px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  text-decoration: none !important;
+}

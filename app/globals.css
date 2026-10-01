@@ -302,7 +302,8 @@ body {
   line-height: 1.55;
 }
 h1, h2, h3, h4, .card-title, .nav-brand { font-family: var(--font-heading); font-weight: 600; }
-[style*="--font-heading"] { font-weight: 600; }
+/* .fh, .ph-accent, .scroll-pane — те же правила для стилей, перенесённых из атрибута style в CSS-модули. */
+[style*="--font-heading"], .fh { font-weight: 600; }
 
 .card { padding: 20px; }
 .btn { letter-spacing: .02em; font-size: 14px; padding: 0 18px; }
@@ -312,9 +313,9 @@ h1, h2, h3, h4, .card-title, .nav-brand { font-family: var(--font-heading); font
 .dark-bar .btn-secondary:hover, .dark-bar .btn-ghost:hover { border-color: #f2efec; background: rgba(242, 239, 236, .12); }
 
 
-.input[style*="--placeholder-color"]::placeholder { color: var(--color-accent-700); opacity: 1; }
+.input[style*="--placeholder-color"]::placeholder, .input.ph-accent::placeholder { color: var(--color-accent-700); opacity: 1; }
 /* Регистрационные метки blueprint выступают на 6px — гасим лишнюю прокрутку в панелях-вкладках */
-div[style*="height: 100%"][style*="overflow: auto"] { overflow-x: hidden; }
+div[style*="height: 100%"][style*="overflow: auto"], div.scroll-pane.scroll-pane { overflow-x: hidden; }
 a { color: var(--color-accent-700); text-decoration: none; }
 a:hover { color: var(--color-accent-900); }
 .pin { transition: transform .12s ease; }

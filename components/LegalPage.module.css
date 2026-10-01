@@ -1,0 +1,29 @@
+/* Статичные стили прототипа (scripts/css-modules.mjs): :where — специфичность атрибута style, !important — его приоритет. */
+:where(.c996d334) {
+  max-width: 760px !important;
+  margin: 0 auto !important;
+  padding: 32px 16px 60px !important;
+  font-size: 15px !important;
+  line-height: 1.6 !important;
+}
+:where(.c68b45ae) {
+  height: 40px !important;
+  font-size: 13px !important;
+  letter-spacing: .06em !important;
+  text-transform: uppercase !important;
+  padding: 0 16px !important;
+}
+:where(.c8e4b18f) {
+  margin-top: 24px !important;
+  font-family: var(--font-heading) !important;
+  font-size: 12.5px !important;
+  letter-spacing: .2em !important;
+  text-transform: uppercase !important;
+  color: color-mix(in srgb, var(--color-text) 64%, transparent) !important;
+}
+:where(.c68398ba) {
+  margin: 4px 0 18px !important;
+  font-size: 30px !important;
+  text-transform: uppercase !important;
+  letter-spacing: .02em !important;
+}

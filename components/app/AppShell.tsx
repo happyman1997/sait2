@@ -2,13 +2,13 @@
 
 import { usePathname } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
-import { css } from '@/lib/css';
 import { AppHeader } from '@/components/AppHeader';
 import { ChatDock } from './ChatDock';
 import { LiveProvider, useLive, type Me } from './Live';
 import { MobileBar, MobileNav } from './MobileShell';
 import { NotifyRail } from './NotifyRail';
 import { ReviewModal } from './ReviewModal';
+import sty from './AppShell.module.css';
 
 function Inner({ children }: { children: ReactNode }) {
   const { me, unread, dock, setDock, place, setRail } = useLive();
@@ -16,12 +16,12 @@ function Inner({ children }: { children: ReactNode }) {
   // Переход в другой раздел сворачивает «Сообщения» в полосу — окно не закрывает кнопки новой страницы.
   useEffect(() => { setDock({ open: false }); setRail(null); }, [path, setDock, setRail]);
   return (
-    <div style={css('display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden')}>
+    <div className={sty.cfa14b4e}>
       <MobileBar />
       <AppHeader wideOnly={!!me} me={me && { name: me.name, role: me.role, city: me.city, avatarUrl: me.avatarUrl, isStaff: me.isStaff }} unread={unread}
         chatActive={dock.open} onChat={() => setDock({ open: !dock.open, view: dock.view })}
         onHome={() => window.dispatchEvent(new Event('arena:home'))} />
-      <div style={css('flex: 1; min-height: 0; display: flex; flex-direction: column')}>{children}</div>
+      <div className={sty.c5e48755}>{children}</div>
       <MobileNav />
       <ChatDock place={place} />
       <ReviewModal />

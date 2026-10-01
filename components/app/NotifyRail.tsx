@@ -10,6 +10,7 @@ import { disablePush, enablePush, pushState, type PushState } from '@/lib/push-c
 import { useFlash } from '@/components/Toast';
 import { useLive, useLiveEvent } from './Live';
 import { Corners, LABEL } from './ui';
+import sty from './NotifyRail.module.css';
 
 type Ev = { id: string; kind: string; text: string; num: number | null; muted: boolean; read: boolean; at: string; href: string | null };
 export type Settings = {
@@ -133,30 +134,30 @@ export function NotifyRail() {
 
   return (
     <div style={{ display: 'contents' }}>
-      <div onClick={() => setRail(null)} style={css('position: fixed; inset: 0; z-index: 90; background: rgba(24, 30, 36, .45)')} />
+      <div onClick={() => setRail(null)} className={sty.c88cdade} />
       <aside role="dialog" aria-label={rail === 'settings' ? 'Настройки' : 'Журнал'}
-        style={css('position: fixed; top: 0; right: 0; bottom: 0; z-index: 91; width: min(440px, 94vw); box-sizing: border-box; overflow: auto; padding: 22px 22px 34px; background: var(--color-neutral-100); border-left: 1px solid var(--color-divider); box-shadow: -20px 0 60px rgba(20, 26, 32, .28)')}>
-        <div style={css('display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 4px')}>
-          <div style={css('font-family: var(--font-heading); font-size: 21px; text-transform: uppercase; letter-spacing: .02em')}>{rail === 'settings' ? 'Настройки' : 'Журнал'}</div>
-          <button className="btn btn-ghost" onClick={() => setRail(null)} style={css('height: 30px; font-size: 13px; flex: none')}>Закрыть</button>
+        className={sty.c61f6465}>
+        <div className={sty.ca68f838}>
+          <div className={'fh ' + sty.c41db1e5}>{rail === 'settings' ? 'Настройки' : 'Журнал'}</div>
+          <button className={'btn btn-ghost ' + sty.c165129c} onClick={() => setRail(null)}>Закрыть</button>
         </div>
 
         {rail === 'journal' && (
-          <div className="blueprint" style={css('margin-top: 20px; padding: 13px 12px')}>
+          <div className={'blueprint ' + sty.c57daa0f}>
             <Corners />
-            <div style={css('display: flex; justify-content: space-between; align-items: baseline; gap: 8px')}>
+            <div className={sty.cad948e3}>
               <div style={css(LABEL)}>{heading}</div>
-              {!!events?.length && <button className="btn btn-ghost" onClick={clear} style={css('height: 22px; font-size: 12.5px')}>Очистить</button>}
+              {!!events?.length && <button className={'btn btn-ghost ' + sty.c2fc1dcc} onClick={clear}>Очистить</button>}
             </div>
-            <div style={css('display: grid; gap: 5px; margin-top: 7px')}>
+            <div className={sty.cfcfa205}>
               {(events || []).map(ev => (
                 <button key={ev.id} onClick={() => open(ev.href)} disabled={!ev.href}
                   style={css('text-align: left; cursor: ' + (ev.href ? 'pointer' : 'default') + '; background: transparent; border: 1px solid ' +
                     (!ev.read ? 'var(--color-accent)' : 'var(--color-divider)') + '; padding: 7px 9px; font-family: var(--font-body); color: inherit')}>
-                  <span style={css('display: block; font-family: var(--font-heading); font-size: 12.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--color-accent-700)')}>
+                  <span className={'fh ' + sty.c69bcb57}>
                     {ev.kind + (ev.muted ? ' · без доставки' : '')}
                   </span>
-                  <span style={css('display: block; font-size: 13px; line-height: 1.35; margin-top: 2px')}>{ev.text}</span>
+                  <span className={sty.cde65327}>{ev.text}</span>
                   <span style={css('display: block; ' + NOTE)}>{timeLabel(ev.at)}</span>
                 </button>
               ))}
@@ -175,32 +176,32 @@ export function NotifyRail() {
 
         {rail === 'settings' && (
           <>
-            <div className="blueprint" style={css('margin-top: 20px; padding: 13px 12px')}>
+            <div className={'blueprint ' + sty.c57daa0f}>
               <Corners />
-              <div style={css('display: flex; justify-content: space-between; align-items: center; gap: 8px')}>
+              <div className={sty.c962b5bc}>
                 <div style={css(LABEL)}>Оповещения</div>
                 {s && <Switch on={s.enabled} onClick={() => save({ enabled: !s.enabled })} title={s.enabled ? 'Выключить оповещения' : 'Включить оповещения'} />}
               </div>
               {!s && <div style={css(NOTE + '; margin-top: 9px')}>Загружаем…</div>}
-              {s && !s.enabled && <div style={css('font-size: 13px; line-height: 1.45; margin-top: 9px; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>Доставка выключена — всплывающие, SMS и письма не приходят. Журнал продолжает вестись.</div>}
+              {s && !s.enabled && <div className={sty.ceccbb76}>Доставка выключена — всплывающие, SMS и письма не приходят. Журнал продолжает вестись.</div>}
               {s && s.enabled && (
                 <div>
-                  <div style={css('display: grid; gap: 6px; margin-top: 10px')}>
+                  <div className={sty.cc60885d}>
                     {([['push', 'Пуш: в открытой вкладке и в браузере'], ['sms', 'SMS'], ['email', emailVerified ? 'E-mail' : 'E-mail (сначала подтвердите адрес в профиле)']] as const).map(([k, label]) => (
-                      <label key={k} style={css('display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer')}>
-                        <input type="checkbox" checked={s[k]} onChange={e => save({ [k]: e.target.checked })} style={css('accent-color: var(--color-accent); width: 14px; height: 14px')} />
+                      <label key={k} className={sty.c0a06f94}>
+                        <input type="checkbox" checked={s[k]} onChange={e => save({ [k]: e.target.checked })} className={sty.c9002738} />
                         <span>{label}</span>
                       </label>
                     ))}
                   </div>
 
                   {s.push && push && push !== 'unsupported' && (
-                    <div style={css('margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap')}>
+                    <div className={sty.c9e6b1c6}>
                       {push === 'on' && <span className="tag tag-accent">пуш на этом устройстве включён</span>}
                       {push === 'denied' && <span style={css(NOTE)}>Браузер запретил уведомления для сайта — разрешите их в настройках браузера.</span>}
                       {push === 'off-server' && <span style={css(NOTE)}>Пуш в браузер на сервере пока не настроен — уведомления приходят в открытой вкладке.</span>}
                       {(push === 'on' || push === 'off') && (
-                        <button className="btn btn-secondary" disabled={busy} style={css('height: 32px; font-size: 12.5px')} onClick={async () => {
+                        <button className={'btn btn-secondary ' + sty.cc6828af} disabled={busy} onClick={async () => {
                           setBusy(true);
                           try { setPush(push === 'on' ? await disablePush() : await enablePush()); } catch { flash('Не удалось включить пуш — попробуйте ещё раз'); } finally { setBusy(false); }
                         }}>{push === 'on' ? 'Выключить на этом устройстве' : 'Включить пуш на этом устройстве'}</button>
@@ -210,18 +211,18 @@ export function NotifyRail() {
 
                   {isFree && (
                     <div>
-                      <div className="hr" style={css('margin: 12px 0 10px')} />
+                      <div className={'hr ' + sty.ce4bd369} />
                       <div className="field">
                         <label htmlFor="notify-radius">Радиус от дома</label>
                         <select id="notify-radius" className="input" value={s.radiusKm} onChange={e => save({ radiusKm: Number(e.target.value) })}>
                           {[10, 30, 50, 100, 300].map(r => <option key={r} value={r}>{'до ' + r + ' км'}</option>)}
                         </select>
                       </div>
-                      <div style={css('font-size: 13px; margin-top: 9px; color: color-mix(in srgb, var(--color-text) 70%, transparent)')}>{'Рядом сейчас — ' + (near ? near.length : '…')}</div>
-                      <div style={css('display: grid; gap: 5px; margin-top: 7px')}>
+                      <div className={sty.cd5c0860}>{'Рядом сейчас — ' + (near ? near.length : '…')}</div>
+                      <div className={sty.cfcfa205}>
                         {(near || []).slice(0, 4).map(j => (
-                          <button key={j.num} onClick={() => open('/?job=' + j.num)} style={css('text-align: left; cursor: pointer; background: transparent; border: 1px solid var(--color-divider); padding: 7px 9px; font-family: var(--font-body); color: inherit')}>
-                            <span style={css('display: block; font-family: var(--font-heading); font-size: 14px; text-transform: uppercase; letter-spacing: .02em')}>{j.title}</span>
+                          <button key={j.num} onClick={() => open('/?job=' + j.num)} className={sty.cf1cae7a}>
+                            <span className={'fh ' + sty.c532e21a}>{j.title}</span>
                             <span style={css('display: block; ' + NOTE)}>{(j.distanceKm != null ? j.distanceKm.toFixed(1).replace('.', ',') + ' км · ' : '') + money(j.pay, j.unit)}</span>
                           </button>
                         ))}
@@ -230,14 +231,14 @@ export function NotifyRail() {
                     </div>
                   )}
 
-                  <div className="hr" style={css('margin: 12px 0 10px')} />
-                  <div style={css('display: flex; justify-content: space-between; align-items: center; gap: 8px')}>
+                  <div className={'hr ' + sty.ce4bd369} />
+                  <div className={sty.c962b5bc}>
                     <div style={css(LABEL)}>Тихие часы</div>
                     <Switch on={s.quietOn} onClick={() => save({ quietOn: !s.quietOn })} title={s.quietOn ? 'Выключить тихие часы' : 'Включить тихие часы'} />
                   </div>
                   {s.quietOn && (
                     <>
-                      <div style={css('display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 9px')}>
+                      <div className={sty.c714f50b}>
                         <div className="field">
                           <label htmlFor="quiet-from">С</label>
                           <select id="quiet-from" className="input" value={s.quietFrom} onChange={e => save({ quietFrom: Number(e.target.value) })}>
@@ -251,14 +252,14 @@ export function NotifyRail() {
                           </select>
                         </div>
                       </div>
-                      <label style={css('display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; margin-top: 9px')}>
-                        <input type="checkbox" checked={s.urgentBypass} onChange={e => save({ urgentBypass: e.target.checked })} style={css('accent-color: var(--color-accent); width: 14px; height: 14px')} />
+                      <label className={sty.cd663655}>
+                        <input type="checkbox" checked={s.urgentBypass} onChange={e => save({ urgentBypass: e.target.checked })} className={sty.c9002738} />
                         <span>Срочные смены приходят и в тихие часы</span>
                       </label>
                     </>
                   )}
 
-                  <div className="field" style={css('margin-top: 12px')}>
+                  <div className={'field ' + sty.c4bb9003}>
                     <label htmlFor="notify-cap">Не больше уведомлений в день</label>
                     <select id="notify-cap" className="input" value={s.dailyCap} onChange={e => save({ dailyCap: Number(e.target.value) })}>
                       {[3, 5, 10, 30].map(v => <option key={v} value={v}>{'до ' + v}</option>)}
@@ -272,38 +273,38 @@ export function NotifyRail() {
               )}
             </div>
 
-            <div className="blueprint" style={css('margin-top: 14px; padding: 13px 12px')}>
+            <div className={'blueprint ' + sty.cfddee99}>
               <Corners />
-              <div style={css('display: flex; justify-content: space-between; align-items: center; gap: 8px')}>
+              <div className={sty.c962b5bc}>
                 <div style={css(LABEL)}>Рабочий режим</div>
                 <Switch on={live.workMode} onClick={() => live.setWorkMode(!live.workMode)} title={live.workMode ? 'Выключить рабочий режим' : 'Включить рабочий режим'} />
               </div>
               <div style={css(NOTE + '; margin-top: 7px')}>Крупные кнопки и строки — удобно в перчатках и на ходу. Реклама в рабочем режиме не показывается. Настройка хранится на этом устройстве.</div>
             </div>
 
-            <div className="blueprint" style={css('margin-top: 14px; padding: 13px 12px')}>
+            <div className={'blueprint ' + sty.cfddee99}>
               <Corners />
               <div style={css(LABEL)}>База для поиска</div>
-              <div style={css('font-size: 14px; line-height: 1.45; margin-top: 7px')}>
+              <div className={sty.c7275f29}>
                 {'Сейчас: ' + me.baseLabel + '. От неё считаются расстояния на карте' + (isFree ? ' и оповещения о сменах рядом.' : '.')}
               </div>
-              <div style={css('display: flex; gap: 6px; margin-top: 10px')}>
-                <input className="input" value={baseQ} onChange={e => { setBaseQ(e.target.value); setBaseErr(''); }} onKeyDown={e => { if (e.key === 'Enter') changeBase(); }}
-                  aria-label="Новая база" placeholder="город, посёлок или адрес" style={css('flex: 1; min-width: 0; height: 38px; min-height: 38px; font-size: 13px; padding: 0 10px')} />
-                <button className="btn btn-secondary" onClick={changeBase} disabled={busy} style={css('height: 38px; font-size: 13px; flex: none')}>{busy ? 'Ищем…' : 'Сменить'}</button>
+              <div className={sty.ce4947c8}>
+                <input className={'input ' + sty.c168acf6} value={baseQ} onChange={e => { setBaseQ(e.target.value); setBaseErr(''); }} onKeyDown={e => { if (e.key === 'Enter') changeBase(); }}
+                  aria-label="Новая база" placeholder="город, посёлок или адрес" />
+                <button className={'btn btn-secondary ' + sty.c07b4ee6} onClick={changeBase} disabled={busy}>{busy ? 'Ищем…' : 'Сменить'}</button>
               </div>
-              {baseErr && <div role="alert" style={css('font-size: 13px; line-height: 1.4; margin-top: 6px; color: var(--color-accent-900); font-weight: 600')}>{baseErr}</div>}
+              {baseErr && <div role="alert" className={sty.ca8c5b3d}>{baseErr}</div>}
             </div>
 
-            <div className="blueprint" style={css('margin-top: 14px; padding: 12px')}>
+            <div className={'blueprint ' + sty.c8562f72}>
               <Corners />
               <div style={css(LABEL)}>Обозначения</div>
-              <div style={css('display: grid; gap: 6px; margin-top: 8px; font-size: 13px; color: color-mix(in srgb, var(--color-text) 78%, transparent)')}>
-                <div style={css('display: flex; align-items: center; gap: 8px')}><span style={css('width: 14px; height: 14px; border: 1px solid var(--color-accent); flex: none')} />Заказ на карте</div>
-                <div style={css('display: flex; align-items: center; gap: 8px')}><span style={css('width: 14px; height: 14px; border: 1px solid var(--color-accent); background: var(--color-accent); flex: none')} />Выбранный заказ</div>
-                <div style={css('display: flex; align-items: center; gap: 8px')}><span style={css('width: 14px; height: 14px; border: 1px dashed var(--color-accent); flex: none')} />Черновик заказа</div>
-                <div style={css('display: flex; align-items: center; gap: 8px')}><span style={css('width: 9px; height: 9px; border: 1px solid var(--color-accent); margin: 0 2px; flex: none')} />Точка — заказ на плотной карте</div>
-                <div style={css('display: flex; align-items: center; gap: 8px')}><span style={css('width: 18px; height: 18px; display: grid; place-items: center; font-family: var(--font-heading); font-size: 12px; color: var(--color-bg); background: var(--color-accent); border: 1px solid var(--color-accent-900); flex: none')}>7</span>Группа заказов — клик приближает</div>
+              <div className={sty.c51837f3}>
+                <div className={sty.cca8dfae}><span className={sty.c4729215} />Заказ на карте</div>
+                <div className={sty.cca8dfae}><span className={sty.c5981d15} />Выбранный заказ</div>
+                <div className={sty.cca8dfae}><span className={sty.cf3db642} />Черновик заказа</div>
+                <div className={sty.cca8dfae}><span className={sty.cd0f69c5} />Точка — заказ на плотной карте</div>
+                <div className={sty.cca8dfae}><span className={'fh ' + sty.cfc1c96f}>7</span>Группа заказов — клик приближает</div>
               </div>
             </div>
           </>

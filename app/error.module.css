@@ -1,0 +1,5 @@
+/* Статичные стили прототипа (scripts/css-modules.mjs): :where — специфичность атрибута style, !important — его приоритет. */
+:where(.cfd54dbe) {
+  height: 42px !important;
+  padding: 0 18px !important;
+}

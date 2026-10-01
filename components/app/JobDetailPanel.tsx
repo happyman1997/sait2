@@ -8,6 +8,7 @@ import { crewOf, dateLabel, jobNum, jobStatus, money, type JobDetail, type JobSu
 import { ApplicantsBlock, LeaveShiftForm, MoveDateForm, ShiftBlock, type Act, type ReviewOpen } from './ShiftBlock';
 import { SeriesBlock } from './SeriesBlock';
 import { Corners, LABEL } from './ui';
+import sty from './JobDetailPanel.module.css';
 
 const CANCEL_REASONS = ['объект отменил работы', 'погода изменилась', 'нашли своих людей', 'ошибка в заказе', 'другая причина'];
 
@@ -87,10 +88,10 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
 
   const applyBtn = () => {
     if (!role) return (
-      <Link href={'/auth?apply=' + job.num} className="btn btn-primary btn-block" style={css('margin-top: 14px; height: 52px; font-size: 16px')}>Откликнуться на заказ</Link>
+      <Link href={'/auth?apply=' + job.num} className={'btn btn-primary btn-block ' + sty.c570d8ab}>Откликнуться на заказ</Link>
     );
     return (
-      <button className="btn btn-primary btn-block" onClick={() => onApply(reqOk)} disabled={busy || st.key !== 'open' || isEmp} style={css('margin-top: 14px; height: 52px; font-size: 16px')}>
+      <button className={'btn btn-primary btn-block ' + sty.c570d8ab} onClick={() => onApply(reqOk)} disabled={busy || st.key !== 'open' || isEmp}>
         {isEmp && st.key === 'open' ? 'Откликаются исполнители' : st.label}
       </button>
     );
@@ -100,101 +101,101 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
 
   return (
     <div>
-      <div style={css('display: flex; justify-content: space-between; align-items: baseline; gap: 10px')}>
+      <div className={sty.cf5c1e62}>
         <div style={css(LABEL)}>Заказ {jobNum(job.num)}{job.district ? ' · ' + job.district : ''}</div>
-        <button className="btn btn-ghost" onClick={onClose} style={css('height: 28px; font-size: 13px')}>Закрыть</button>
+        <button className={'btn btn-ghost ' + sty.c4b8d758} onClick={onClose}>Закрыть</button>
       </div>
-      <h3 style={css('margin: 6px 0 0; font-size: 26px; line-height: 1.05; text-transform: uppercase; letter-spacing: .01em')}>{job.title}</h3>
-      <div style={css('display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap')}>
+      <h3 className={sty.ce5f1500}>{job.title}</h3>
+      <div className={sty.cf74fada}>
         <span className="tag tag-accent">{job.typeLabel}</span>
         <span className={s.cls}>{s.label}</span>
         {job.mine && <span className="tag tag-neutral">ваш заказ</span>}
       </div>
 
       {!job.mine && (
-        <div className="blueprint" style={css('margin-top: 16px; padding: 16px 17px')}>
+        <div className={'blueprint ' + sty.c19ead0a}>
           <Corners />
-          <div style={css('font-family: var(--font-heading); font-size: 38px; line-height: 1; color: var(--color-accent-900)')}>{money(job.pay, job.unit)}</div>
-          <div style={css('font-size: 14px; line-height: 1.45; margin-top: 5px; color: color-mix(in srgb, var(--color-text) 70%, transparent)')}>{when} · {job.payType || 'по договорённости'}</div>
+          <div className={'fh ' + sty.cedbf1c2}>{money(job.pay, job.unit)}</div>
+          <div className={sty.c42a2800}>{when} · {job.payType || 'по договорённости'}</div>
           {job.requirement && (
-            <div style={css('margin-top: 12px; border: 1px solid var(--color-accent); border-radius: 12px; padding: 9px 11px')}>
-              <div style={css('font-family: var(--font-heading); font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 60%, transparent)')}>Условие заказчика</div>
-              <div style={css('font-size: 13.5px; line-height: 1.45; margin-top: 4px; color: var(--color-accent-900)')}>{job.requirement}</div>
+            <div className={sty.c72c2647}>
+              <div className={'fh ' + sty.c870fd56}>Условие заказчика</div>
+              <div className={sty.c18fc486}>{job.requirement}</div>
               {role === 'freelancer' && st.key !== 'applied' && st.key !== 'hired' && (
-                <label style={css('display: flex; align-items: flex-start; gap: 9px; margin-top: 9px; font-size: 13px; line-height: 1.4; cursor: pointer')}>
-                  <input type="checkbox" checked={reqOk} onChange={e => setReqOk(e.target.checked)} style={css('width: 17px; height: 17px; margin-top: 1px; flex: none; accent-color: var(--color-accent)')} />
+                <label className={sty.c2c1389a}>
+                  <input type="checkbox" checked={reqOk} onChange={e => setReqOk(e.target.checked)} className={sty.cfd133d1} />
                   <span>Подтверждаю: условие выполняю — можно отправлять отклик</span>
                 </label>
               )}
-              {!role && <div style={css('font-size: 13px; line-height: 1.4; margin-top: 6px; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>Подтвердить условие можно только в профиле — зарегистрируйтесь, чтобы откликнуться.</div>}
+              {!role && <div className={sty.ce8dd76b}>Подтвердить условие можно только в профиле — зарегистрируйтесь, чтобы откликнуться.</div>}
             </div>
           )}
           {applyBtn()}
           {role === 'freelancer' && job.myStatus === 'sent' && (
-            <button className="btn btn-ghost btn-block" onClick={onWithdraw} disabled={busy} style={css('margin-top: 8px; height: 40px; font-size: 14px')}>Отказаться</button>
+            <button className={'btn btn-ghost btn-block ' + sty.cdf03ebe} onClick={onWithdraw} disabled={busy}>Отказаться</button>
           )}
-          <div style={css('font-size: 13px; line-height: 1.4; margin-top: 9px; color: color-mix(in srgb, var(--color-text) 62%, transparent)')}>
+          <div className={sty.cbca74d7}>
             {isEmp ? 'Откликаться может только исполнитель — для этого нужен отдельный аккаунт.' : 'Отклик ни к чему не обязывает — условия и адрес можно прочитать ниже.'}
           </div>
         </div>
       )}
 
       {job.cancellation && (
-        <div style={css('margin-top: 14px; border: 1px solid var(--color-accent); padding: 10px 12px')}>
-          <div style={css('font-size: 14px; line-height: 1.45; color: var(--color-accent-900)')}>
+        <div className={sty.caabaa43}>
+          <div className={sty.c765e4b4}>
             Отменено {new Date(job.cancellation.at).toLocaleDateString('ru-RU')} · работодатель · {job.cancellation.reason} · {job.cancellation.notice}{job.cancellation.late ? ' · пометка в профиле' : ''}
           </div>
         </div>
       )}
 
-      <div className="blueprint" style={css('margin-top: 20px; padding: 0')}>
+      <div className={'blueprint ' + sty.ce938c7b}>
         <Corners />
         {specs.map(sp => (
-          <div key={sp.label} style={css('display: flex; justify-content: space-between; gap: 14px; padding: 10px 13px; border-bottom: 1px solid var(--color-divider)')}>
-            <span style={css('font-family: var(--font-heading); font-size: 13px; letter-spacing: .16em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>{sp.label}</span>
-            <span style={css('font-size: 14px; text-align: right; overflow-wrap: anywhere')}>{sp.value}</span>
+          <div key={sp.label} className={sty.c71d0385}>
+            <span className={'fh ' + sty.c8d02d9e}>{sp.label}</span>
+            <span className={sty.cf2ce843}>{sp.value}</span>
           </div>
         ))}
       </div>
 
-      <div style={css('margin-top: 16px; font-size: 14px; line-height: 1.55; color: color-mix(in srgb, var(--color-text) 75%, transparent); text-wrap: pretty; white-space: pre-line')}>{job.description}</div>
+      <div className={sty.c5dd66ad}>{job.description}</div>
 
       {job.series && <SeriesBlock job={job} act={act} busy={busy} onReview={onReview} />}
 
-      <button className="btn btn-ghost" onClick={() => setMore(m => !m)} style={css('margin-top: 12px; height: 32px; font-size: 13px; padding: 0 8px; margin-left: -8px')}>{more ? 'Скрыть условия заказа' : 'Все условия заказа →'}</button>
+      <button className={'btn btn-ghost ' + sty.c6f1722e} onClick={() => setMore(m => !m)}>{more ? 'Скрыть условия заказа' : 'Все условия заказа →'}</button>
       {more && (
-        <div className="blueprint" style={css('margin-top: 8px; padding: 0')}>
+        <div className={'blueprint ' + sty.c1fcc62d}>
           <Corners />
           <div style={css(LABEL + '; padding: 11px 13px 0')}>До выхода</div>
           {brief(job).map(b => (
-            <div key={b.label} style={css('padding: 9px 13px; border-bottom: 1px solid var(--color-divider)')}>
-              <div style={css('font-family: var(--font-heading); font-size: 13px; letter-spacing: .16em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>{b.label}</div>
-              <div style={css('font-size: 14px; line-height: 1.45; margin-top: 2px')}>{b.value}</div>
+            <div key={b.label} className={sty.c8567366}>
+              <div className={'fh ' + sty.c8d02d9e}>{b.label}</div>
+              <div className={sty.ce8c9345}>{b.value}</div>
             </div>
           ))}
         </div>
       )}
 
-      <div className="hr" style={css('margin: 18px 0')} />
+      <div className={'hr ' + sty.cd13d540} />
 
-      <div style={css('display: flex; align-items: center; gap: 12px')}>
-        <div style={css('width: 40px; height: 40px; border: 1px solid var(--color-divider); display: grid; place-items: center; font-family: var(--font-heading); font-size: 14px; color: var(--color-accent-700); flex: none')}>{job.employer.initials}</div>
-        <div style={css('min-width: 0')}>
-          <button onClick={() => setPerson(true)} title="Открыть профиль" style={css('all: unset; cursor: pointer; font-family: var(--font-heading); font-weight: 600; font-size: 17px; text-transform: uppercase; letter-spacing: .02em; text-decoration: underline; text-decoration-color: var(--color-divider); text-underline-offset: 3px')}>{job.employer.name}</button>
-          <div style={css('font-size: 13px; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>
+      <div className={sty.cb264e9d}>
+        <div className={'fh ' + sty.c2d881fc}>{job.employer.initials}</div>
+        <div className={sty.c33f2a66}>
+          <button onClick={() => setPerson(true)} title="Открыть профиль" className={'fh ' + sty.c0929946}>{job.employer.name}</button>
+          <div className={sty.cdde3848}>
             {job.employer.rating != null ? 'рейтинг ' + job.employer.rating.toFixed(1) : 'пока без оценок'} · {job.employer.jobs} заказ{job.employer.jobs % 10 === 1 && job.employer.jobs % 100 !== 11 ? '' : job.employer.jobs % 10 >= 2 && job.employer.jobs % 10 <= 4 && (job.employer.jobs % 100 < 12 || job.employer.jobs % 100 > 14) ? 'а' : 'ов'}
           </div>
         </div>
       </div>
 
       {role === 'freelancer' && job.myStatus === 'sent' && (
-        <div style={css('margin-top: 10px; font-size: 13px; line-height: 1.4; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>Чат откроется, когда работодатель наймёт вас на этот заказ.</div>
+        <div className={sty.c8800ce9}>Чат откроется, когда работодатель наймёт вас на этот заказ.</div>
       )}
       {role === 'freelancer' && job.shift?.noShow && (
-        <div style={css('margin-top: 12px; border: 1px solid var(--color-accent); padding: 9px 11px; font-size: 13.5px; line-height: 1.45; color: var(--color-accent-900)')}>Работодатель отметил «Не вышел» — вы сняты со смены, отметка видна в профиле.</div>
+        <div className={sty.cf827e84}>Работодатель отметил «Не вышел» — вы сняты со смены, отметка видна в профиле.</div>
       )}
       {role === 'freelancer' && job.shift?.withdrawal && job.myStatus !== 'hired' && (
-        <div style={css('margin-top: 12px; border: 1px solid var(--color-accent); padding: 9px 11px; font-size: 13.5px; line-height: 1.45; color: var(--color-accent-900)')}>
+        <div className={sty.cf827e84}>
           Вы отказались {new Date(job.shift.withdrawal.at).toLocaleDateString('ru-RU')} · {job.shift.withdrawal.reason} · {job.shift.withdrawal.notice}{job.shift.withdrawal.late ? ' · пометка в профиле на 90 дней' : ' · без последствий для рейтинга'}
         </div>
       )}
@@ -203,71 +204,71 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
         <ShiftBlock job={job} isOwner={job.mine} act={act} onChat={onChat} onReview={onReview} busy={busy} />
       )}
       {role === 'freelancer' && job.myStatus === 'hired' && (job.status === 'open' || job.status === 'staffed') && !leaveOpen && (
-        <button className="btn btn-ghost btn-block" onClick={() => setLeaveOpen(true)} style={css('margin-top: 8px; height: 42px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Отказаться от смены</button>
+        <button className={'btn btn-ghost btn-block ' + sty.c5da0771} onClick={() => setLeaveOpen(true)}>Отказаться от смены</button>
       )}
       {leaveOpen && <LeaveShiftForm act={act} busy={busy} onClose={() => setLeaveOpen(false)} />}
 
       {closed && (
-        <div className="blueprint" style={css('margin-top: 14px; padding: 13px 14px')}>
+        <div className={'blueprint ' + sty.cae70be2}>
           <Corners />
           <div style={css(LABEL)}>Набор закрыт</div>
-          <div style={css('font-size: 13.5px; line-height: 1.5; margin-top: 6px; color: color-mix(in srgb, var(--color-text) 76%, transparent); text-wrap: pretty')}>
+          <div className={sty.cc3c2f87}>
             {(crew === 1 ? 'Единственное место на «' + job.title + '» занято' : 'Все места на «' + job.title + '» заняты') +
               ' — отклик закрыт. Если работодатель снимет исполнителя со смены, набор откроется снова.'}
           </div>
-          <div style={css('display: grid; gap: 6px; margin-top: 11px')}>
+          <div className={sty.ca579344}>
             {alternatives.map(a => (
-              <button key={a.num} onClick={() => onOpenJob(a.num)} style={css('text-align: left; cursor: pointer; background: transparent; border: 1px solid var(--color-divider); padding: 8px 10px; font-family: var(--font-body); color: inherit')}>
-                <span style={css('display: flex; justify-content: space-between; gap: 10px; align-items: baseline; flex-wrap: wrap')}>
-                  <span style={css('font-family: var(--font-heading); font-size: 15px; text-transform: uppercase; letter-spacing: .02em; min-width: 0')}>{a.title}</span>
-                  <span style={css('font-family: var(--font-heading); font-size: 15px; white-space: nowrap')}>{money(a.pay, a.unit)}</span>
+              <button key={a.num} onClick={() => onOpenJob(a.num)} className={sty.c5efb3fe}>
+                <span className={sty.cebf0f9b}>
+                  <span className={'fh ' + sty.cb541011}>{a.title}</span>
+                  <span className={'fh ' + sty.ce4bef58}>{money(a.pay, a.unit)}</span>
                 </span>
-                <span style={css('display: block; font-size: 13px; line-height: 1.4; margin-top: 2px; color: color-mix(in srgb, var(--color-text) 68%, transparent)')}>{(a.district || a.address) + ' · ' + dateLabel(a.date)}</span>
+                <span className={sty.cd49428a}>{(a.district || a.address) + ' · ' + dateLabel(a.date)}</span>
               </button>
             ))}
           </div>
-          {!alternatives.length && <div style={css('font-size: 13px; line-height: 1.45; margin-top: 10px; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>Похожего рядом нет — загляните на карту позже.</div>}
+          {!alternatives.length && <div className={sty.c72e1cb3}>Похожего рядом нет — загляните на карту позже.</div>}
         </div>
       )}
 
       {job.mine && job.applicantList && job.status !== 'cancelled' && <ApplicantsBlock job={job} act={act} onChat={onChat} busy={busy} />}
 
       {job.mine && job.status !== 'cancelled' && job.status !== 'accepted' && !cancelOpen && (
-        <div style={css('display: grid; gap: 8px; margin-top: 14px')}>
+        <div className={sty.c5a8e8a5}>
           {job.status === 'open' && job.hired === 0 && (
-            <button className="btn btn-secondary" onClick={onEdit} style={css('height: 42px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Изменить условия</button>
+            <button className={'btn btn-secondary ' + sty.c98c3d34} onClick={onEdit}>Изменить условия</button>
           )}
-          <button className="btn btn-ghost" onClick={() => { setCancelOpen(true); setMoveOpen(false); }} style={css('height: 42px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Отменить смену</button>
-          {!moveOpen && <button className="btn btn-ghost" onClick={() => setMoveOpen(true)} style={css('height: 42px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Перенести дату выхода</button>}
+          <button className={'btn btn-ghost ' + sty.c98c3d34} onClick={() => { setCancelOpen(true); setMoveOpen(false); }}>Отменить смену</button>
+          {!moveOpen && <button className={'btn btn-ghost ' + sty.c98c3d34} onClick={() => setMoveOpen(true)}>Перенести дату выхода</button>}
         </div>
       )}
       {moveOpen && !cancelOpen && <MoveDateForm job={job} act={act} busy={busy} onClose={() => setMoveOpen(false)} />}
 
       {cancelOpen && (
-        <div className="blueprint" style={css('margin-top: 12px; padding: 13px 12px')}>
+        <div className={'blueprint ' + sty.c0a5aa83}>
           <Corners />
           <div style={css(LABEL)}>Отмена смены</div>
-          <div className="field" style={css('margin-top: 10px')}>
+          <div className={'field ' + sty.ce5a6d3c}>
             <label htmlFor="cancel-reason">Причина</label>
             <select id="cancel-reason" className="input" value={reason} onChange={e => setReason(e.target.value)}>
               {CANCEL_REASONS.map(r => <option key={r}>{r}</option>)}
             </select>
           </div>
-          <div className="field" style={css('margin-top: 10px')}>
+          <div className={'field ' + sty.ce5a6d3c}>
             <label htmlFor="cancel-notice">За сколько до выхода</label>
             <select id="cancel-notice" className="input" value={notice} onChange={e => setNotice(e.target.value)}>
               <option>больше суток</option>
               <option>меньше суток</option>
             </select>
           </div>
-          <div style={css('font-size: 13px; line-height: 1.45; margin-top: 10px; color: var(--color-accent-900); border: 1px solid var(--color-accent); padding: 9px 10px')}>
+          <div className={sty.c3e92d4d}>
             {lateNow
               ? 'Поздняя отмена: пометка в карточке работодателя на 90 дней и уведомление нанятым исполнителям. Денежных удержаний платформа не делает — компенсацию стороны решают между собой.'
               : job.hired > 0 ? 'Отмена заранее: исполнители получат уведомление, на рейтинг не влияет.' : 'Нанятых пока нет — откликнувшиеся получат уведомление, на рейтинг не влияет.'}
           </div>
-          <div style={css('display: flex; gap: 8px; margin-top: 12px')}>
-            <button className="btn btn-primary" disabled={busy} onClick={() => onCancel(reason, notice)} style={css('flex: 1; height: 42px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase')}>Подтвердить отмену</button>
-            <button className="btn btn-ghost" onClick={() => setCancelOpen(false)} style={css('height: 42px; font-size: 13px; padding: 0 14px')}>Назад</button>
+          <div className={sty.c5c223c4}>
+            <button className={'btn btn-primary ' + sty.ca96b295} disabled={busy} onClick={() => onCancel(reason, notice)}>Подтвердить отмену</button>
+            <button className={'btn btn-ghost ' + sty.c4066974} onClick={() => setCancelOpen(false)}>Назад</button>
           </div>
         </div>
       )}
@@ -286,35 +287,35 @@ function PersonModal({ job, onClose }: { job: JobDetail; onClose: () => void }) 
     { label: 'Расчёт', value: job.payType || 'по договорённости' }
   ];
   return (
-    <div style={css('position: fixed; inset: 0; z-index: 140; display: grid; place-items: center; padding: 20px; background: rgba(24, 30, 36, .48)')} onKeyDown={ev => { if (ev.key === 'Escape') onClose(); }}>
-      <div onClick={onClose} style={css('position: absolute; inset: 0')} />
-      <div className="blueprint" role="dialog" aria-modal="true" aria-label={'Профиль работодателя ' + e.name} style={css('position: relative; z-index: 141; width: min(460px, 94vw); background: var(--color-bg); box-shadow: 0 24px 60px rgba(20, 26, 32, .3)')}>
+    <div className={sty.cbc34164} onKeyDown={ev => { if (ev.key === 'Escape') onClose(); }}>
+      <div onClick={onClose} className={sty.ccd59aab} />
+      <div className={'blueprint ' + sty.cb9527de} role="dialog" aria-modal="true" aria-label={'Профиль работодателя ' + e.name}>
         <Corners />
-        <div style={css('max-height: 86vh; overflow-y: auto; overflow-x: hidden; padding: 20px 22px; box-sizing: border-box')}>
-          <div style={css('display: flex; align-items: flex-start; gap: 14px')}>
-            <div style={css('width: 58px; height: 58px; border: 1px solid var(--color-accent); display: grid; place-items: center; font-family: var(--font-heading); font-size: 20px; color: var(--color-accent-700); flex: none')}>{e.initials}</div>
-            <div style={css('flex: 1; min-width: 0')}>
-              <div style={css('font-family: var(--font-heading); font-size: 11.5px; letter-spacing: .2em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 58%, transparent)')}>Профиль работодателя</div>
-              <div style={css('font-family: var(--font-heading); font-size: 23px; line-height: 1.05; text-transform: uppercase; letter-spacing: .02em')}>{e.name}</div>
-              <div style={css('font-size: 13px; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>{e.since}</div>
+        <div className={sty.c83a5d4f}>
+          <div className={sty.c16ff81f}>
+            <div className={'fh ' + sty.cb63922d}>{e.initials}</div>
+            <div className={sty.c8b4ab7f}>
+              <div className={'fh ' + sty.c4afa4c3}>Профиль работодателя</div>
+              <div className={'fh ' + sty.c439f72f}>{e.name}</div>
+              <div className={sty.cdde3848}>{e.since}</div>
             </div>
-            <button onClick={onClose} title="Закрыть" aria-label="Закрыть" autoFocus style={css('all: unset; cursor: pointer; flex: none; font-size: 19px; line-height: 1; color: color-mix(in srgb, var(--color-text) 60%, transparent)')}>×</button>
+            <button onClick={onClose} title="Закрыть" aria-label="Закрыть" autoFocus className={sty.c3e4983f}>×</button>
           </div>
-          <div style={css('display: grid; gap: 7px; margin-top: 16px')}>
+          <div className={sty.ccc38f46}>
             {facts.map(f => (
-              <div key={f.label} style={css('display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; align-items: baseline; border-top: 1px solid var(--color-divider); padding-top: 7px')}>
-                <span style={css('font-family: var(--font-heading); font-size: 11.5px; letter-spacing: .16em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 58%, transparent); white-space: nowrap')}>{f.label}</span>
-                <span style={css('font-size: 13.5px; line-height: 1.35; text-align: right')}>{f.value}</span>
+              <div key={f.label} className={sty.c0271a98}>
+                <span className={'fh ' + sty.c7c21188}>{f.label}</span>
+                <span className={sty.ca2be77f}>{f.value}</span>
               </div>
             ))}
           </div>
           {(job.access.length > 0 || job.tools) && (
-            <div style={css('display: flex; flex-wrap: wrap; gap: 5px; margin-top: 14px')}>
+            <div className={sty.c13d4ae9}>
               {job.access.concat(job.tools ? [job.tools] : []).map(t => <span key={t} className="tag tag-outline">{t}</span>)}
             </div>
           )}
-          <div style={css('font-size: 12.5px; line-height: 1.4; margin-top: 14px; color: color-mix(in srgb, var(--color-text) 60%, transparent)')}>Телефон открывается после найма — в чате и карточке смены.</div>
-          <button className="btn btn-secondary btn-block" onClick={onClose} style={css('margin-top: 12px; height: 40px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Закрыть</button>
+          <div className={sty.cc43d001}>Телефон открывается после найма — в чате и карточке смены.</div>
+          <button className={'btn btn-secondary btn-block ' + sty.c72a8236} onClick={onClose}>Закрыть</button>
         </div>
       </div>
     </div>

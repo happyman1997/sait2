@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { css } from '@/lib/css';
 import { useLive } from './Live';
+import sty from './MobileShell.module.css';
 
 export const NAV_H = 'calc(56px + env(safe-area-inset-bottom))';
 
@@ -17,14 +18,14 @@ export function MobileBar() {
   if (!me) return null;
   const heading = path === '/mine' && me.role === 'employer' ? 'мои заказы' : HEADING[path] || '';
   return (
-    <div className="only-narrow" style={css('flex: none; align-items: center; gap: 8px; padding: max(8px, env(safe-area-inset-top)) 10px 8px 16px; border-bottom: 1px solid var(--color-divider); background: var(--color-bg)')}>
-      <Link href="/" onClick={() => window.dispatchEvent(new Event('arena:home'))} style={css('font-family: var(--font-heading); font-weight: 600; font-size: 18px; letter-spacing: .14em; text-transform: uppercase; color: inherit; text-decoration: none; white-space: nowrap')}>Арена Работы</Link>
-      <span style={css('font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 62%, transparent); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap')}>{heading}</span>
+    <div className={'only-narrow ' + sty.cd052a46}>
+      <Link href="/" onClick={() => window.dispatchEvent(new Event('arena:home'))} className={'fh ' + sty.c03ad802}>Арена Работы</Link>
+      <span className={sty.cee04050}>{heading}</span>
       <span style={{ flex: 1 }} />
       <button onClick={() => setRail('journal')} aria-label={'Журнал' + (journal ? ', новых: ' + journal : '')}
-        style={css('flex: none; position: relative; width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid var(--color-divider); background: transparent; cursor: pointer; color: inherit')}>
+        className={sty.c4012f9c}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
-        {journal > 0 && <span style={css('position: absolute; top: 3px; right: 3px; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; background: var(--color-accent); color: #fff; font-family: var(--font-heading); font-size: 11px; line-height: 16px; text-align: center')}>{journal > 99 ? '99+' : journal}</span>}
+        {journal > 0 && <span className={'fh ' + sty.c13cd613}>{journal > 99 ? '99+' : journal}</span>}
       </button>
     </div>
   );
@@ -48,11 +49,10 @@ export function MobileNav() {
     <>
       {/* Место под фиксированное меню, чтобы контент не уходил под него */}
       <div className="only-narrow" aria-hidden="true" style={css('flex: none; height: ' + NAV_H)} />
-      <nav className="only-narrow" aria-label="Разделы"
-        style={css('position: fixed; left: 0; right: 0; bottom: 0; z-index: 85; padding-bottom: env(safe-area-inset-bottom); border-top: 1px solid var(--color-divider); background: var(--color-neutral-100)')}>
+      <nav className={'only-narrow ' + sty.c4b8dcc6} aria-label="Разделы">
         {items.map(it => {
           const on = it.key === 'chat' ? dock.open : !dock.open && path === it.key;
-          const inner = <>{it.label}{!!it.badge && <span style={css('min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; background: var(--color-accent); color: #fff; font-size: 11px; line-height: 16px; text-align: center')}>{it.badge}</span>}</>;
+          const inner = <>{it.label}{!!it.badge && <span className={sty.cedbcc9d}>{it.badge}</span>}</>;
           return it.href
             ? <Link key={it.key} href={it.href} onClick={() => setDock({ open: false })} aria-current={on ? 'page' : undefined} style={style(on)}>{inner}</Link>
             : <button key={it.key} onClick={() => setDock({ open: !dock.open, view: dock.view })} aria-pressed={on} style={style(on)}>{inner}</button>;

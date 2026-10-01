@@ -9,6 +9,7 @@ import { dateLabel, isSeries, jobNum, jobStatus, localISO, money, plural, series
 import { useFlash } from '@/components/Toast';
 import { useLive, useLiveEvent } from './Live';
 import { Corners } from './ui';
+import sty from './MyJobsPage.module.css';
 
 const daysLeft = (iso: string) => Math.max(0, Math.ceil((Date.parse(iso) - Date.now()) / 86400000));
 
@@ -102,10 +103,10 @@ export function MyJobsPage({ role }: { role: 'freelancer' | 'employer' }) {
   };
 
   return (
-    <div style={css('flex: 1; min-height: 0; overflow: auto; padding: 22px max(24px, calc((100% - 1280px) / 2)) 90px')}>
-      <h2 style={css('margin: 0 0 18px; font-size: 29px; text-transform: uppercase; letter-spacing: .02em')}>{emp ? 'Мои заказы' : 'Мои смены'}</h2>
-      {!jobs && <div style={css('font-size: 14px; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>Загружаем…</div>}
-      <div style={css('display: grid; gap: 13px')}>
+    <div className={sty.c04b825c}>
+      <h2 className={sty.c197cab9}>{emp ? 'Мои заказы' : 'Мои смены'}</h2>
+      {!jobs && <div className={sty.c816d564}>Загружаем…</div>}
+      <div className={sty.c82a9418}>
         {jobs?.map(j => {
           const sub = isSubOnly(j, emp);
           const subLive = sub && j.status !== 'cancelled' && j.status !== 'accepted';
@@ -117,58 +118,57 @@ export function MyJobsPage({ role }: { role: 'freelancer' | 'employer' }) {
           const t = track(j, emp);
           const hasNext = !sub && t.cur >= 0 && (emp ? t.cur === 1 || t.cur === 2 : t.cur === 2 && !t.reported);
           return (
-            <div key={j.num} className="card blueprint" style={css('padding: 16px 18px')}>
+            <div key={j.num} className={'card blueprint ' + sty.c082f045}>
               <Corners />
-              <div style={css('display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap')}>
-                <div style={css('font-family: var(--font-heading); font-size: 14px; letter-spacing: .2em; color: color-mix(in srgb, var(--color-text) 62%, transparent); padding-top: 6px')}>{jobNum(j.num)}</div>
-                <div style={css('flex: 1; min-width: 190px')}>
-                  <div style={css('font-family: var(--font-heading); font-weight: 600; font-size: 20px; text-transform: uppercase; letter-spacing: .02em')}>{j.title}</div>
-                  <div style={css('font-size: 14px; color: color-mix(in srgb, var(--color-text) 70%, transparent); margin-top: 2px')}>{j.address} · {sub ? 'замена ' + dayList(subShown) : dateLabel(j.date)}</div>
-                  <div style={css('margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap')}>
+              <div className={sty.c6dae14f}>
+                <div className={'fh ' + sty.c9f4231f}>{jobNum(j.num)}</div>
+                <div className={sty.c1dddb55}>
+                  <div className={'fh ' + sty.c10a0e6b}>{j.title}</div>
+                  <div className={sty.c6490c3f}>{j.address} · {sub ? 'замена ' + dayList(subShown) : dateLabel(j.date)}</div>
+                  <div className={sty.c9e6b1c6}>
                     <span className={s.cls}>{s.label}</span>
-                    <span style={css('font-size: 13px; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>
+                    <span className={sty.cdde3848}>
                       {emp ? j.applicants + ' ' + plural(j.applicants, 'отклик', 'отклика', 'откликов') + (j.counterpart ? ' · нанят: ' + j.counterpart : '') : 'работодатель ' + j.counterpart}
                     </span>
                   </div>
                 </div>
-                <div style={css('text-align: right')}>
-                  <div style={css('font-family: var(--font-heading); font-weight: 600; font-size: 22px')}>{money(j.pay, j.unit)}</div>
-                  <div style={css('display: flex; gap: 6px; margin-top: 8px; justify-content: flex-end')}>
-                    <Link href={'/?job=' + j.num} className="btn btn-secondary" style={css('height: 32px; font-size: 13px')}>На карте</Link>
-                    {j.hasChat && <button className="btn btn-secondary" onClick={() => (j.chatThread ? openChat(j.num, j.chatThread) : setDock({ open: true, view: 'list' }))} style={css('height: 32px; font-size: 13px')}>Чат</button>}
+                <div className={sty.c30489cb}>
+                  <div className={'fh ' + sty.cade7558}>{money(j.pay, j.unit)}</div>
+                  <div className={sty.c9a16b17}>
+                    <Link href={'/?job=' + j.num} className={'btn btn-secondary ' + sty.c7730a85}>На карте</Link>
+                    {j.hasChat && <button className={'btn btn-secondary ' + sty.c7730a85} onClick={() => (j.chatThread ? openChat(j.num, j.chatThread) : setDock({ open: true, view: 'list' }))}>Чат</button>}
                   </div>
                 </div>
               </div>
-              <div style={css('display: flex; gap: 6px; margin-top: 14px')}>
+              <div className={sty.ce672ace}>
                 {t.stages.map((st, i) => (
                   <div key={st.label} style={css(t.off
                     ? 'flex: 1; min-width: 0; padding: 7px 9px; border: 1px dashed var(--color-divider); background: transparent; color: color-mix(in srgb, var(--color-text) 50%, transparent); font-size: 12.5px; line-height: 1.25; text-decoration: line-through'
                     : 'flex: 1; min-width: 0; padding: 7px 9px; border: 1px solid ' + (st.ok ? 'var(--color-accent)' : i === t.cur ? 'color-mix(in srgb, var(--color-accent) 40%, var(--color-divider))' : 'var(--color-divider)') +
                       '; background: ' + (st.ok ? 'color-mix(in srgb, var(--color-accent) 14%, transparent)' : 'transparent') +
                       '; color: ' + (st.ok ? 'var(--color-accent-900)' : i === t.cur ? 'color-mix(in srgb, var(--color-text) 72%, transparent)' : 'color-mix(in srgb, var(--color-text) 58%, transparent)') + '; font-size: 12.5px; line-height: 1.25')}>
-                    <div style={css('font-family: var(--font-heading); font-size: 12px; letter-spacing: .16em')}>{t.off ? '×' : st.ok ? '✓' : String(i + 1)}</div>
-                    <div style={css('margin-top: 2px')}>{st.label}</div>
+                    <div className={'fh ' + sty.c945e30f}>{t.off ? '×' : st.ok ? '✓' : String(i + 1)}</div>
+                    <div className={sty.c46a7c4f}>{st.label}</div>
                   </div>
                 ))}
               </div>
-              <div style={css('display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 9px')}>
-                <span style={css('font-size: 13.5px; line-height: 1.4; min-width: 0; flex: 1 1 260px; color: color-mix(in srgb, var(--color-text) 72%, transparent)')}>{t.note}</span>
+              <div className={sty.cc626c4c}>
+                <span className={sty.ce3c4e73}>{t.note}</span>
                 {hasNext && (emp && t.cur === 1
-                  ? <Link href="/apps" className="btn btn-primary" style={css('height: 40px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; padding: 0 16px; flex: none')}>Смотреть отклики</Link>
+                  ? <Link href="/apps" className={'btn btn-primary ' + sty.ca52b2a4}>Смотреть отклики</Link>
                   : isSeries(j.repeat)
-                  ? <Link href={'/?job=' + j.num} className="btn btn-primary" style={css('height: 40px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; padding: 0 16px; flex: none; display: inline-flex; align-items: center; text-decoration: none')}>Серия выходов</Link>
-                  : <button className="btn btn-primary" disabled={busy || (!emp && !j.repeat && j.date > localISO())}
-                      onClick={() => (emp ? act(j.num, 'accept', 'Работа принята — оцените исполнителя') : act(j.num, 'report', 'Работа сдана — у работодателя 7 дней на приёмку'))}
-                      style={css('height: 40px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; padding: 0 16px; flex: none')}>
+                  ? <Link href={'/?job=' + j.num} className={'btn btn-primary ' + sty.c2792902}>Серия выходов</Link>
+                  : <button className={'btn btn-primary ' + sty.ca52b2a4} disabled={busy || (!emp && !j.repeat && j.date > localISO())}
+                      onClick={() => (emp ? act(j.num, 'accept', 'Работа принята — оцените исполнителя') : act(j.num, 'report', 'Работа сдана — у работодателя 7 дней на приёмку'))}>
                       {emp ? 'Принять работу' : !j.repeat && j.date > localISO() ? 'Сдать работу — с ' + dateLabel(j.date) : 'Сдать работу'}
                     </button>)}
               </div>
               {j.status === 'accepted' && j.reviewable > 0 && (
-                <div style={css('display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; border-top: 1px solid var(--color-divider); padding-top: 10px')}>
-                  <span style={css('font-family: var(--font-heading); font-size: 11.5px; letter-spacing: .18em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 58%, transparent)')}>отзыв · {j.counterpart}</span>
-                  <span style={css('font-size: 13.5px; color: var(--color-accent-900)')}>{j.reviewed >= j.reviewable ? 'отзыв оставлен' : ''}</span>
+                <div className={sty.cefdb4bb}>
+                  <span className={'fh ' + sty.cbf81ab7}>отзыв · {j.counterpart}</span>
+                  <span className={sty.cdcd12d1}>{j.reviewed >= j.reviewable ? 'отзыв оставлен' : ''}</span>
                   <span style={{ flex: 1 }} />
-                  <Link href={'/?job=' + j.num} className="btn btn-secondary" style={css('height: 36px; font-size: 13px; flex: none')}>{j.reviewed >= j.reviewable ? 'Открыть смену' : emp ? 'Оценить исполнителя' : 'Оценить работодателя'}</Link>
+                  <Link href={'/?job=' + j.num} className={'btn btn-secondary ' + sty.cd45276d}>{j.reviewed >= j.reviewable ? 'Открыть смену' : emp ? 'Оценить исполнителя' : 'Оценить работодателя'}</Link>
                 </div>
               )}
             </div>
@@ -176,7 +176,7 @@ export function MyJobsPage({ role }: { role: 'freelancer' | 'employer' }) {
         })}
       </div>
       {jobs && !jobs.length && (
-        <div className="blueprint" style={css('padding: 36px; text-align: center; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>
+        <div className={'blueprint ' + sty.c3225b0f}>
           <Corners />
           Пока пусто. {emp ? 'Отметьте заказ на карте — он появится здесь.' : 'Откликнитесь на заказ — он появится здесь.'}
         </div>

@@ -1,0 +1,158 @@
+/* Статичные стили прототипа (scripts/css-modules.mjs): :where — специфичность атрибута style, !important — его приоритет. */
+:where(.c04b825c) {
+  flex: 1 !important;
+  min-height: 0 !important;
+  overflow: auto !important;
+  padding: 22px max(24px, calc((100% - 1280px) / 2)) 90px !important;
+}
+:where(.c197cab9) {
+  margin: 0 0 18px !important;
+  font-size: 29px !important;
+  text-transform: uppercase !important;
+  letter-spacing: .02em !important;
+}
+:where(.c816d564) {
+  font-size: 14px !important;
+  color: color-mix(in srgb, var(--color-text) 66%, transparent) !important;
+}
+:where(.c82a9418) {
+  display: grid !important;
+  gap: 13px !important;
+}
+:where(.c082f045) {
+  padding: 16px 18px !important;
+}
+:where(.c6dae14f) {
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 16px !important;
+  flex-wrap: wrap !important;
+}
+:where(.c9f4231f) {
+  font-family: var(--font-heading) !important;
+  font-size: 14px !important;
+  letter-spacing: .2em !important;
+  color: color-mix(in srgb, var(--color-text) 62%, transparent) !important;
+  padding-top: 6px !important;
+}
+:where(.c1dddb55) {
+  flex: 1 !important;
+  min-width: 190px !important;
+}
+:where(.c10a0e6b) {
+  font-family: var(--font-heading) !important;
+  font-weight: 600 !important;
+  font-size: 20px !important;
+  text-transform: uppercase !important;
+  letter-spacing: .02em !important;
+}
+:where(.c6490c3f) {
+  font-size: 14px !important;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent) !important;
+  margin-top: 2px !important;
+}
+:where(.c9e6b1c6) {
+  margin-top: 10px !important;
+  display: flex !important;
+  gap: 8px !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+}
+:where(.cdde3848) {
+  font-size: 13px !important;
+  color: color-mix(in srgb, var(--color-text) 66%, transparent) !important;
+}
+:where(.c30489cb) {
+  text-align: right !important;
+}
+:where(.cade7558) {
+  font-family: var(--font-heading) !important;
+  font-weight: 600 !important;
+  font-size: 22px !important;
+}
+:where(.c9a16b17) {
+  display: flex !important;
+  gap: 6px !important;
+  margin-top: 8px !important;
+  justify-content: flex-end !important;
+}
+:where(.c7730a85) {
+  height: 32px !important;
+  font-size: 13px !important;
+}
+:where(.ce672ace) {
+  display: flex !important;
+  gap: 6px !important;
+  margin-top: 14px !important;
+}
+:where(.c945e30f) {
+  font-family: var(--font-heading) !important;
+  font-size: 12px !important;
+  letter-spacing: .16em !important;
+}
+:where(.c46a7c4f) {
+  margin-top: 2px !important;
+}
+:where(.cc626c4c) {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  flex-wrap: wrap !important;
+  margin-top: 9px !important;
+}
+:where(.ce3c4e73) {
+  font-size: 13.5px !important;
+  line-height: 1.4 !important;
+  min-width: 0 !important;
+  flex: 1 1 260px !important;
+  color: color-mix(in srgb, var(--color-text) 72%, transparent) !important;
+}
+:where(.ca52b2a4) {
+  height: 40px !important;
+  font-size: 13px !important;
+  letter-spacing: .06em !important;
+  text-transform: uppercase !important;
+  padding: 0 16px !important;
+  flex: none !important;
+}
+:where(.c2792902) {
+  height: 40px !important;
+  font-size: 13px !important;
+  letter-spacing: .06em !important;
+  text-transform: uppercase !important;
+  padding: 0 16px !important;
+  flex: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  text-decoration: none !important;
+}
+:where(.cefdb4bb) {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  flex-wrap: wrap !important;
+  margin-top: 10px !important;
+  border-top: 1px solid var(--color-divider) !important;
+  padding-top: 10px !important;
+}
+:where(.cbf81ab7) {
+  font-family: var(--font-heading) !important;
+  font-size: 11.5px !important;
+  letter-spacing: .18em !important;
+  text-transform: uppercase !important;
+  color: color-mix(in srgb, var(--color-text) 58%, transparent) !important;
+}
+:where(.cdcd12d1) {
+  font-size: 13.5px !important;
+  color: var(--color-accent-900) !important;
+}
+:where(.cd45276d) {
+  height: 36px !important;
+  font-size: 13px !important;
+  flex: none !important;
+}
+:where(.c3225b0f) {
+  padding: 36px !important;
+  text-align: center !important;
+  color: color-mix(in srgb, var(--color-text) 66%, transparent) !important;
+}

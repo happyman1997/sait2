@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { css } from '@/lib/css';
 import { useLive } from './Live';
+import sty from './AdSlot.module.css';
 
 type Ad = { id: string; advertiser: string; title: string; line: string; cta: string; erid: string };
 
@@ -39,16 +40,15 @@ export function AdSlot({ place, extra = '' }: { place: 'feed' | 'profile'; extra
   if (!ad || workMode) return null;
   return (
     <div ref={ref} aria-label="Реклама" style={css('border: 1px solid var(--color-accent); padding: 11px 13px; background: color-mix(in srgb, var(--color-accent) 7%, transparent); ' + extra)}>
-      <div style={css('display: flex; justify-content: space-between; gap: 10px; align-items: baseline; flex-wrap: wrap')}>
-        <span style={css('font-family: var(--font-heading); font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--color-accent-900)')}>Реклама</span>
-        <span style={css('font-size: 11.5px; color: color-mix(in srgb, var(--color-text) 62%, transparent)')}>{'erid: ' + ad.erid}</span>
+      <div className={sty.cebf0f9b}>
+        <span className={'fh ' + sty.ce000444}>Реклама</span>
+        <span className={sty.c4e38bd9}>{'erid: ' + ad.erid}</span>
       </div>
-      <div style={css('font-family: var(--font-heading); font-size: 17px; line-height: 1.05; text-transform: uppercase; letter-spacing: .02em; margin-top: 4px')}>{ad.title}</div>
-      {ad.line && <div style={css('font-size: 12.5px; line-height: 1.4; margin-top: 4px; color: color-mix(in srgb, var(--color-text) 78%, transparent)')}>{ad.line}</div>}
-      <div style={css('display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 9px')}>
-        <a className="btn btn-secondary" href={'/api/ads/' + ad.id + '/go'} target="_blank" rel="noopener sponsored"
-          style={css('height: 32px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; padding: 0 12px; display: inline-flex; align-items: center; text-decoration: none')}>{ad.cta}</a>
-        <span style={css('font-size: 11.5px; color: color-mix(in srgb, var(--color-text) 66%, transparent)')}>{ad.advertiser}</span>
+      <div className={'fh ' + sty.ce5110ac}>{ad.title}</div>
+      {ad.line && <div className={sty.c262f3c9}>{ad.line}</div>}
+      <div className={sty.ce83fbc7}>
+        <a className={'btn btn-secondary ' + sty.c0f0fc35} href={'/api/ads/' + ad.id + '/go'} target="_blank" rel="noopener sponsored">{ad.cta}</a>
+        <span className={sty.ceb20a7e}>{ad.advertiser}</span>
       </div>
     </div>
   );

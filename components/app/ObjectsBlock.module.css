@@ -1,0 +1,88 @@
+/* Статичные стили прототипа (scripts/css-modules.mjs): :where — специфичность атрибута style, !important — его приоритет. */
+:where(.c57daa0f) {
+  margin-top: 20px !important;
+  padding: 13px 12px !important;
+}
+:where(.c39b0f5c) {
+  display: grid !important;
+  gap: 6px !important;
+  margin-top: 9px !important;
+}
+:where(.ccfa1a69) {
+  border: 1px solid var(--color-divider) !important;
+  padding: 8px 10px !important;
+}
+:where(.c583964a) {
+  font-family: var(--font-heading) !important;
+  font-size: 14px !important;
+  text-transform: uppercase !important;
+  letter-spacing: .02em !important;
+}
+:where(.cd0ad396) {
+  display: flex !important;
+  gap: 6px !important;
+  margin-top: 8px !important;
+  flex-wrap: wrap !important;
+}
+:where(.cbf21556) {
+  height: 32px !important;
+  font-size: 12.5px !important;
+  padding: 0 12px !important;
+}
+:where(.ce5a6d3c) {
+  margin-top: 10px !important;
+}
+:where(.cf5c1e62) {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: baseline !important;
+  gap: 10px !important;
+}
+:where(.c41db1e5) {
+  font-family: var(--font-heading) !important;
+  font-size: 21px !important;
+  text-transform: uppercase !important;
+  letter-spacing: .02em !important;
+}
+:where(.c165129c) {
+  height: 30px !important;
+  font-size: 13px !important;
+  flex: none !important;
+}
+:where(.c2bf69bb) {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+}
+:where(.cab743e8) {
+  display: grid !important;
+  gap: 5px !important;
+}
+:where(.cf1cae7a) {
+  text-align: left !important;
+  cursor: pointer !important;
+  background: transparent !important;
+  border: 1px solid var(--color-divider) !important;
+  padding: 7px 9px !important;
+  font-family: var(--font-body) !important;
+  color: inherit !important;
+}
+:where(.c532e21a) {
+  display: block !important;
+  font-family: var(--font-heading) !important;
+  font-size: 14px !important;
+  text-transform: uppercase !important;
+  letter-spacing: .02em !important;
+}
+:where(.c8ab760c) {
+  margin-top: 16px !important;
+  height: 42px !important;
+  font-size: 13px !important;
+  letter-spacing: .06em !important;
+  text-transform: uppercase !important;
+}
+:where(.c0945196) {
+  margin-top: 8px !important;
+  height: 36px !important;
+  font-size: 13px !important;
+}

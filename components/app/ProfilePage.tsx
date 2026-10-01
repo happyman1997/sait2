@@ -16,6 +16,7 @@ import { useFlash } from '@/components/Toast';
 import { AdSlot } from './AdSlot';
 import { useLive } from './Live';
 import { Chip, Corners, FIELD_ERR, LABEL, MUTED, initialsOf } from './ui';
+import sty from './ProfilePage.module.css';
 
 type Profile = {
   user: { id: string; role: 'freelancer' | 'employer'; login: string; phone: string; email: string; name: string; city: string; avatarUrl: string | null; baseLabel: string; emailVerified: boolean };
@@ -38,12 +39,12 @@ const TYPE_LABEL = Object.fromEntries(JOB_TYPES.map(t => [t.id, t.label]));
 
 function Section({ title, note, children }: { title: string; note?: string; children: ReactNode }) {
   return (
-    <section style={css('display: flex; flex-wrap: wrap; gap: 10px 32px; padding: 26px 0; border-top: 1px solid var(--color-divider)')}>
-      <div style={css('flex: 0 0 190px; min-width: 0')}>
+    <section className={sty.c75f6db7}>
+      <div className={sty.c236af5d}>
         <h2 style={css(SEC_HEAD + '; margin: 0; font-weight: inherit')}>{title}</h2>
         {note && <div style={css(SEC_NOTE)}>{note}</div>}
       </div>
-      <div style={css('flex: 1 1 380px; min-width: 0')}>{children}</div>
+      <div className={sty.cc7e103d}>{children}</div>
     </section>
   );
 }
@@ -93,7 +94,7 @@ export function ProfilePage() {
   if (!p) {
     return (
       <div style={css('flex: 1; display: grid; place-items: center; padding: 40px 16px; ' + MUTED)}>
-        {loadErr ? <div style={css('text-align: center')}>{loadErr}<div><button className="btn btn-secondary" onClick={load} style={css('margin-top: 12px; height: 38px')}>Повторить</button></div></div> : 'Загружаем профиль…'}
+        {loadErr ? <div className={sty.c65f9d5a}>{loadErr}<div><button className={'btn btn-secondary ' + sty.c611c8e0} onClick={load}>Повторить</button></div></div> : 'Загружаем профиль…'}
       </div>
     );
   }
@@ -103,25 +104,24 @@ export function ProfilePage() {
   const fieldErr = (f: string) => (err && err.field === f ? <div role="alert" style={css(FIELD_ERR)}>{err.message}</div> : null);
 
   return (
-    <div style={css('flex: 1; min-height: 0; overflow: auto; padding: 22px max(clamp(16px, 2.4vw, 40px), calc((100% - 1280px) / 2)) 48px')}>
-      <div style={css('display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 22px')}>
-        <button className="btn btn-ghost" onClick={() => (window.history.length > 1 ? router.back() : router.push('/'))} style={css('height: 34px; font-size: 13.5px; padding: 0 10px 0 6px; display: inline-flex; align-items: center; gap: 6px')}>← Назад</button>
+    <div className={sty.c2120941}>
+      <div className={sty.c51490d3}>
+        <button className={'btn btn-ghost ' + sty.c0bba3b7} onClick={() => (window.history.length > 1 ? router.back() : router.push('/'))}>← Назад</button>
         <span style={{ flex: 1 }} />
-        {me?.isStaff && <Link href="/support" className="btn btn-ghost" style={css('height: 34px; font-size: 12.5px; letter-spacing: .1em; text-transform: uppercase; padding: 0 12px; display: inline-flex; align-items: center; text-decoration: none')}>Поддержка</Link>}
-        <button className="btn btn-ghost" onClick={() => setRail('settings')} style={css('height: 34px; font-size: 12.5px; letter-spacing: .1em; text-transform: uppercase; padding: 0 12px')}>Настройки</button>
-        <button className="btn btn-ghost" onClick={async () => {
+        {me?.isStaff && <Link href="/support" className={'btn btn-ghost ' + sty.cd553319}>Поддержка</Link>}
+        <button className={'btn btn-ghost ' + sty.ce42f018} onClick={() => setRail('settings')}>Настройки</button>
+        <button className={'btn btn-ghost ' + sty.ce42f018} onClick={async () => {
           // Подписка на пуш принадлежит браузеру — снимаем её, чтобы уведомления не приходили следующему человеку на этом устройстве.
           await disablePush().catch(() => {});
           await api('/api/auth/logout', {}).catch(() => {}); router.push('/'); router.refresh();
-        }}
-          style={css('height: 34px; font-size: 12.5px; letter-spacing: .1em; text-transform: uppercase; padding: 0 12px')}>Выйти</button>
+        }}>Выйти</button>
       </div>
 
-      <div className="profile-grid" style={css('display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 300px); gap: clamp(20px, 2.4vw, 40px); align-items: start')}>
-        <div style={css('min-width: 0; max-width: 880px')}>
+      <div className={'profile-grid ' + sty.c5f2bfed}>
+        <div className={sty.c86533bd}>
           <HeaderCard p={p} setP={setP} patch={patch} busy={busy} err={err} />
 
-          <div style={css('margin-top: 10px')}>
+          <div className={sty.ce5a6d3c}>
             <Contacts p={p} patch={patch} busy={busy} fieldErr={fieldErr} onPhone={load} />
 
             {isEmp ? <Organization p={p} patch={patch} busy={busy} fieldErr={fieldErr} /> : (
@@ -139,12 +139,11 @@ export function ProfilePage() {
               {!p.history.length && <div style={css('font-size: 14px; line-height: 1.5; ' + MUTED)}>Закрытых смен пока нет. После приёмки работы смена попадёт сюда с отметкой о расчёте.</div>}
               <div style={{ display: 'grid' }}>
                 {p.history.map(h => (
-                  <button key={h.num} onClick={() => router.push('/?job=' + h.num)} className="row-hover"
-                    style={css('display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 16px; text-align: left; cursor: pointer; background: transparent; border: 0; border-bottom: 1px solid var(--color-divider); padding: 12px 8px; margin: 0 -8px; font-family: var(--font-body); color: inherit')}>
-                    <span style={css('font-family: var(--font-heading); font-size: 17px; text-transform: uppercase; letter-spacing: .02em; min-width: 0; overflow-wrap: anywhere')}>
-                      <span style={css('color: var(--color-accent-700); margin-right: 8px')}>{'С-' + h.num}</span>{h.title}
+                  <button key={h.num} onClick={() => router.push('/?job=' + h.num)} className={'row-hover ' + sty.cd9b27a8}>
+                    <span className={'fh ' + sty.c1c9f7dc}>
+                      <span className={sty.c8228996}>{'С-' + h.num}</span>{h.title}
                     </span>
-                    <span style={css('font-family: var(--font-heading); font-size: 17px; white-space: nowrap; color: var(--color-accent-900)')}>{money(h.pay, h.unit)}</span>
+                    <span className={'fh ' + sty.c165dda5}>{money(h.pay, h.unit)}</span>
                     <span style={css('grid-column: 1 / -1; font-size: 13px; ' + MUTED)}>{h.address + ' · ' + dateLabel(h.date) + ' · ' + h.settle + (h.auto ? ' · принята автоматически' : '')}</span>
                   </button>
                 ))}
@@ -153,14 +152,14 @@ export function ProfilePage() {
 
             <Section title="Пометки площадки" note="Поздние отказы и неявки видны 90 дней.">
               {!p.marks.length && (
-                <div style={css('display: flex; gap: 10px; align-items: center; font-size: 14px')}>
+                <div className={sty.ce3d8c26}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-700)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>Пометок нет
                 </div>
               )}
-              <div style={css('display: grid; gap: 8px')}>
+              <div className={sty.cd726313}>
                 {p.marks.map((m, i) => (
-                  <div key={i} style={css('border: 1px solid var(--color-accent); padding: 10px 12px')}>
-                    <div style={css('font-family: var(--font-heading); font-size: 14px; text-transform: uppercase; letter-spacing: .02em; color: var(--color-accent-900)')}>{m.label}</div>
+                  <div key={i} className={sty.c2ce6819}>
+                    <div className={'fh ' + sty.cc869800}>{m.label}</div>
                     <div style={css('font-size: 13px; line-height: 1.4; margin-top: 2px; ' + MUTED)}>{m.value}</div>
                   </div>
                 ))}
@@ -169,22 +168,22 @@ export function ProfilePage() {
 
             <Section title="Отзывы" note={isEmp ? 'Что пишут исполнители после смен.' : 'Что пишут работодатели после приёмки.'}>
               {!p.reviews.length && <div style={css('font-size: 14px; line-height: 1.5; ' + MUTED)}>Отзывов пока нет — они появляются после приёмки работы.</div>}
-              <div style={css('display: grid; gap: 10px')}>
+              <div className={sty.c5f73fd3}>
                 {p.reviews.map((r, i) => (
-                  <div key={i} style={css('border-bottom: 1px solid var(--color-divider); padding-bottom: 10px')}>
-                    <div style={css('display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap')}>
-                      <span aria-label={'Оценка ' + r.rating + ' из 5'} style={css('color: var(--color-accent-700); letter-spacing: .1em')}>{'★'.repeat(r.rating) + '☆'.repeat(5 - r.rating)}</span>
-                      <span style={css('font-family: var(--font-heading); font-size: 14px; text-transform: uppercase; letter-spacing: .02em')}>{r.author}</span>
+                  <div key={i} className={sty.cb596dca}>
+                    <div className={sty.ca7d1012}>
+                      <span aria-label={'Оценка ' + r.rating + ' из 5'} className={sty.c7f1a80c}>{'★'.repeat(r.rating) + '☆'.repeat(5 - r.rating)}</span>
+                      <span className={'fh ' + sty.c583964a}>{r.author}</span>
                       <span style={css('font-size: 12.5px; ' + MUTED)}>{r.title + ' · ' + new Date(r.at).toLocaleDateString('ru-RU')}</span>
                     </div>
-                    {r.text && <div style={css('font-size: 14px; line-height: 1.45; margin-top: 4px')}>{r.text}</div>}
+                    {r.text && <div className={sty.cf0e9b35}>{r.text}</div>}
                   </div>
                 ))}
               </div>
             </Section>
 
             <Section title="Договор">
-              <div style={css('display: flex; gap: 16px; align-items: center; flex-wrap: wrap')}>
+              <div className={sty.caab70ba}>
                 <a className="btn btn-secondary" href="/api/contract-template" download onClick={() => flash('Шаблон ГПХ скачан — заполняют стороны сами')}
                   style={css(BTN + '; display: inline-flex; align-items: center; gap: 8px; text-decoration: none')}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 15V3" /><path d="m7 10 5 5 5-5" /><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /></svg>
@@ -200,11 +199,11 @@ export function ProfilePage() {
           </div>
         </div>
 
-        <div style={css('min-width: 0; display: grid; gap: 16px; position: sticky; top: 0')}>
-          <div className="blueprint" style={css('padding: 16px')}>
+        <div className={sty.c890f362}>
+          <div className={'blueprint ' + sty.cc741527}>
             <Corners />
             <div style={css(LABEL)}>{isEmp ? 'Заказы' : 'Смены'}</div>
-            <div style={css('display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px')}>
+            <div className={sty.ce186e08}>
               {[
                 { v: String(p.stats.done), l: isEmp ? 'принято работ' : 'смен закрыто' },
                 { v: p.stats.rating == null ? '—' : p.stats.rating.toFixed(1).replace('.', ','), l: 'рейтинг' },
@@ -212,7 +211,7 @@ export function ProfilePage() {
                 isEmp ? { v: String(p.stats.jobs), l: 'заказов всего' } : { v: String(p.stats.noShows), l: 'неявок' }
               ].map(s => (
                 <div key={s.l}>
-                  <div style={css('font-family: var(--font-heading); font-size: 26px; line-height: 1; color: var(--color-accent-900)')}>{s.v}</div>
+                  <div className={'fh ' + sty.c33ab335}>{s.v}</div>
                   <div style={css('font-family: var(--font-heading); font-size: 11.5px; letter-spacing: .16em; text-transform: uppercase; margin-top: 5px; ' + MUTED)}>{s.l}</div>
                 </div>
               ))}
@@ -287,56 +286,55 @@ function HeaderCard({ p, setP, patch, busy, err }: {
   const freeSkills = JOB_TYPES.filter(t => !(fp.skills || []).includes(t.id));
 
   return (
-    <div className="blueprint" style={css('padding: 28px')}>
+    <div className={'blueprint ' + sty.cdc6b6e9}>
       <Corners />
-      <div style={css('display: flex; gap: 24px; align-items: center; flex-wrap: wrap')}>
-        <div style={css('flex: none; display: grid; gap: 8px; justify-items: center')}>
-          <label title="Загрузить фото" style={css('position: relative; width: 104px; height: 104px; border: 1px solid var(--color-accent); display: grid; place-items: center; cursor: pointer; overflow: hidden; background: var(--color-accent-100)')}>
-            {!p.user.avatarUrl && <span style={css('font-family: var(--font-heading); font-size: 34px; letter-spacing: .02em; color: var(--color-accent-700)')}>{initialsOf(p.user.name)}</span>}
-            {p.user.avatarUrl && <img src={p.user.avatarUrl} alt="Фото профиля" style={css('position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover')} />}
-            {uploading && <span style={css('position: absolute; inset: 0; display: grid; place-items: center; background: rgba(255,255,255,.7); font-size: 12px')}>загрузка…</span>}
+      <div className={sty.c0d6b929}>
+        <div className={sty.c544010f}>
+          <label title="Загрузить фото" className={sty.ce1ef653}>
+            {!p.user.avatarUrl && <span className={'fh ' + sty.cdbd2b0b}>{initialsOf(p.user.name)}</span>}
+            {p.user.avatarUrl && <img src={p.user.avatarUrl} alt="Фото профиля" className={sty.c6412d40} />}
+            {uploading && <span className={sty.c265f060}>загрузка…</span>}
             <input type="file" accept="image/jpeg,image/png,image/webp,image/heic" onChange={e => { pick(e.target.files?.[0]); e.target.value = ''; }} aria-label="Загрузить фото"
-              style={css('position: absolute; inset: 0; opacity: 0; cursor: pointer')} />
+              className={sty.cfa58977} />
           </label>
-          <div style={css('display: flex; gap: 10px')}>
-            <span style={css('font-family: var(--font-heading); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--color-accent-700)')}>сменить фото</span>
+          <div className={sty.cd1956dd}>
+            <span className={'fh ' + sty.cb9e4c90}>сменить фото</span>
             {p.user.avatarUrl && <button onClick={clearAvatar} style={css('all: unset; cursor: pointer; font-family: var(--font-heading); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; ' + MUTED)}>убрать</button>}
           </div>
         </div>
-        <div style={css('flex: 1 1 280px; min-width: 0')}>
+        <div className={sty.ceb4f2b0}>
           {!editing ? (
-            <div style={css('display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap')}>
-              <h1 style={css('margin: 0; font-size: clamp(28px, 2.6vw, 38px); line-height: 1; text-transform: uppercase; letter-spacing: .01em; overflow-wrap: anywhere')}>{p.user.name}</h1>
-              <button className="btn btn-ghost" onClick={startEdit} aria-label="Изменить имя" style={css('height: 28px; font-size: 13px; padding: 0 8px')}>Изменить</button>
+            <div className={sty.c2de84e8}>
+              <h1 className={sty.c4d09782}>{p.user.name}</h1>
+              <button className={'btn btn-ghost ' + sty.ce0c9da2} onClick={startEdit} aria-label="Изменить имя">Изменить</button>
             </div>
           ) : (
-            <div style={css('display: grid; gap: 10px')}>
-              <div style={css('display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px')}>
+            <div className={sty.c5f73fd3}>
+              <div className={sty.cf4e7254}>
                 <div className="field"><label htmlFor="pf-first">Имя</label><input id="pf-first" className="input" value={first} onChange={e => setFirst(e.target.value)} placeholder="Данияр" maxLength={60} /></div>
                 <div className="field"><label htmlFor="pf-last">Фамилия</label><input id="pf-last" className="input" value={last} onChange={e => setLast(e.target.value)} placeholder="Сапаров" maxLength={60} /></div>
               </div>
               {err?.field === 'name' && <div role="alert" style={css(FIELD_ERR)}>{err.message}</div>}
-              <div style={css('display: flex; gap: 8px')}>
-                <button className="btn btn-primary" onClick={saveName} disabled={busy === 'name'} style={css('height: 38px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Сохранить</button>
-                <button className="btn btn-ghost" onClick={() => setEditing(false)} style={css('height: 38px; font-size: 13px')}>Отменить</button>
+              <div className={sty.cb9b7b53}>
+                <button className={'btn btn-primary ' + sty.cf8f6389} onClick={saveName} disabled={busy === 'name'}>Сохранить</button>
+                <button className={'btn btn-ghost ' + sty.c1d41128} onClick={() => setEditing(false)}>Отменить</button>
               </div>
             </div>
           )}
           <div style={css('font-size: 14.5px; margin-top: 8px; ' + MUTED)}>{(isEmp ? 'Работодатель' : 'Исполнитель') + ' · ' + p.user.city}</div>
-          <div style={css('display: flex; gap: 6px; flex-wrap: wrap; margin-top: 14px; align-items: center')}>
+          <div className={sty.c81a29e9}>
             {tags.map(t => (
-              <span key={t.label} className="tag tag-outline" style={css('display: inline-flex; align-items: center; gap: 6px')}>
+              <span key={t.label} className={'tag tag-outline ' + sty.c687e3e0}>
                 {t.label}
                 {t.onRemove && <button onClick={t.onRemove} title="Убрать тег" aria-label={'Убрать «' + t.label + '»'} style={css('all: unset; cursor: pointer; line-height: 1; font-size: 14px; ' + MUTED)}>×</button>}
               </span>
             ))}
             {!isEmp && !adding && freeSkills.length > 0 && (
-              <button className="tag tag-outline" onClick={() => setAdding(true)} style={css('cursor: pointer; border-style: dashed')}>+ навык</button>
+              <button className={'tag tag-outline ' + sty.c86fd59c} onClick={() => setAdding(true)}>+ навык</button>
             )}
             {!isEmp && adding && (
-              <select className="input" autoFocus aria-label="Добавить навык" defaultValue="" onBlur={() => setAdding(false)}
-                onChange={e => { const id = e.target.value; setAdding(false); if (id) patch({ freelancer: { skills: [...(fp.skills || []), id] } }, 'Навык «' + TYPE_LABEL[id] + '» добавлен'); }}
-                style={css('height: 32px; min-height: 32px; font-size: 13px; padding: 0 8px; width: auto')}>
+              <select className={'input ' + sty.c772d10c} autoFocus aria-label="Добавить навык" defaultValue="" onBlur={() => setAdding(false)}
+                onChange={e => { const id = e.target.value; setAdding(false); if (id) patch({ freelancer: { skills: [...(fp.skills || []), id] } }, 'Навык «' + TYPE_LABEL[id] + '» добавлен'); }}>
                 <option value="" disabled>выберите навык</option>
                 {freeSkills.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
               </select>
@@ -362,7 +360,7 @@ function Contacts({ p, patch, busy, fieldErr, onPhone }: {
 
   return (
     <Section title="Вход и контакты" note="Войти можно по логину или телефону.">
-      <div style={css('display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px')}>
+      <div className={sty.ca630824}>
         <div className="field">
           <label htmlFor="pf-login">Логин</label>
           <input id="pf-login" className="input" value={login} onChange={e => setLogin(e.target.value)} placeholder="daniyar_s" autoComplete="username" maxLength={20} />
@@ -370,9 +368,9 @@ function Contacts({ p, patch, busy, fieldErr, onPhone }: {
         </div>
         <div className="field">
           <label>Телефон</label>
-          <div style={css('display: flex; align-items: center; min-height: 40px; gap: 10px; font-size: 14.5px; flex-wrap: wrap')}>
+          <div className={sty.c1120df7}>
             {formatPhone(p.user.phone)}
-            <button className="btn btn-ghost" onClick={() => setPhoneOpen(o => !o)} style={css('height: 28px; font-size: 12.5px; padding: 0 8px')}>{phoneOpen ? 'Отменить' : 'Сменить'}</button>
+            <button className={'btn btn-ghost ' + sty.c28cbbc4} onClick={() => setPhoneOpen(o => !o)}>{phoneOpen ? 'Отменить' : 'Сменить'}</button>
           </div>
         </div>
         <div className="field">
@@ -383,23 +381,22 @@ function Contacts({ p, patch, busy, fieldErr, onPhone }: {
         </div>
         <div className="field">
           <label>Город базы</label>
-          <div style={css('display: flex; align-items: center; min-height: 40px; gap: 10px; font-size: 14.5px; flex-wrap: wrap')}>
+          <div className={sty.c1120df7}>
             {p.user.baseLabel}
-            <button className="btn btn-ghost" onClick={() => setRail('settings')} style={css('height: 28px; font-size: 12.5px; padding: 0 8px')}>меняется в настройках</button>
+            <button className={'btn btn-ghost ' + sty.c28cbbc4} onClick={() => setRail('settings')}>меняется в настройках</button>
           </div>
         </div>
       </div>
       {dirty && (
-        <div style={css('display: flex; gap: 8px; margin-top: 12px')}>
-          <button className="btn btn-primary" disabled={busy === 'contacts'} onClick={() => patch({ login: login.trim(), email: email.trim() }, 'Контакты сохранены', 'contacts')}
-            style={css('height: 38px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Сохранить</button>
-          <button className="btn btn-ghost" onClick={() => { setLogin(p.user.login); setEmail(p.user.email); }} style={css('height: 38px; font-size: 13px')}>Отменить</button>
+        <div className={sty.c5c223c4}>
+          <button className={'btn btn-primary ' + sty.cf8f6389} disabled={busy === 'contacts'} onClick={() => patch({ login: login.trim(), email: email.trim() }, 'Контакты сохранены', 'contacts')}>Сохранить</button>
+          <button className={'btn btn-ghost ' + sty.c1d41128} onClick={() => { setLogin(p.user.login); setEmail(p.user.email); }}>Отменить</button>
         </div>
       )}
       {phoneOpen && <PhoneChange onDone={() => { setPhoneOpen(false); onPhone(); }} />}
-      <div style={css('margin-top: 14px')}>
+      <div className={sty.cdffc4db}>
         {!pwOpen
-          ? <button className="btn btn-ghost" onClick={() => setPwOpen(true)} style={css('height: 32px; font-size: 13px; padding: 0 10px')}>Сменить пароль</button>
+          ? <button className={'btn btn-ghost ' + sty.c1aa09b8} onClick={() => setPwOpen(true)}>Сменить пароль</button>
           : <PasswordChange onDone={() => setPwOpen(false)} />}
       </div>
     </Section>
@@ -447,11 +444,11 @@ function PhoneChange({ onDone }: { onDone: () => void }) {
   };
 
   return (
-    <div style={css('margin-top: 14px; border: 1px solid var(--color-divider); padding: 14px; display: grid; gap: 10px; max-width: 520px')}>
+    <div className={sty.ce97d98d}>
       <div style={css(LABEL)}>Новый телефон</div>
       {!sent ? (
         <>
-          <div style={css('display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px')}>
+          <div className={sty.c846dd40}>
             <div className="field">
               <label htmlFor="ph-new">Номер</label>
               <input id="ph-new" className="input" type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+7 916 000 00 00" autoComplete="tel" />
@@ -464,18 +461,18 @@ function PhoneChange({ onDone }: { onDone: () => void }) {
             </div>
           </div>
           {err && !['phone', 'password'].includes(err.field) && <div role="alert" style={css(FIELD_ERR)}>{err.message}</div>}
-          <div><button className="btn btn-primary" onClick={start} disabled={busy} style={css('height: 38px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Прислать код</button></div>
+          <div><button className={'btn btn-primary ' + sty.cf8f6389} onClick={start} disabled={busy}>Прислать код</button></div>
         </>
       ) : (
         <>
-          <div style={css('font-size: 13.5px; line-height: 1.45')}>{'Код отправлен в SMS на ' + sent.sentTo + '.'}{sent.devCode && <span style={css(MUTED)}>{' Код для разработки: ' + sent.devCode}</span>}</div>
-          <div style={css('display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap')}>
-            <div className="field" style={css('width: 150px')}>
+          <div className={sty.c30c0749}>{'Код отправлен в SMS на ' + sent.sentTo + '.'}{sent.devCode && <span style={css(MUTED)}>{' Код для разработки: ' + sent.devCode}</span>}</div>
+          <div className={sty.ca80eb44}>
+            <div className={'field ' + sty.c0a9e77d}>
               <label htmlFor="ph-code">Код из SMS</label>
               <input id="ph-code" className="input" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 4))} />
             </div>
-            <button className="btn btn-primary" onClick={verify} disabled={busy || code.length < 4} style={css('height: 40px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Подтвердить</button>
-            <button className="btn btn-ghost" onClick={resend} disabled={wait > 0} style={css('height: 40px; font-size: 13px')}>{wait > 0 ? 'Повторно через ' + wait + ' с' : 'Прислать ещё раз'}</button>
+            <button className={'btn btn-primary ' + sty.cad84e51} onClick={verify} disabled={busy || code.length < 4}>Подтвердить</button>
+            <button className={'btn btn-ghost ' + sty.c8dc805f} onClick={resend} disabled={wait > 0}>{wait > 0 ? 'Повторно через ' + wait + ' с' : 'Прислать ещё раз'}</button>
           </div>
           {err && <div role="alert" style={css(FIELD_ERR)}>{err.message}</div>}
         </>
@@ -505,17 +502,17 @@ function PasswordChange({ onDone }: { onDone: () => void }) {
     </div>
   );
   return (
-    <div style={css('border: 1px solid var(--color-divider); padding: 14px; display: grid; gap: 10px; max-width: 620px')}>
+    <div className={sty.cedec8fc}>
       <div style={css(LABEL)}>Смена пароля</div>
-      <div style={css('display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px')}>
+      <div className={sty.c56b5181}>
         {input('current', 'Текущий пароль', 'current-password')}
         {input('password', 'Новый пароль', 'new-password')}
         {input('password2', 'Ещё раз', 'new-password')}
       </div>
       {err && !['current', 'password', 'password2'].includes(err.field) && <div role="alert" style={css(FIELD_ERR)}>{err.message}</div>}
-      <div style={css('display: flex; gap: 8px')}>
-        <button className="btn btn-primary" onClick={save} disabled={busy} style={css('height: 38px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Сменить пароль</button>
-        <button className="btn btn-ghost" onClick={onDone} style={css('height: 38px; font-size: 13px')}>Отменить</button>
+      <div className={sty.cb9b7b53}>
+        <button className={'btn btn-primary ' + sty.cf8f6389} onClick={save} disabled={busy}>Сменить пароль</button>
+        <button className={'btn btn-ghost ' + sty.c1d41128} onClick={onDone}>Отменить</button>
       </div>
       <div style={css('font-size: 12.5px; ' + MUTED)}>После смены остальные входы (другие телефоны и браузеры) завершатся.</div>
     </div>
@@ -540,7 +537,7 @@ function Organization({ p, patch, busy, fieldErr }: {
 
   return (
     <Section title="Организация" note="Тип, название и ИНН видны исполнителям в карточке заказа.">
-      <div style={css('display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px')}>
+      <div className={sty.c671477c}>
         <div className="field">
           <label htmlFor="org-type">Кто размещает заказы</label>
           <select id="org-type" className="input" value={orgType} onChange={e => setOrgType(e.target.value)}>
@@ -574,19 +571,19 @@ function Organization({ p, patch, busy, fieldErr }: {
           </select>
         </div>
       </div>
-      <div style={css('margin-top: 12px')}>
+      <div className={sty.c4bb9003}>
         <div style={css(LABEL + '; margin-bottom: 7px')}>Доступ на объект</div>
-        <div style={css('display: flex; flex-wrap: wrap; gap: 6px')}>
+        <div className={sty.c2bf69bb}>
           {ACCESS.map(a => <Chip key={a} active={access.includes(a)} onClick={() => setAccess(x => (x.includes(a) ? x.filter(y => y !== a) : [...x, a]))}>{a}</Chip>)}
         </div>
       </div>
-      <div style={css('display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; align-items: baseline')}>
+      <div className={sty.c71dea44}>
         <span className="tag tag-outline">{p.inn ? 'ИНН указан · не проверен' : 'ИНН не указан'}</span>
         <span style={css('font-size: 13px; line-height: 1.45; ' + MUTED)}>Площадка показывает ИНН как есть — исполнитель может сам проверить его в открытых реестрах ФНС.</span>
       </div>
       {dirty && (
-        <div style={css('display: flex; gap: 8px; margin-top: 14px')}>
-          <button className="btn btn-primary" disabled={busy === 'org'} style={css('height: 38px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}
+        <div className={sty.cc3502a9}>
+          <button className={'btn btn-primary ' + sty.cf8f6389} disabled={busy === 'org'}
             onClick={() => patch({ employer: { orgType, orgName: isPerson ? '' : orgName, inn: inn || undefined, objectKind: objectKind || undefined, tools: tools || undefined, access } }, 'Организация сохранена', 'org')}>Сохранить</button>
         </div>
       )}
@@ -612,14 +609,14 @@ function GearEditor({ gear, customGear, ownCar, patch, fieldErr }: {
   };
   return (
     <>
-      <div style={css('display: flex; flex-wrap: wrap; gap: 6px')}>
+      <div className={sty.c2bf69bb}>
         {all.map(g => <Chip key={g} active={gear.includes(g)} onClick={() => toggle(g)}>{g}</Chip>)}
         <Chip active={ownCar} onClick={() => patch({ freelancer: { ownCar: !ownCar } })}>своя машина</Chip>
       </div>
-      <div style={css('display: flex; gap: 6px; margin-top: 12px; max-width: 520px')}>
-        <input className="input" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') add(); }} aria-label="Свой инвентарь" maxLength={60}
-          placeholder="например, мотоблок с щёткой" style={css('flex: 1; min-width: 0')} />
-        <button className="btn btn-secondary" onClick={add} style={css('height: 40px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; padding: 0 14px; white-space: nowrap')}>Добавить</button>
+      <div className={sty.cf4bfb50}>
+        <input className={'input ' + sty.c8b4ab7f} value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') add(); }} aria-label="Свой инвентарь" maxLength={60}
+          placeholder="например, мотоблок с щёткой" />
+        <button className={'btn btn-secondary ' + sty.c27fa87c} onClick={add}>Добавить</button>
       </div>
       {fieldErr('gear')}
     </>
@@ -631,11 +628,11 @@ function GearEditor({ gear, customGear, ownCar, patch, fieldErr }: {
 function EmailStatus({ verified }: { verified: boolean }) {
   const flash = useFlash();
   const [sent, setSent] = useState(false);
-  if (verified) return <div style={css('font-size: 12.5px; margin-top: 5px; color: var(--color-accent-700)')}>✓ подтверждён</div>;
+  if (verified) return <div className={sty.c28d9942}>✓ подтверждён</div>;
   return (
     <div style={css('font-size: 12.5px; line-height: 1.4; margin-top: 5px; ' + MUTED)}>
       {sent ? 'Письмо отправлено — перейдите по ссылке из него. ' : 'Не подтверждён — письма об уведомлениях не приходят. '}
-      <button className="btn btn-ghost" style={css('height: 24px; font-size: 12.5px; padding: 0 4px')} onClick={async () => {
+      <button className={'btn btn-ghost ' + sty.ccb1964b} onClick={async () => {
         try { await api('/api/me/email/verify', {}); setSent(true); flash('Письмо со ссылкой отправлено'); }
         catch (e) { flash(e instanceof ApiError ? e.message : 'Не удалось отправить письмо'); }
       }}>{sent ? 'Отправить ещё раз' : 'Отправить письмо'}</button>
@@ -659,15 +656,15 @@ function NpdCheck({ npd, onDone }: { npd?: { inn: string | null; status: 'ok' | 
   const when = npd?.checkedAt ? new Date(npd.checkedAt).toLocaleDateString('ru-RU') : '';
   return (
     <>
-      <div style={css('display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end')}>
-        <div className="field" style={css('flex: 1; min-width: 200px; max-width: 320px')}>
+      <div className={sty.c4da9731}>
+        <div className={'field ' + sty.c38fb825}>
           <label htmlFor="npd-inn">ИНН самозанятого</label>
           <input id="npd-inn" className="input" inputMode="numeric" value={inn} onChange={e => setInn(e.target.value.replace(/\D/g, '').slice(0, 12))} placeholder="770712345678" />
         </div>
         <button className="btn btn-secondary" onClick={check} disabled={busy || inn.length !== 12} style={css(BTN)}>{busy ? 'Запрос в ФНС…' : 'Проверить'}</button>
       </div>
       {err && <div role="alert" style={css(FIELD_ERR)}>{err}</div>}
-      <div style={css('display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; align-items: baseline')}>
+      <div className={sty.cc452ac4}>
         <span className={'tag ' + (npd?.status === 'ok' ? 'tag-accent' : 'tag-outline')}>
           {npd?.status === 'ok' ? 'Самозанятый · проверено ' + when : npd?.status === 'not_found' ? 'Статус не найден · ' + when : 'Статус не проверен'}
         </span>

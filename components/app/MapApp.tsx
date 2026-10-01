@@ -26,6 +26,7 @@ import { Corners, LABEL } from './ui';
 
 export type { Me } from './Live';
 import type { Me } from './Live';
+import sty from './MapApp.module.css';
 
 const WORK_BTN = 'flex: 1; min-height: 58px; font-size: 19px; letter-spacing: .02em; border: 1px solid var(--color-accent-900); cursor: pointer; font-family: var(--font-heading); display: flex; align-items: center; justify-content: center; text-align: center; padding: 0 10px'
 
@@ -523,42 +524,40 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
   const PAD = 'max(clamp(14px, 2vw, 24px), calc((100% - 1440px) / 2))';
 
   return (
-    <div style={css('display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden')}>
+    <div className={sty.cecc0ae7}>
 
       {!me && !(narrow && (form || selected)) && (
         <div style={css('flex: none; display: flex; align-items: baseline; gap: 6px 16px; flex-wrap: wrap; padding: clamp(9px, 1.4vw, 13px) ' + PAD + '; background: var(--color-accent-900); border-bottom: 1px solid var(--color-accent-900)')}>
-          <span style={css('font-family: var(--font-heading); font-size: clamp(13px, 1.4vw, 15px); letter-spacing: .2em; text-transform: uppercase; color: #fff; flex: none')}>Сезонные работы на карте</span>
-          <span style={css('font-size: clamp(14px, 1.5vw, 16px); line-height: 1.45; min-width: 0; color: rgba(255, 255, 255, .92); text-wrap: pretty')}>Здесь ищут подработку: убрать снег, скосить траву, разгрузить машину. Видно, где работа, когда выходить и сколько заплатят. Резюме не нужно.</span>
+          <span className={'fh ' + sty.cd0d9449}>Сезонные работы на карте</span>
+          <span className={sty.c3230d14}>Здесь ищут подработку: убрать снег, скосить траву, разгрузить машину. Видно, где работа, когда выходить и сколько заплатят. Резюме не нужно.</span>
         </div>
       )}
 
       {offline && (
-        <div role="status" style={css('flex: none; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 9px 20px; border-top: 1px solid var(--color-accent); border-bottom: 1px solid var(--color-accent); background: color-mix(in srgb, var(--color-accent) 9%, transparent)')}>
-          <span style={css('font-family: var(--font-heading); font-size: 12.5px; letter-spacing: .2em; text-transform: uppercase; color: var(--color-accent-900)')}>нет сети</span>
-          <span style={css('font-size: 13.5px; line-height: 1.45; min-width: 0; color: var(--color-accent-900)')}>Карта и список показаны из последней загрузки. Отклик и публикация заработают, когда связь вернётся.</span>
+        <div role="status" className={sty.c16245db}>
+          <span className={'fh ' + sty.c717ed17}>нет сети</span>
+          <span className={sty.c462d795}>Карта и список показаны из последней загрузки. Отклик и публикация заработают, когда связь вернётся.</span>
           <span style={{ flex: 1 }} />
-          <button className="btn btn-ghost" onClick={() => { if (navigator.onLine) { setOffline(false); loadJobs(); } }} style={css('height: 28px; font-size: 12.5px; flex: none')}>Проверить связь</button>
+          <button className={'btn btn-ghost ' + sty.cd443c0f} onClick={() => { if (navigator.onLine) { setOffline(false); loadJobs(); } }}>Проверить связь</button>
         </div>
       )}
 
       {!(narrow && form) && (
         <div style={css('flex: none; display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 10px ' + PAD + '; border-bottom: 1px solid var(--color-divider); background: var(--color-neutral-100)')}>
-          <button className="btn btn-primary" onClick={() => setListOpen(o => !o)} aria-expanded={listOpen} style={css('height: 34px; font-size: 13px; padding: 0 13px; flex: none; display: inline-flex; align-items: center; gap: 7px')}>
+          <button className={'btn btn-primary ' + sty.c524a41d} onClick={() => setListOpen(o => !o)} aria-expanded={listOpen}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /></svg>
             {listOpen ? 'Скрыть список заказов' : 'Все заказы списком · ' + found}
           </button>
-          <button className="btn btn-primary" onClick={() => setFiltersOpen(o => !o)} aria-expanded={filtersOpen} style={css('height: 34px; font-size: 13px; padding: 0 13px; flex: none')}>{nFilters ? 'Фильтры · ' + nFilters : 'Фильтры'}</button>
-          <span aria-live="polite" style={css('font-family: var(--font-heading); font-size: 13px; letter-spacing: .18em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 60%, transparent); white-space: nowrap; flex: none')}>{loaded ? 'найдено ' + found : 'загрузка…'}</span>
+          <button className={'btn btn-primary ' + sty.c8269510} onClick={() => setFiltersOpen(o => !o)} aria-expanded={filtersOpen}>{nFilters ? 'Фильтры · ' + nFilters : 'Фильтры'}</button>
+          <span aria-live="polite" className={'fh ' + sty.c9462104}>{loaded ? 'найдено ' + found : 'загрузка…'}</span>
           {me && (
-            <span className="only-wide" style={css('display: contents')}>
-              <button className="btn btn-primary" onClick={() => live.setRail(live.rail === 'journal' ? null : 'journal')} title="Оповещения и журнал" aria-label={'Журнал' + (live.journal ? ', новых: ' + live.journal : '')}
-                style={css('position: relative; height: 34px; font-size: 13px; padding: 0 12px; flex: none; display: inline-flex; align-items: center; gap: 7px')}>
+            <span className={'only-wide ' + sty.cddf581b}>
+              <button className={'btn btn-primary ' + sty.cec3a420} onClick={() => live.setRail(live.rail === 'journal' ? null : 'journal')} title="Оповещения и журнал" aria-label={'Журнал' + (live.journal ? ', новых: ' + live.journal : '')}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
                 Журнал
-                {live.journal > 0 && <span style={css('min-width: 17px; height: 17px; box-sizing: border-box; padding: 0 4px; border-radius: 999px; background: var(--color-bg); color: var(--color-accent-900); font-family: var(--font-heading); font-size: 11.5px; line-height: 17px; text-align: center')}>{live.journal > 99 ? '99+' : live.journal}</span>}
+                {live.journal > 0 && <span className={'fh ' + sty.c6f669bf}>{live.journal > 99 ? '99+' : live.journal}</span>}
               </button>
-              <button className="btn btn-primary" onClick={() => live.setRail(live.rail === 'settings' ? null : 'settings')} title="Настройки" aria-label="Настройки"
-                style={css('height: 34px; font-size: 13px; padding: 0 12px; flex: none; display: inline-flex; align-items: center; gap: 7px')}>
+              <button className={'btn btn-primary ' + sty.cae34003} onClick={() => live.setRail(live.rail === 'settings' ? null : 'settings')} title="Настройки" aria-label="Настройки">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
                 Настройки
               </button>
@@ -578,22 +577,22 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
 
         <div style={css(railStyle)}>
           {kept && !form && isEmp && (
-            <div style={css('border: 1px solid var(--color-accent); padding: 10px 12px; margin-bottom: 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap')}>
-              <div style={css('flex: 1 1 180px; min-width: 0')}>
+            <div className={sty.c563470d}>
+              <div className={sty.c1bbd7a1}>
                 <div style={css(LABEL)}>Черновик заказа</div>
-                <div style={css('font-size: 13.5px; margin-top: 3px')}>{(kept.form.address || 'адрес не указан') + ' · шаг ' + (kept.step || 1) + ' из 4'}</div>
+                <div className={sty.c2c91976}>{(kept.form.address || 'адрес не указан') + ' · шаг ' + (kept.step || 1) + ' из 4'}</div>
               </div>
-              <button className="btn btn-secondary" onClick={restoreDraft} style={css('height: 34px; font-size: 13px')}>Продолжить</button>
-              <button className="btn btn-ghost" onClick={() => { writeLS(DRAFT_KEY, null); setKept(null); }} style={css('height: 34px; font-size: 13px')}>Удалить</button>
+              <button className={'btn btn-secondary ' + sty.c81bfc8a} onClick={restoreDraft}>Продолжить</button>
+              <button className={'btn btn-ghost ' + sty.c81bfc8a} onClick={() => { writeLS(DRAFT_KEY, null); setKept(null); }}>Удалить</button>
             </div>
           )}
 
           {form && isEmp && !editing && !form.objectId && form.lat != null && form.address.trim() && (
-            <div style={css('display: flex; justify-content: flex-end; margin-bottom: 6px')}>
-              <button className="btn btn-ghost" onClick={saveAsObject} style={css('height: 28px; font-size: 12.5px; padding: 0 8px')}>Сохранить адрес как объект</button>
+            <div className={sty.c71621e2}>
+              <button className={'btn btn-ghost ' + sty.c28cbbc4} onClick={saveAsObject}>Сохранить адрес как объект</button>
             </div>
           )}
-          {form?.objectId && <div style={css('font-size: 12.5px; margin-bottom: 6px; color: var(--color-accent-700)')}>{'Заказ с объекта «' + (objects.find(o => o.id === form.objectId)?.name || 'объект') + '» — попадёт в историю смен объекта'}</div>}
+          {form?.objectId && <div className={sty.ce40d1df}>{'Заказ с объекта «' + (objects.find(o => o.id === form.objectId)?.name || 'объект') + '» — попадёт в историю смен объекта'}</div>}
 
           {form && (
             <JobFormPanel form={form} setForm={setForm} step={formStep} goStep={goStep} errs={formErrs} formError={formError}
@@ -631,27 +630,27 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
           <SeasonMap ref={mapRef} pins={pins} draft={draftPoint} mode={isEmp ? 'employer' : 'view'} highlight={hover} anchor={isEmp ? null : anchor}
             radiusKm={isEmp ? 0 : filters.km} onMapClick={onMapClick} onPinClick={onPinClick} onStackClick={onStackClick} />
           {stackPick && stackPick.length > 0 && !form && (
-            <div className="blueprint" style={css('position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 6; width: min(420px, calc(100% - 32px)); max-height: calc(100% - 52px); display: flex; flex-direction: column; background: var(--color-bg); padding: 13px 15px 14px; box-shadow: var(--shadow-lg)')}>
+            <div className={'blueprint ' + sty.c030d8ff}>
               <Corners />
-              <div style={css('display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex: none')}>
-                <div style={css('font-family: var(--font-heading); font-size: 12px; letter-spacing: .2em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 62%, transparent)')}>Ещё на этом адресе</div>
-                <button className="btn btn-ghost" onClick={() => setStackPick(null)} style={css('height: 26px; font-size: 12.5px')}>Закрыть</button>
+              <div className={sty.c403498b}>
+                <div className={'fh ' + sty.cae1709c}>Ещё на этом адресе</div>
+                <button className={'btn btn-ghost ' + sty.cd1673a6} onClick={() => setStackPick(null)}>Закрыть</button>
               </div>
-              <div style={css('display: grid; gap: 6px; margin-top: 9px; min-height: 0; overflow: auto')}>
+              <div className={sty.c380f53b}>
                 {stackPick.map(n => jobs.find(j => j.num === n)).filter((j): j is JobSummary => !!j).map(j => (
-                  <button key={j.num} onClick={() => select(j.num)} style={css('display: flex; align-items: baseline; justify-content: space-between; gap: 12px; text-align: left; cursor: pointer; background: transparent; border: 1px solid var(--color-divider); padding: 9px 11px; font-family: var(--font-body); color: inherit')}>
-                    <span style={css('min-width: 0')}>
-                      <span style={css('display: block; font-family: var(--font-heading); font-size: 14.5px; text-transform: uppercase; letter-spacing: .02em')}>{j.title}</span>
-                      <span style={css('display: block; font-size: 12.5px; color: color-mix(in srgb, var(--color-text) 64%, transparent)')}>{j.address} · {dateLabel(j.date)}</span>
+                  <button key={j.num} onClick={() => select(j.num)} className={sty.c40300c1}>
+                    <span className={sty.c33f2a66}>
+                      <span className={'fh ' + sty.c4b2febe}>{j.title}</span>
+                      <span className={sty.c20b1f30}>{j.address} · {dateLabel(j.date)}</span>
                     </span>
-                    <span style={css('flex: none; font-family: var(--font-heading); font-size: 16px; color: var(--color-accent-900)')}>{money(j.pay, j.unit)}</span>
+                    <span className={'fh ' + sty.c75d69d4}>{money(j.pay, j.unit)}</span>
                   </button>
                 ))}
               </div>
             </div>
           )}
           {loaded && !found && !form && (
-            <div style={css('position: absolute; left: 50%; top: 16px; transform: translateX(-50%); z-index: 6; max-width: calc(100% - 32px); padding: 9px 14px; background: var(--color-bg); border: 1px solid var(--color-divider); box-shadow: var(--shadow-md); font-size: 13.5px; line-height: 1.4')}>
+            <div className={sty.ca7e8c51}>
               {nFilters || filters.q.trim() ? 'Под фильтр ничего не попало — снимите лишние условия.' : isEmp ? 'Заказов пока нет — кликните по карте, чтобы опубликовать первый.' : 'Открытых заказов пока нет — загляните позже.'}
             </div>
           )}
