@@ -32,7 +32,7 @@ export function ShiftScreen() {
   useEffect(load, [load]);
   useEffect(() => { try { setTipHidden(localStorage.getItem(TIP_KEY) === '1'); } catch { setTipHidden(false); } }, []);
   // Своя смена изменилась — перечитать; событие по другому заказу могло сделать актуальной другую смену.
-  useLiveEvent(e => { if ((e.t === 'job' && (!job || e.num === job.num)) || (e.t === 'event' && e.num)) load(); });
+  useLiveEvent(e => { if ((e.t === 'job' && (!job || e.num === job.num)) || (e.t === 'event' && e.num) || e.t === 'resync') load(); });
 
   const act = useCallback(async (path: string, body: unknown, ok: string, method: 'POST' | 'DELETE' = 'POST') => {
     if (!job) return false;

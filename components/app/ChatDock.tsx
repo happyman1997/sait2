@@ -45,6 +45,7 @@ export function ChatDock({ place }: { place: 'map' | 'form' | 'page' }) {
   useEffect(() => { if (showChat) { setThread(null); load(); } }, [showChat, dock.num, dock.thread]); // eslint-disable-line react-hooks/exhaustive-deps
   useLiveEvent((e) => {
     if ((e.t === 'message' || e.t === 'read') && showChat && e.num === dock.num && e.thread === dock.thread) load();
+    if (e.t === 'resync' && showChat) load();
   });
   useEffect(() => { listRef.current?.scrollTo({ top: listRef.current.scrollHeight }); }, [thread?.messages.length]);
 

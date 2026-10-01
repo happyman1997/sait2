@@ -147,8 +147,11 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
     }
   }, [detail]);
 
+  // Ответ по заказу, который уже закрыли или сменили на другой, не должен подменить открытую карточку.
+  const selectedRef = useRef(selected);
+  useEffect(() => { selectedRef.current = selected; }, [selected]);
   const patchJob = (j: JobDetail) => {
-    setDetail(j);
+    if (selectedRef.current === j.num) setDetail(j);
     setJobs(list => list.map(x => (x.num === j.num ? { ...x, myStatus: j.myStatus, applicants: j.applicants, hired: j.hired, status: j.status, date: j.date, urgent: j.urgent } : x)));
   };
 
@@ -471,8 +474,8 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
   }, []);
   const listReloadT = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useLiveEvent((e) => {
-    if (e.t !== 'job') return;
-    if (e.num === selected) refreshDetail(e.num);
+    if (e.t !== 'job' && e.t !== 'resync') return;
+    if (selected && (e.t === 'resync' || e.num === selected)) refreshDetail(selected);
     clearTimeout(listReloadT.current);
     listReloadT.current = setTimeout(loadJobs, 400);
   });

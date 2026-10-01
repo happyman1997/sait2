@@ -11,13 +11,24 @@ export type LiveEvent =
   | { t: 'message'; num: number; thread: string }      // новое сообщение в диалоге (thread = freelancerId)
   | { t: 'read'; num: number; thread: string }         // вторая сторона прочитала
   | { t: 'job'; num: number }                          // изменился заказ/смена
-  | { t: 'event'; text: string; num: number | null };  // запись журнала — показать уведомлением
+  | { t: 'event'; text: string; num: number | null }   // запись журнала — показать уведомлением
+  | { t: 'resync' };                                   // события могли потеряться — перечитать экран
 
 type Sink = (e: LiveEvent) => void;
 
 type Hub = { subs: Map<string, Set<Sink>>; client: Client | null; connecting: Promise<void> | null };
 const g = globalThis as unknown as { __arenaLive?: Hub };
 const hub: Hub = (g.__arenaLive ??= { subs: new Map<string, Set<Sink>>(), client: null, connecting: null });
+
+/** После обрыва LISTEN-соединения: повторы с нарастающей паузой, пока есть слушатели; затем — «перечитайте экран». */
+function scheduleReconnect(delay = 2000) {
+  setTimeout(() => {
+    if (!hub.subs.size) return;
+    ensureListener()
+      .then(() => { for (const set of hub.subs.values()) set.forEach(fn => fn({ t: 'resync' })); })
+      .catch(() => scheduleReconnect(Math.min(delay * 2, 30_000)));
+  }, delay);
+}
 
 async function ensureListener() {
   if (hub.client || hub.connecting) return hub.connecting ?? undefined;
@@ -30,16 +41,26 @@ async function ensureListener() {
         for (const id of u) hub.subs.get(id)?.forEach(fn => fn(e));
       } catch { /* битый payload игнорируем */ }
     });
+    let dropped = false;
     const reconnect = () => {
-      hub.client = null;
+      if (dropped) return;
+      dropped = true;
+      if (hub.client === c) hub.client = null;
       c.end().catch(() => {});
-      // Переподключаемся, только пока есть слушатели.
-      setTimeout(() => { if (hub.subs.size) ensureListener().catch(() => {}); }, 2000);
+      // События за время обрыва не дошли: переподключаемся, пока есть слушатели, и просим их перечитать данные.
+      scheduleReconnect();
     };
     c.on('error', reconnect);
     c.on('end', () => { if (hub.client === c) reconnect(); });
-    await c.connect();
-    await c.query('LISTEN ' + LIVE_CHANNEL);
+    // Ошибка до успешного LISTEN — отдаём вызывающему (он повторит), без собственного переподключения.
+    try {
+      await c.connect();
+      await c.query('LISTEN ' + LIVE_CHANNEL);
+    } catch (e) {
+      dropped = true;
+      c.end().catch(() => {});
+      throw e;
+    }
     hub.client = c;
   })().finally(() => { hub.connecting = null; });
   return hub.connecting;

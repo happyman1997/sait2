@@ -93,7 +93,7 @@ export function MyJobsPage({ role }: { role: 'freelancer' | 'employer' }) {
     api<{ jobs: MyJob[] }>('/api/me/jobs').then(r => setJobs(r.jobs)).catch(e => flash(e instanceof ApiError ? e.message : 'Не удалось загрузить список'));
   }, [flash]);
   useEffect(load, [load]);
-  useLiveEvent(e => { if (e.t === 'job') load(); });
+  useLiveEvent(e => { if (e.t === 'job' || e.t === 'resync') load(); });
 
   const act = async (num: number, path: string, ok: string) => {
     setBusy(true);

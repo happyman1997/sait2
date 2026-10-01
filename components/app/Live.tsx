@@ -10,7 +10,9 @@ export type LiveEvent =
   | { t: 'message'; num: number; thread: string }
   | { t: 'read'; num: number; thread: string }
   | { t: 'job'; num: number }
-  | { t: 'event'; text: string; num: number | null };
+  | { t: 'event'; text: string; num: number | null }
+  /** Поток переподключился после обрыва: события за это время потеряны — перечитать то, что на экране. */
+  | { t: 'resync' };
 
 export type Me = {
   id: string; name: string; role: 'freelancer' | 'employer'; city: string; avatarUrl: string | null;
@@ -100,16 +102,26 @@ export function LiveProvider({ me, children }: { me: Me; children: ReactNode }) 
   }, [meKey]);
 
   useEffect(() => { reloadChats(); }, [reloadChats]);
-  useEffect(() => {
+  const reloadJournal = useCallback(() => {
     if (!meKey) { setJournal(0); return; }
     api<{ unread: number; toasts: boolean }>('/api/events?limit=1').then(r => { setJournal(r.unread); toasts.current = r.toasts; }).catch(() => {});
   }, [meKey]);
+  useEffect(() => { reloadJournal(); }, [reloadJournal]);
 
   // Один поток на вкладку; браузер сам переподключается (retry: 5000).
   useEffect(() => {
     if (!meKey || typeof EventSource === 'undefined') return;
     const es = new EventSource('/api/stream');
     let reloadT: ReturnType<typeof setTimeout> | undefined;
+    let dropped = false;
+    es.onerror = () => { dropped = true; };
+    es.onopen = () => {
+      if (!dropped) return;
+      dropped = false;
+      reloadChats();
+      reloadJournal();
+      listeners.current.forEach(fn => fn({ t: 'resync' }));
+    };
     es.onmessage = (m) => {
       let e: LiveEvent;
       try { e = JSON.parse(m.data); } catch { return; }
@@ -118,7 +130,7 @@ export function LiveProvider({ me, children }: { me: Me; children: ReactNode }) 
       listeners.current.forEach(fn => fn(e));
     };
     return () => { clearTimeout(reloadT); es.close(); };
-  }, [meKey, flash, reloadChats]);
+  }, [meKey, flash, reloadChats, reloadJournal]);
 
   const onLive = useCallback((fn: (e: LiveEvent) => void) => {
     listeners.current.add(fn);

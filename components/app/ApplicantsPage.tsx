@@ -35,7 +35,7 @@ export function ApplicantsPage() {
     api<{ jobs: BoardJob[] }>('/api/me/applicants').then(r => setJobs(r.jobs)).catch(e => flash(e instanceof ApiError ? e.message : 'Не удалось загрузить отклики'));
   }, [flash]);
   useEffect(load, [load]);
-  useLiveEvent(e => { if (e.t === 'job') load(); });
+  useLiveEvent(e => { if (e.t === 'job' || e.t === 'resync') load(); });
 
   const act = async (num: number, path: string, ok: string) => {
     setBusy(true);

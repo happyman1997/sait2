@@ -67,7 +67,7 @@ export function NotifyRail() {
     if (rail === 'settings') pushState().then(setPush).catch(() => setPush('unsupported'));
   }, [rail, loadEvents, settings]);
 
-  useLiveEvent(e => { if (e.t === 'event' && rail === 'journal') loadEvents(); });
+  useLiveEvent(e => { if ((e.t === 'event' || e.t === 'resync') && rail === 'journal') loadEvents(); });
 
   // «Рядом сейчас» — открытые смены в радиусе оповещений.
   const radius = settings?.radiusKm;
