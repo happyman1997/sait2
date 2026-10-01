@@ -10,6 +10,7 @@ const sh = await import('@/server/shifts');
 const support = await import('@/server/support');
 const disputes = await import('@/server/disputes');
 const { contractTemplate } = await import('@/server/contract');
+const { doneSql } = await import('@/server/stats');
 const { AppError } = await import('@/server/errors');
 const { seriesDates, seriesDayLabel } = await import('@/lib/jobs');
 const { localClock } = await import('@/server/events');
@@ -346,8 +347,10 @@ describe('сдача, приёмка и расчёт по дням серии', 
     await expectErr(sh.saveReview(num, { rating: 5, text: 'Всё чётко' }, other), /стороны смены/);
     await act(num, other, today, 'report');
     await act(num, emp, today, 'accept');
-    expect((await jobs.getJob(num, other)).series!.reviews).toEqual([{ target: 'employer', name: 'Айгуль Т.', mine: null }]);
-    expect((await jobs.getJob(num, emp)).series!.reviews).toEqual([{ target: other.id, name: 'Ольга К.', mine: null }]);
+    expect((await jobs.getJob(num, other)).series!.reviews).toEqual([{ target: 'employer', name: 'Айгуль Т.', mine: null, complained: false }]);
+    expect((await jobs.getJob(num, emp)).series!.reviews).toEqual([{ target: other.id, name: 'Ольга К.', mine: null, complained: false }]);
+    // Принятый выход на замену засчитывается в закрытые смены.
+    expect((await one<{ n: number }>(`SELECT ${doneSql('$1::uuid')} AS n`, [other.id]))!.n).toBe(1);
     await sh.saveReview(num, { rating: 5, text: 'Всё чётко, рассчитались сразу' }, other);
     await sh.saveReview(num, { target: other.id, rating: 4, text: 'Вышла вовремя' }, emp);
     expect((await jobs.getJob(num, other)).series!.reviews[0].mine).toMatchObject({ rating: 5, editable: true });
@@ -358,6 +361,34 @@ describe('сдача, приёмка и расчёт по дням серии', 
     // Жалоба на замену — тоже после приёмки её дня и адресуется ей.
     await sh.fileComplaint(num, { reason: 'грубое общение', text: 'Грубила в чате', target: other.id }, emp);
     expect((await one<{ target_id: string }>('SELECT target_id FROM complaints'))!.target_id).toBe(other.id);
+    expect((await jobs.getJob(num, emp)).series!.reviews[0].complained).toBe(true);
+    await sh.fileComplaint(num, { reason: 'грубое общение', text: 'Грубили при встрече' }, other);
+    expect((await jobs.getJob(num, other)).series!.reviews[0].complained).toBe(true);
+  });
+
+  it('закончившаяся серия уходит из поиска, не принимает отклики и закрывается сама через 7 дней', async () => {
+    const other = await mkUser('freelancer', 'olga_k', '9163333333', 'Ольга Кузнецова');
+    const j = await jobs.createJob(form({ repeat: 'раз в неделю', crew: '2' }), emp, today);
+    expect((await one<{ e: string }>(`SELECT to_char(series_end, 'YYYY-MM-DD') AS e FROM jobs WHERE num = $1`, [j.num]))!.e).toBe(plus(today, 2 + 28));
+    await jobs.applyToJob(j.num, { reqConfirmed: true }, fl, today);
+    await sh.staffAction(j.num, (await jobs.getJob(j.num, emp)).applicantList![0].id, 'hire', emp);
+    await sh.extendSeries(j.num, emp);
+    expect((await one<{ e: string }>(`SELECT to_char(series_end, 'YYYY-MM-DD') AS e FROM jobs WHERE num = $1`, [j.num]))!.e).toBe(plus(today, 2 + 56));
+    const search = async () => (await jobs.listJobs({ ...MOSCOW, today, when: 'all' } as never, other)).jobs.map(x => x.num);
+    expect(await search()).toContain(j.num);
+    // Все 9 выходов прошли: последний — 3 дня назад.
+    await query('UPDATE jobs SET date = $2 WHERE num = $1', [j.num, plus(today, -59)]);
+    await jobs.syncSeriesEnd((await one<{ id: string }>('SELECT id FROM jobs WHERE num = $1', [j.num]))!.id, pool());
+    expect(await search()).not.toContain(j.num);
+    await expectErr(jobs.applyToJob(j.num, { reqConfirmed: true }, other, today), /закончилась/);
+    expect(await sh.autoAcceptDue()).not.toContain(j.num);
+    // Через 7 дней после последнего выхода — закрывается автоматически, отзывы открыты.
+    await query('UPDATE jobs SET date = date - 5, series_end = series_end - 5 WHERE num = $1', [j.num]);
+    expect(await sh.autoAcceptDue()).toContain(j.num);
+    const closed = await jobs.getJob(j.num, fl);
+    expect(closed.status).toBe('accepted');
+    expect(closed.shift!.reviewTargets).toEqual([{ target: 'employer', name: 'Айгуль Т.' }]);
+    expect((await one<{ text: string }>(`SELECT text FROM events WHERE user_id = $1 AND kind = 'accept'`, [fl.id]))!.text).toMatch(/Серия завершилась/);
   });
 
   it('даты серии с историей не сдвигаются: перенос начала и смена графика — отказ; без истории — можно', async () => {

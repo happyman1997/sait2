@@ -358,7 +358,7 @@ describe('мои смены и отклики', () => {
     await jobs.cancelJob(b.num, { reason: 'погода изменилась', notice: 'больше суток' }, emp);
 
     const mine = await sh.myJobs(fl);
-    expect(mine.map(j => [j.num, j.myStatus])).toEqual([[a.num, 'hired'], [b.num, 'rejected']].sort((x, y) => (x[0] === b.num ? 1 : -1)));
+    expect(mine.map(j => [j.num, j.myStatus])).toEqual([[a.num, 'hired'], [b.num, 'rejected']]);
     expect(mine.find(j => j.num === a.num)).toMatchObject({ counterpart: 'Айгуль Т.', hasChat: true });
     expect(mine.find(j => j.num === b.num)?.cancellation?.reason).toBe('погода изменилась');
 

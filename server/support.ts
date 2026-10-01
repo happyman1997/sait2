@@ -9,6 +9,7 @@ import { invalidateSearch, jobPeople } from './jobs';
 import { publish } from './live';
 import { detachFreelancer } from './shifts';
 import type { SessionUser } from './session';
+import { doneSql } from './stats';
 
 type U = Pick<SessionUser, 'id'> | null;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -204,7 +205,7 @@ export async function findUsers(viewer: U, q: unknown): Promise<UserRow[]> {
             CASE WHEN u.role = 'employer' THEN (SELECT count(*) FROM jobs WHERE employer_id = u.id)
                  ELSE (SELECT count(*) FROM applications WHERE freelancer_id = u.id) END::int AS jobs,
             CASE WHEN u.role = 'employer' THEN (SELECT count(*) FROM jobs WHERE employer_id = u.id AND status = 'accepted')
-                 ELSE (SELECT count(*) FROM hires h JOIN acceptances ac ON ac.job_id = h.job_id WHERE h.freelancer_id = u.id) END::int AS done,
+                 ELSE ${doneSql('u.id')} END::int AS done,
             (SELECT count(*) FROM complaints c WHERE coalesce(c.target_id, (SELECT employer_id FROM jobs WHERE id = c.job_id)) = u.id)::int AS complaints,
             (SELECT count(*) FROM user_marks m WHERE m.user_id = u.id AND coalesce(m.until, m.created_at + interval '90 days') > now())::int AS marks
        FROM users u

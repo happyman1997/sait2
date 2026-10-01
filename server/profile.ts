@@ -10,6 +10,7 @@ import { limitOrThrow } from './rate-limit';
 import { sendEmailVerification } from './verify';
 import { shortName } from './jobs';
 import type { SessionUser } from './session';
+import { doneSql } from './stats';
 
 type U = SessionUser;
 
@@ -35,7 +36,7 @@ export async function getProfile(viewer: U | null) {
   const [profile, stats, history, marks, reviews, settings] = await Promise.all([
     loadProfile(u.id, u.role),
     one<{ done: number; rating: number | null; reviews: number; jobs: number; no_shows: number; inn: string | null }>(
-      `SELECT (SELECT count(*) FROM ${emp ? "jobs j WHERE j.employer_id = u.id AND j.status = 'accepted'" : 'hires h JOIN acceptances a ON a.job_id = h.job_id WHERE h.freelancer_id = u.id'})::int AS done,
+      `SELECT ${emp ? "(SELECT count(*) FROM jobs j WHERE j.employer_id = u.id AND j.status = 'accepted')::int" : doneSql('u.id')} AS done,
               (SELECT avg(rating)::float8 FROM reviews WHERE target_id = u.id) AS rating,
               (SELECT count(*) FROM reviews WHERE target_id = u.id)::int AS reviews,
               (SELECT count(*) FROM ${emp ? 'jobs WHERE employer_id = u.id' : "applications WHERE freelancer_id = u.id"})::int AS jobs,

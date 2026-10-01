@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { css } from '@/lib/css';
 import { localISO, type JobDetail, type SeriesInfo } from '@/lib/jobs';
-import type { Act, ReviewOpen } from './ShiftBlock';
+import { ComplaintForm, type Act, type ReviewOpen } from './ShiftBlock';
 import { Corners, LABEL } from './ui';
 
 type Day = SeriesInfo['days'][number];
@@ -35,6 +35,7 @@ export function SeriesBlock({ job, act, busy, onReview }: { job: JobDetail; act:
   const s = job.series!;
   const [all, setAll] = useState(false);
   const [callDay, setCallDay] = useState('');
+  const [complainAbout, setComplainAbout] = useState<{ id: string; name: string } | null>(null);
   // Коротко — дни, где нужно действие или идёт приёмка/расчёт, и ближайшие пять; если ничего — последние пять.
   const upcoming = s.days.filter(d => !d.past && !hasAction(d) && !inProgress(d)).slice(0, 5);
   const short = s.days.filter(d => hasAction(d) || inProgress(d) || upcoming.includes(d));
@@ -153,8 +154,15 @@ export function SeriesBlock({ job, act, busy, onReview }: { job: JobDetail; act:
               {r.mine ? 'Изменить отзыв' : job.mine ? 'Оценить замену' : 'Оценить работодателя'}
             </button>
           )}
+          {r.complained
+            ? <span style={css('font-size: 12.5px; color: color-mix(in srgb, var(--color-text) 64%, transparent)')}>жалоба на рассмотрении</span>
+            : <button className="btn btn-ghost" onClick={() => setComplainAbout({ id: r.target, name: r.name })} style={css('height: 32px; font-size: 12.5px; padding: 0 6px; flex: none')}>Пожаловаться</button>}
         </div>
       ))}
+      {complainAbout && (
+        <ComplaintForm role={job.mine ? 'employer' : 'freelancer'} act={act} busy={busy} onClose={() => setComplainAbout(null)}
+          title={'Жалоба · ' + complainAbout.name} targets={job.mine ? [complainAbout] : []} />
+      )}
       {s.canExtend && (
         <button className="btn btn-secondary btn-block" disabled={busy} onClick={() => act('series/extend', {}, 'Серия продлена — добавлено 4 выхода')}
           style={css('margin-top: 10px; height: 40px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase')}>Продлить серию на месяц</button>

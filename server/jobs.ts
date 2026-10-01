@@ -15,6 +15,7 @@ import { jobPhotos } from './files';
 import { publish } from './live';
 import { limitOrThrow } from './rate-limit';
 import type { SessionUser } from './session';
+import { doneSql } from './stats';
 
 export const DEFAULT_BASE = { lat: 55.7558, lng: 37.6173, label: 'Москва' };
 export const CANCEL_REASONS_EMPLOYER = ['объект отменил работы', 'погода изменилась', 'нашли своих людей', 'ошибка в заказе', 'другая причина'];
@@ -121,7 +122,8 @@ async function searchJobs(p: ListParams, viewer: Viewer, db: Db) {
        SELECT j.id, j.pt
          FROM jobs j
         WHERE j.status IN ('open', 'staffed')
-          AND (j.date >= $4::date OR j.repeat IS NOT NULL)
+          -- Разовый — пока не прошла дата; серия — пока не прошёл последний выход («по снегопаду» — без конца).
+          AND (j.date >= $4::date OR (j.repeat IS NOT NULL AND (j.series_end IS NULL OR j.series_end >= $4::date)))
           AND ($5::text[] IS NULL OR j.type_id = ANY($5))
           AND j.pay >= $6
           AND (NOT $8 OR j.date BETWEEN $4::date AND $4::date + 1)
@@ -143,7 +145,8 @@ async function searchJobs(p: ListParams, viewer: Viewer, db: Db) {
 export async function jobTypes(today: string, db: Db = pool()) {
   const r = await query<{ id: string; label: string; is_custom: boolean; count: number }>(
     `SELECT t.id, t.label, t.is_custom,
-            (SELECT count(*) FROM jobs j WHERE j.type_id = t.id AND j.status IN ('open', 'staffed') AND (j.date >= $1::date OR j.repeat IS NOT NULL))::int AS count
+            (SELECT count(*) FROM jobs j WHERE j.type_id = t.id AND j.status IN ('open', 'staffed')
+                AND (j.date >= $1::date OR (j.repeat IS NOT NULL AND (j.series_end IS NULL OR j.series_end >= $1::date))))::int AS count
        FROM job_types t
       ORDER BY t.is_custom, t.created_at, t.label`,
     [today],
@@ -250,7 +253,7 @@ async function loadApplicants(jobId: string, db: Db): Promise<Applicant[]> {
   const apps = await query<{ id: string; freelancer_id: string; name: string; status: AppStatus; created_at: Date; no_show_count: number; gear: string[] | null; rating: number | null; done: number; is_lead: boolean | null; npd: boolean | null }>(
     `SELECT a.id, a.freelancer_id, u.name, a.status, a.created_at, u.no_show_count, fp.gear, (fp.npd_status = 'ok' AND fp.npd_checked_at > now() - interval '3 days') AS npd,
             (SELECT avg(rating)::float8 FROM reviews WHERE target_id = u.id) AS rating,
-            (SELECT count(*) FROM hires h JOIN acceptances ac ON ac.job_id = h.job_id WHERE h.freelancer_id = u.id)::int AS done,
+            ${doneSql('u.id')} AS done,
             (SELECT is_lead FROM hires h WHERE h.job_id = a.job_id AND h.freelancer_id = u.id) AS is_lead
        FROM applications a JOIN users u ON u.id = a.freelancer_id LEFT JOIN freelancer_profiles fp ON fp.user_id = u.id
       WHERE a.job_id = $1 AND a.status IN ('sent', 'hired')
@@ -263,6 +266,14 @@ async function loadApplicants(jobId: string, db: Db): Promise<Applicant[]> {
     noShows: a.no_show_count, gear: (a.gear || []).filter(g => g !== 'Ничего нет').slice(0, 2).join(', ') || 'свой инвентарь не указан',
     status: a.status, isLead: !!a.is_lead, appliedAt: a.created_at.toISOString(), npd: !!a.npd
   }));
+}
+
+/** Последний выход серии по графику — по нему закончившаяся серия уходит из поиска (у «по снегопаду» конца нет). */
+export async function syncSeriesEnd(jobId: string, db: Db) {
+  const j = (await one<{ repeat: string | null; date: string; series_len: number }>(
+    `SELECT repeat, to_char(date, 'YYYY-MM-DD') AS date, series_len FROM jobs WHERE id = $1`, [jobId], db))!;
+  const dates = j.repeat ? seriesDates(j.repeat, j.date, j.series_len) : null;
+  await query('UPDATE jobs SET series_end = $2 WHERE id = $1', [jobId, dates?.at(-1) ?? null], db);
 }
 
 /** Даты серии: по правилу повтора, а «по снегопаду» — вызовы работодателя (по возрастанию). */
@@ -359,12 +370,18 @@ async function loadSubReviews(r: { id: string; employer_id: string }, viewer: Vi
     targets = [{ key: 'employer', id: r.employer_id, name: empName }];
   }
   if (!targets.length) return [];
-  const mine = await query<{ target_id: string; rating: number; text: string; editable_until: Date }>(
-    'SELECT target_id, rating, text, editable_until FROM reviews WHERE job_id = $1 AND author_id = $2', [r.id, viewer.id], db);
+  const [mine, complaints] = await Promise.all([
+    query<{ target_id: string; rating: number; text: string; editable_until: Date }>(
+      'SELECT target_id, rating, text, editable_until FROM reviews WHERE job_id = $1 AND author_id = $2', [r.id, viewer.id], db),
+    query<{ target_id: string | null }>('SELECT target_id FROM complaints WHERE job_id = $1 AND author_id = $2', [r.id, viewer.id], db)
+  ]);
   const now = Date.now();
   return targets.map(t => {
     const v = mine.rows.find(x => x.target_id === t.id);
-    return { target: t.key, name: t.name, mine: v ? { rating: v.rating, text: v.text, editable: v.editable_until.getTime() > now } : null };
+    return {
+      target: t.key, name: t.name, mine: v ? { rating: v.rating, text: v.text, editable: v.editable_until.getTime() > now } : null,
+      complained: complaints.rows.some(c => c.target_id === t.id)
+    };
   });
 }
 
@@ -540,6 +557,7 @@ export async function createJob(raw: unknown, viewer: Viewer, todayRaw: unknown)
         f.meetName || null, f.meetPhone || null, f.objectId || null],
       db
     );
+    await syncSeriesEnd(row!.id, db);
     await addEvents([{ userId: viewer.id, kind: 'job', text: 'Заказ опубликован — № ' + jobNum(Number(row!.num)), jobId: row!.id, num: Number(row!.num), silent: true }], db);
     return Number(row!.num);
   });
@@ -600,6 +618,7 @@ export async function updateJob(num: number, raw: unknown, viewer: Viewer, today
         f.regular ? f.repeatNote || null : null, f.req || null, f.access, f.tools, f.meetName || null, f.meetPhone || null],
       db
     );
+    await syncSeriesEnd(j.id, db);
     invalidateSearch();
     const sent = await query<{ freelancer_id: string }>(`SELECT freelancer_id FROM applications WHERE job_id = $1 AND status = 'sent'`, [j.id], db);
     await addEvents(sent.rows.map(a => ({ userId: a.freelancer_id, kind: 'job', text: 'Условия заказа № ' + jobNum(num) + ' изменились — проверьте карточку', jobId: j.id, num })), db);
@@ -661,8 +680,9 @@ export async function applyToJob(num: number, raw: unknown, viewer: Viewer, toda
   await limitOrThrow(`apply:${viewer.id}`, 60, 3600, 'Слишком много откликов за час — передохните и продолжите позже.');
 
   await tx(async (db) => {
-    const j = await one<{ id: string; employer_id: string; status: JobStatus; crew: number; requirement: string | null; date: string; repeat: string | null; title: string; hired: number }>(
+    const j = await one<{ id: string; employer_id: string; status: JobStatus; crew: number; requirement: string | null; date: string; repeat: string | null; title: string; hired: number; series_end: string | null }>(
       `SELECT j.id, j.employer_id, j.status, j.crew, j.requirement, to_char(j.date, 'YYYY-MM-DD') AS date, j.repeat, j.title,
+              to_char(j.series_end, 'YYYY-MM-DD') AS series_end,
               (SELECT count(*) FROM hires h WHERE h.job_id = j.id)::int AS hired
          FROM jobs j WHERE j.num = $1 FOR UPDATE OF j`,
       [num],
@@ -672,6 +692,7 @@ export async function applyToJob(num: number, raw: unknown, viewer: Viewer, toda
     if (j.status === 'cancelled' || j.status === 'accepted' || j.status === 'reported') throw new AppError(409, 'Заказ закрыт или отменён — отклик не принимается.');
     if (j.crew < CREW_ANY && j.hired >= j.crew) throw new AppError(409, 'Смена уже набрана — отклики закрыты.');
     if (!j.repeat && j.date < today) throw new AppError(409, 'Дата выхода уже прошла — отклик не принимается.');
+    if (j.series_end && j.series_end < today) throw new AppError(409, 'Серия уже закончилась — отклик не принимается.');
     if (j.requirement && !reqConfirmed) throw new AppError(422, 'Подтвердите условие работодателя: ' + j.requirement, 'req');
 
     const prev = await one<{ status: AppStatus }>('SELECT status FROM applications WHERE job_id = $1 AND freelancer_id = $2', [j.id, viewer.id], db);

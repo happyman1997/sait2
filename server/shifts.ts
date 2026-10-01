@@ -10,10 +10,11 @@ import { badWordIn, findBadField } from '@/lib/moderation';
 import { one, pool, query, tx, type Db } from './db';
 import { AppError, ModerationError } from './errors';
 import { addEvents, localClock, mailSupport } from './events';
-import { clientToday, getJob, initialsOf, invalidateSearch, seriesDatesFor, seriesHasHistory, SERIES_FIXED, shortName } from './jobs';
+import { clientToday, getJob, initialsOf, invalidateSearch, seriesDatesFor, seriesHasHistory, SERIES_FIXED, shortName, syncSeriesEnd } from './jobs';
 import { publish } from './live';
 import { limitOrThrow } from './rate-limit';
 import type { SessionUser } from './session';
+import { doneSql } from './stats';
 
 type Viewer = Pick<SessionUser, 'id' | 'role' | 'city' | 'base_lat' | 'base_lng'> | null;
 type U = NonNullable<Viewer>;
@@ -275,10 +276,14 @@ async function acceptLocked(j: JobRow, auto: boolean, db: Db) {
   await addEvents([
     ...hired.map(h => ({
       userId: h.freelancer_id, kind: 'accept', jobId: j.id, num: j.num, deliver: true,
-      text: auto ? 'Смена закрыта автоматически: работодатель не ответил ' + AUTO_ACCEPT_DAYS + ' дней — засчитана вам · ' + t
+      text: auto
+        ? (isSeries(j.repeat) ? 'Серия завершилась: последний выход был ' + AUTO_ACCEPT_DAYS + ' дней назад · ' + t + '. Оцените работодателя.'
+          : 'Смена закрыта автоматически: работодатель не ответил ' + AUTO_ACCEPT_DAYS + ' дней — засчитана вам · ' + t)
         : (isSeries(j.repeat) ? 'Серия завершена · ' : 'Работа принята · ') + t + '. Оцените работодателя.'
     })),
-    ...(auto ? [{ userId: j.employer_id, kind: 'accept', jobId: j.id, num: j.num, deliver: true, text: 'Смена закрыта автоматически: работа сдана ' + AUTO_ACCEPT_DAYS + ' дней назад · ' + t }] : [])
+    ...(auto ? [{ userId: j.employer_id, kind: 'accept', jobId: j.id, num: j.num, deliver: true,
+      text: isSeries(j.repeat) ? 'Серия закрыта автоматически: последний выход был ' + AUTO_ACCEPT_DAYS + ' дней назад · ' + t + '. Оцените исполнителей.'
+        : 'Смена закрыта автоматически: работа сдана ' + AUTO_ACCEPT_DAYS + ' дней назад · ' + t }] : [])
   ], db);
   await publish([j.employer_id, ...hired.map(h => h.freelancer_id), ...rest], { t: 'job', num: j.num }, db);
 }
@@ -293,12 +298,19 @@ export async function acceptWork(num: number, viewer: Viewer): Promise<JobDetail
   return getJob(num, viewer);
 }
 
-/** Автоприёмка: работа сдана 7+ дней назад и не принята — засчитывается исполнителю. */
+/**
+ * Автоприёмка: работа сдана 7+ дней назад и не принята — засчитывается исполнителю.
+ * Серия по графику с нанятыми закрывается сама через 7 дней после последнего выхода — открываются отзывы.
+ */
 export async function autoAcceptDue(db: Db = pool()): Promise<number[]> {
   const due = await query<{ num: string }>(
     `SELECT j.num FROM reports r JOIN jobs j ON j.id = r.job_id
       WHERE j.status = 'reported' AND r.reported_at <= now() - make_interval(days => $1)
-      ORDER BY r.reported_at LIMIT 200`,
+     UNION ALL
+     SELECT j.num FROM jobs j
+      WHERE j.status IN ('open', 'staffed') AND j.series_end < current_date - $1
+        AND EXISTS (SELECT 1 FROM hires h WHERE h.job_id = j.id)
+      LIMIT 200`,
     [AUTO_ACCEPT_DAYS], db);
   const done: number[] = [];
   // Дни серии: сдан 7+ дней назад и не принят — засчитывается сам.
@@ -327,7 +339,7 @@ export async function autoAcceptDue(db: Db = pool()): Promise<number[]> {
     try {
       await tx(async (t) => {
         const j = await lockJob(num, t);
-        if (j.status !== 'reported') return;
+        if (j.status !== 'reported' && !(isSeries(j.repeat) && (j.status === 'open' || j.status === 'staffed'))) return;
         await acceptLocked(j, true, t);
         done.push(num);
       });
@@ -354,6 +366,7 @@ export async function moveDate(num: number, raw: unknown, viewer: Viewer, todayR
     if (j.date === date) throw new AppError(422, 'Это та же дата.', 'date');
     if (j.repeat && !isOnCall(j.repeat) && (await seriesHasHistory(j.id, db))) throw new AppError(409, SERIES_FIXED, 'date');
     await query('UPDATE jobs SET date = $2, urgent = $3, updated_at = now() WHERE id = $1', [j.id, date, ahead <= 1], db);
+    await syncSeriesEnd(j.id, db);
     invalidateSearch();
     const people = [...(await hiredOf(j.id, db)).map(h => h.freelancer_id), ...(await openApplicants(j.id, db))];
     const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
@@ -690,7 +703,7 @@ export async function applicantsBoard(viewer: Viewer) {
     `SELECT j.num, a.id, u.name, a.status, a.created_at, h.is_lead, a.req_confirmed,
             (SELECT avg(rating)::float8 FROM reviews WHERE target_id = u.id) AS rating,
             (SELECT count(*) FROM reviews WHERE target_id = u.id)::int AS reviews,
-            (SELECT count(*) FROM hires h2 JOIN acceptances ac ON ac.job_id = h2.job_id WHERE h2.freelancer_id = u.id)::int AS done,
+            ${doneSql('u.id')} AS done,
             u.no_show_count, fp.gear, fp.own_car, fp.work_cities, fp.skills, fp.custom_skills, (fp.npd_status = 'ok' AND fp.npd_checked_at > now() - interval '3 days') AS npd,
             EXISTS (SELECT 1 FROM user_marks m WHERE m.user_id = u.id AND m.kind = 'late_withdrawal' AND m.until > now()) AS late
        FROM applications a JOIN jobs j ON j.id = a.job_id JOIN users u ON u.id = a.freelancer_id
@@ -950,6 +963,8 @@ export async function callSeries(num: number, raw: unknown, viewer: Viewer): Pro
   const day = typeof r.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.day) ? r.day : '';
   const cancel = r.cancel === true;
   if (!day) throw new AppError(422, 'Выберите дату вызова.', 'day');
+  // Каждый вызов и отмена — срочное уведомление бригаде: «вызвать — отменить» по кругу не должно её засыпать (лимит — на заказ).
+  if (viewer) await limitOrThrow(`call:${num}:${viewer.id}`, 20, 86400, 'Слишком много вызовов и отмен за сутки — договоритесь с бригадой в чате.');
   await tx(async (db) => {
     const j = await lockJob(num, db);
     needOwner(j, viewer);
@@ -1061,6 +1076,7 @@ export async function extendSeries(num: number, viewer: Viewer): Promise<JobDeta
     if (j.status === 'cancelled' || j.status === 'accepted') throw new AppError(409, 'Серия закрыта.');
     const r = await query('UPDATE jobs SET series_len = series_len + $2, updated_at = now() WHERE id = $1 AND series_len + $2 <= 60', [j.id, SERIES_STEP], db);
     if (!r.rowCount) throw new AppError(409, 'Серия уже максимальной длины.');
+    await syncSeriesEnd(j.id, db);
     const hired = await hiredOf(j.id, db);
     await addEvents(hired.map(h => ({
       userId: h.freelancer_id, kind: 'job', jobId: j.id, num, deliver: true,

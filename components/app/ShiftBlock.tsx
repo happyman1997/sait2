@@ -2,7 +2,7 @@
 
 // Блоки жизненного цикла смены в карточке заказа: отклики с наймом, смена (встречающий, сдача, приёмка),
 // расчёт, отзывы, жалоба, перенос даты и отказ исполнителя.
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { css } from '@/lib/css';
 import { uploadForm } from '@/lib/image';
 import { COMPLAINT_KINDS, crewOf, dateLabel, DISPUTE_REASONS, isSeries, LEAVE_REASONS, localISO, money, plural, type DisputeInfo, type JobDetail } from '@/lib/jobs';
@@ -69,10 +69,6 @@ export function ShiftBlock({ job, isOwner, act, onChat, onReview, busy }: {
 }) {
   const s = job.shift!;
   const [complaintOpen, setComplaintOpen] = useState(false);
-  const kinds = COMPLAINT_KINDS[isOwner ? 'employer' : 'freelancer'];
-  const [kind, setKind] = useState(kinds[0]);
-  const [ctext, setCtext] = useState('');
-  const [ctarget, setCtarget] = useState('');
   const accepted = job.status === 'accepted';
   const reported = job.status === 'reported';
   const brigade = s.hired.length > 1;
@@ -83,7 +79,9 @@ export function ShiftBlock({ job, isOwner, act, onChat, onReview, busy }: {
   const canReport = !isOwner && job.myStatus === 'hired' && !reported && !accepted && job.status !== 'cancelled' && (!brigade || s.iAmLead) && !early;
 
   const line = accepted
-    ? (s.autoAccepted ? 'Смена закрыта автоматически: работодатель не ответил 7 дней — засчитана исполнителю.' : (series ? 'Серия завершена · ' : 'Работа принята · ') + new Date(s.acceptedAt!).toLocaleDateString('ru-RU'))
+    ? (s.autoAccepted
+      ? (series ? 'Серия закрылась автоматически через 7 дней после последнего выхода.' : 'Смена закрыта автоматически: работодатель не ответил 7 дней — засчитана исполнителю.')
+      : (series ? 'Серия завершена · ' : 'Работа принята · ') + new Date(s.acceptedAt!).toLocaleDateString('ru-RU'))
     : series
       ? (isOwner
         ? 'Нанято ' + s.hired.length + (crewOf(job) === Infinity ? '' : ' из ' + crewOf(job)) + ' · серия с ' + dateLabel(job.date) + '. Каждый выход сдаётся и принимается отдельно — в «Серии выходов». «Завершить серию» закрывает заказ и открывает отзывы.'
@@ -195,34 +193,52 @@ export function ShiftBlock({ job, isOwner, act, onChat, onReview, busy }: {
         </div>
       )}
       {accepted && !s.myComplaint && !complaintOpen && (
-        <button className="btn btn-ghost btn-block" onClick={() => { setComplaintOpen(true); setCtarget(isOwner ? (s.hired[0]?.appId || '') : ''); }} style={css('margin-top: 8px; ' + BTN)}>Пожаловаться на смену</button>
+        <button className="btn btn-ghost btn-block" onClick={() => setComplaintOpen(true)} style={css('margin-top: 8px; ' + BTN)}>Пожаловаться на смену</button>
       )}
       {complaintOpen && (
-        <div className="blueprint" style={css('margin-top: 12px; padding: 13px 12px')}>
-          <Corners />
-          <div style={css(LABEL)}>Жалоба</div>
-          {isOwner && s.hired.length > 1 && (
-            <div className="field" style={css('margin-top: 10px')}>
-              <label htmlFor="cm-target">На кого</label>
-              <select id="cm-target" className="input" value={ctarget} onChange={e => setCtarget(e.target.value)}>
-                {s.hired.map(h => <option key={h.appId!} value={h.appId!}>{h.name}</option>)}
-              </select>
-            </div>
-          )}
-          <div className="field" style={css('margin-top: 10px')}>
-            <label htmlFor="cm-kind">Тема</label>
-            <select id="cm-kind" className="input" value={kind} onChange={e => setKind(e.target.value)}>
-              {kinds.map(k => <option key={k}>{k}</option>)}
-            </select>
-          </div>
-          <textarea className="input" rows={3} value={ctext} onChange={e => setCtext(e.target.value)} aria-label="Жалоба" placeholder="Что произошло, с датами и суммами" style={css('width: 100%; box-sizing: border-box; margin-top: 10px')} />
-          <div style={css('font-size: 13px; line-height: 1.45; margin-top: 10px; color: color-mix(in srgb, var(--color-text) 70%, transparent)')}>Площадка не возвращает деньги — она разбирает поведение на площадке: ответ за 3 рабочих дня, санкции — пометка, понижение в выдаче, блокировка.</div>
-          <div style={css('display: flex; gap: 8px; margin-top: 12px')}>
-            <button className="btn btn-primary" disabled={busy} onClick={async () => { if (await act('complaint', { reason: kind, text: ctext, target: isOwner ? ctarget : undefined }, 'Жалоба принята — ответ за 3 рабочих дня')) setComplaintOpen(false); }} style={css('flex: 1; ' + BTN)}>Отправить жалобу</button>
-            <button className="btn btn-ghost" onClick={() => setComplaintOpen(false)} style={css('height: 42px; font-size: 13px; padding: 0 14px')}>Назад</button>
-          </div>
+        <ComplaintForm role={isOwner ? 'employer' : 'freelancer'} act={act} busy={busy} onClose={() => setComplaintOpen(false)}
+          targets={isOwner ? s.hired.filter(h => h.appId).map(h => ({ id: h.appId!, name: h.name })) : []} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Жалоба в поддержку: тема, текст и — у работодателя — на кого (id отклика или, для замены, id исполнителя).
+ * Одна цель — без выбора. Площадка разбирает поведение, деньги не возвращает.
+ */
+export function ComplaintForm({ role, targets, act, busy, onClose, title = 'Жалоба' }: {
+  role: 'employer' | 'freelancer'; targets: { id: string; name: string }[]; act: Act; busy: boolean; onClose: () => void; title?: string;
+}) {
+  const kinds = COMPLAINT_KINDS[role];
+  const [kind, setKind] = useState(kinds[0]);
+  const [text, setText] = useState('');
+  const [target, setTarget] = useState(targets[0]?.id ?? '');
+  const id = useId();
+  return (
+    <div className="blueprint" style={css('margin-top: 12px; padding: 13px 12px')}>
+      <Corners />
+      <div style={css(LABEL)}>{title}</div>
+      {targets.length > 1 && (
+        <div className="field" style={css('margin-top: 10px')}>
+          <label htmlFor={id + 't'}>На кого</label>
+          <select id={id + 't'} className="input" value={target} onChange={e => setTarget(e.target.value)}>
+            {targets.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
         </div>
       )}
+      <div className="field" style={css('margin-top: 10px')}>
+        <label htmlFor={id + 'k'}>Тема</label>
+        <select id={id + 'k'} className="input" value={kind} onChange={e => setKind(e.target.value)}>
+          {kinds.map(k => <option key={k}>{k}</option>)}
+        </select>
+      </div>
+      <textarea className="input" rows={3} value={text} onChange={e => setText(e.target.value)} aria-label="Жалоба" placeholder="Что произошло, с датами и суммами" style={css('width: 100%; box-sizing: border-box; margin-top: 10px')} />
+      <div style={css('font-size: 13px; line-height: 1.45; margin-top: 10px; color: color-mix(in srgb, var(--color-text) 70%, transparent)')}>Площадка не возвращает деньги — она разбирает поведение на площадке: ответ за 3 рабочих дня, санкции — пометка, понижение в выдаче, блокировка.</div>
+      <div style={css('display: flex; gap: 8px; margin-top: 12px')}>
+        <button className="btn btn-primary" disabled={busy} onClick={async () => { if (await act('complaint', { reason: kind, text, target: target || undefined }, 'Жалоба принята — ответ за 3 рабочих дня')) onClose(); }} style={css('flex: 1; ' + BTN)}>Отправить жалобу</button>
+        <button className="btn btn-ghost" onClick={onClose} style={css('height: 42px; font-size: 13px; padding: 0 14px')}>Назад</button>
+      </div>
     </div>
   );
 }
