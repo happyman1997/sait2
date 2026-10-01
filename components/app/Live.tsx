@@ -127,6 +127,8 @@ export function LiveProvider({ me, children }: { me: Me; children: ReactNode }) 
       try { e = JSON.parse(m.data); } catch { return; }
       if (e.t === 'event') { if (toasts.current) flash(e.text); setJournal(n => n + 1); }
       if (e.t === 'message' || e.t === 'read') { clearTimeout(reloadT); reloadT = setTimeout(reloadChats, 150); }
+      // Сервер переподключился к базе — события за это время потеряны.
+      if (e.t === 'resync') { reloadChats(); reloadJournal(); }
       listeners.current.forEach(fn => fn(e));
     };
     return () => { clearTimeout(reloadT); es.close(); };

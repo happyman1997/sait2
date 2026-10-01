@@ -118,11 +118,13 @@ export async function listJobs(p: ListParams, viewer: Viewer, db: Db = pool()) {
   const hit = await guestSearch.get(key, load, VIEWER_MAX_AGE);
   const own = viewer.role === 'freelancer' && !mineLoaded && hit.rows.length
     ? new Map((await query<{ job_id: string; status: AppStatus }>(
-      // Все свои отклики (обычно десятки) дешевле, чем передавать в запрос 500 id выдачи.
-      'SELECT job_id, status FROM applications WHERE freelancer_id = $1', [viewer.id], db)).rows
+      // Свои отклики на открытые заказы (в выдаче только они) — дешевле, чем передавать в запрос 500 id выдачи.
+      `SELECT a.job_id, a.status FROM applications a JOIN jobs j ON j.id = a.job_id
+        WHERE a.freelancer_id = $1 AND j.status IN ('open', 'staffed')`, [viewer.id], db)).rows
       .map(x => [x.job_id, x.status]))
     : null;
-  return { jobs: hit.rows.map(x => toSummary(own ? { ...x, my_status: own.get(x.id) ?? null } : x, viewer)), base: hit.base };
+  // Выдача посчитана от округлённой точки, а своя метка базы на карте — точно на месте.
+  return { jobs: hit.rows.map(x => toSummary(own ? { ...x, my_status: own.get(x.id) ?? null } : x, viewer)), base: b };
 }
 
 async function searchJobs(p: ListParams, viewer: Viewer, db: Db) {
