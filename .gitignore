@@ -14,3 +14,4 @@ public/maplibre/
 deploy/backups/
 deploy/letsencrypt/
 dist/
+deploy/map/

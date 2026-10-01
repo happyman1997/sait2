@@ -87,7 +87,32 @@ docker compose -f docker-compose.prod.yml --env-file .env.production exec -T db 
 
 Приложение без состояния, кроме фото: задайте `S3_BUCKET` и запускайте несколько контейнеров `app` за балансировщиком (`docker compose ... up -d --scale app=3` и `upstream` в nginx). Живые обновления идут через Postgres `LISTEN/NOTIFY`, фоновые задачи защищены блокировкой — работают корректно при любом числе экземпляров. Кэш выдачи на соседних экземплярах обновляется в пределах 5 с (вошедшим) и 20 с (гостям).
 
-## 9. Сборка за прокси с подменой TLS
+## 9. Своя карта (без зарубежных серверов)
+
+По умолчанию стиль и тайлы карты грузятся браузером с OpenFreeMap (за рубежом). Чтобы всё шло с вашего сервера:
+
+1. **Тайлы России** — один файл `russia.pmtiles` (схема OpenMapTiles), собирается Planetiler из данных OpenStreetMap. Нужна машина с 16 ГБ RAM и ~60 ГБ диска, несколько часов; собрать можно и на другой машине, а файл (~10–15 ГБ) скопировать:
+   ```sh
+   mkdir -p deploy/map
+   docker run --rm -e JAVA_TOOL_OPTIONS="-Xmx12g" -v "$PWD/deploy/map:/data" ghcr.io/onthegomap/planetiler:latest \
+     --download --area=russia --output=/data/russia.pmtiles
+   ```
+2. **Стиль, шрифты подписей, значки** (стиль liberty, адреса переписываются на ваш сайт):
+   ```sh
+   docker run --rm -v "$PWD:/work" -w /work node:22-bookworm-slim node deploy/map-setup.mjs https://arena-raboty.ru
+   ```
+3. В `.env.production`: `NEXT_PUBLIC_MAP_STYLE_URL=/map/style.json` (и `CSP_CONNECT_SRC=` пустой), затем пересборка:
+   ```sh
+   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+   ```
+
+nginx отдаёт `deploy/map` по адресу `/map/` (другая папка — `MAP_DIR`); карта читает файл тайлов кусками (Range-запросы), отдельный сервер тайлов не нужен. Подпись на карте сменится на «© OpenMapTiles · © участники OpenStreetMap». Обновлять тайлы — повтором шага 1 раз в несколько месяцев.
+
+Проверено на стенде с тестовым файлом тайлов: карта рисуется, все запросы страницы — только на свой сервер, нарушений CSP нет. Шаги 1–2 на стенде не запускались (нужен доступ к Geofabrik и OpenFreeMap).
+
+Шрифт интерфейса (Golos Text) уже отдаётся со своего сервера — Google Fonts не используется.
+
+## 10. Сборка за прокси с подменой TLS
 
 Если сервер ходит в интернет через корпоративный прокси со своим сертификатом:
 

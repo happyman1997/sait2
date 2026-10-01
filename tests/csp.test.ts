@@ -9,7 +9,8 @@ describe('CSP', () => {
     const csp = buildCsp('abc');
     expect(dir(csp, 'script-src')).toBe("script-src 'self' 'nonce-abc' 'strict-dynamic'");
     expect(dir(buildCsp('abc', { dev: true }), 'script-src')).toContain("'unsafe-eval'");
-    expect(dir(csp, 'style-src-elem')).toBe("style-src-elem 'self' 'nonce-abc' https://fonts.googleapis.com");
+    expect(dir(csp, 'style-src-elem')).toBe("style-src-elem 'self' 'nonce-abc'");
+    expect(csp).not.toMatch(/google/);
     expect(dir(csp, 'style-src-attr')).toBe("style-src-attr 'unsafe-inline'");
     for (const d of ["object-src 'none'", "frame-ancestors 'none'", "base-uri 'self'", "form-action 'self'", 'report-uri /api/csp-report']) expect(csp).toContain(d);
   });

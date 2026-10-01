@@ -25,8 +25,8 @@ export function observe(status: number, seconds: number) {
 export async function renderMetrics(): Promise<string> {
   const p = pool();
   const biz = await one<{ users_f: number; users_e: number; jobs_open: number; outbox_pending: number; outbox_failed: number; complaints: number; disputes: number }>(
-    `SELECT (SELECT count(*) FROM users WHERE role = 'freelancer')::int AS users_f,
-            (SELECT count(*) FROM users WHERE role = 'employer')::int AS users_e,
+    `SELECT (SELECT count(*) FROM users WHERE role = 'freelancer' AND status <> 'deleted')::int AS users_f,
+            (SELECT count(*) FROM users WHERE role = 'employer' AND status <> 'deleted')::int AS users_e,
             (SELECT count(*) FROM jobs WHERE status IN ('open', 'staffed'))::int AS jobs_open,
             (SELECT count(*) FROM notification_outbox WHERE status = 'pending')::int AS outbox_pending,
             (SELECT count(*) FROM notification_outbox WHERE status = 'failed' AND created_at > now() - interval '1 day')::int AS outbox_failed,

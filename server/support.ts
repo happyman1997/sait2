@@ -237,6 +237,7 @@ export async function setBlocked(viewer: U, userId: string, raw: unknown) {
     const u = await one<{ role: string; status: string; is_staff: boolean }>('SELECT role, status, is_staff FROM users WHERE id = $1 FOR UPDATE', [userId], t);
     if (!u) throw new AppError(404, 'Пользователь не найден.');
     if (u.is_staff) throw new AppError(409, 'Сотрудника сначала нужно снять с роли поддержки.');
+    if (u.status === 'deleted') throw new AppError(409, 'Аккаунт удалён пользователем.');
     if ((u.status === 'blocked') === blocked) throw new AppError(409, blocked ? 'Уже заблокирован.' : 'Уже активен.');
     await query('UPDATE users SET status = $2, updated_at = now() WHERE id = $1', [userId, blocked ? 'blocked' : 'active'], t);
     if (blocked) {

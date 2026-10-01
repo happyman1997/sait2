@@ -48,7 +48,8 @@ export async function sessionUser(token: string | undefined | null, db: Db = poo
     [sha256(token)],
     db
   );
-  if (!row || row.status === 'blocked') return null;
+  // Заблокированный или удалённый аккаунт — входа нет.
+  if (!row || row.status !== 'active') return null;
   if (Date.now() - row.last_seen_at.getTime() > 3600_000) {
     await query(
       `UPDATE sessions SET last_seen_at = now(), expires_at = now() + make_interval(days => $2) WHERE id = $1`,

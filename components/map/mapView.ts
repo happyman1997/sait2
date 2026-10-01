@@ -1,7 +1,8 @@
-// Карта заказов: MapLibre GL + тайлы OpenFreeMap (данные © OpenStreetMap, ODbL).
+// Карта заказов: MapLibre GL + тайлы OpenFreeMap или свой PMTiles (данные © OpenStreetMap, ODbL).
 // Перенос design/design/moscow-map.js: метки-плашки HTML-оверлеем, группировка на мелком масштабе,
 // веер плашек на одном адресе, точка базы, круг радиуса. Координаты — сразу lat/lng вместо процентной сетки.
 import type { ExpressionSpecification, LngLatBounds, Map as GLMap } from 'maplibre-gl';
+import { SELF_HOSTED_MAP, STYLE_URL } from './style';
 
 export type Pin = { id: number; lat: number; lng: number; urgent: boolean; rate: string; kind: string; active: boolean; title: string };
 export type LatLng = { lat: number; lng: number };
@@ -12,7 +13,6 @@ export type MapCallbacks = {
   onStackClick?: (ids: number[]) => void;
 };
 
-export const STYLE_URL = process.env.NEXT_PUBLIC_MAP_STYLE_URL || 'https://tiles.openfreemap.org/styles/liberty';
 // Россия целиком — кадр по умолчанию, когда меток нет.
 const RU_BOUNDS: [[number, number], [number, number]] = [[19, 42], [180, 71]];
 
@@ -153,10 +153,18 @@ export class SeasonMapView {
     if (this.destroyed) return;
     // Воркер отдаётся статикой той же версии (scripts/copy-maplibre-worker.mjs).
     gl.setWorkerUrl('/maplibre/maplibre-gl-worker.mjs');
+    if (SELF_HOSTED_MAP) {
+      // Тайлы из файла .pmtiles читаются кусками (Range-запросы) — сервер тайлов не нужен.
+      const { Protocol } = await import('pmtiles');
+      if (this.destroyed) return;
+      const proto = new Protocol();
+      gl.addProtocol('pmtiles', proto.tile);
+    }
     this.gl = gl;
     const map = new gl.Map({
       container: this.host,
-      style: STYLE_URL,
+      // Относительный адрес стиля — от своего сайта.
+      style: new URL(STYLE_URL, window.location.href).href,
       center: [60, 57],
       zoom: 3,
       minZoom: 0,

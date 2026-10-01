@@ -420,7 +420,7 @@ export async function platformStats(db: Db = pool()) {
   if (!row) {
     row = await one<Row>(
       `INSERT INTO daily_stats (day, freelancers, employers)
-       SELECT current_date, count(*) FILTER (WHERE role = 'freelancer'), count(*) FILTER (WHERE role = 'employer') FROM users
+       SELECT current_date, count(*) FILTER (WHERE role = 'freelancer'), count(*) FILTER (WHERE role = 'employer') FROM users WHERE status <> 'deleted'
        ON CONFLICT (day) DO NOTHING
        RETURNING day, freelancers, employers`,
       [],

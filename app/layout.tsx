@@ -3,6 +3,11 @@ import { connection } from 'next/server';
 import type { ReactNode } from 'react';
 import { ModerationGuard } from '@/components/ModerationGuard';
 import { ToastProvider } from '@/components/Toast';
+// Шрифт Golos Text — со своего сервера (раньше — Google Fonts: IP посетителя уходил за рубеж).
+import '@fontsource/golos-text/400.css';
+import '@fontsource/golos-text/500.css';
+import '@fontsource/golos-text/600.css';
+import '@fontsource/golos-text/700.css';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -17,12 +22,6 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   await connection();
   return (
     <html lang="ru">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" />
-      </head>
       <body>
         <ToastProvider>
           {children}

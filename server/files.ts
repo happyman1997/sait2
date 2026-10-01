@@ -38,7 +38,7 @@ async function store(ownerId: string, kind: 'avatar' | 'photo', file: unknown, j
   return row!.id;
 }
 
-async function removeFile(id: string) {
+export async function removeFile(id: string) {
   await query('DELETE FROM files WHERE id = $1', [id]);
   await getStorage().remove(id);
 }

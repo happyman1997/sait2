@@ -3,6 +3,7 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './map-skin.css';
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { SELF_HOSTED_MAP } from './style';
 import { SeasonMapView, type LatLng, type MapCallbacks, type Pin } from './mapView';
 
 export type SeasonMapHandle = { flyTo: (lat: number, lng: number, zoom?: number) => void };
@@ -35,9 +36,11 @@ export const SeasonMap = forwardRef<SeasonMapHandle, Props>(function SeasonMap(p
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
       <div ref={el} />
-      {/* Атрибуция обязательна: данные © OpenStreetMap (ODbL), тайлы OpenFreeMap. */}
+      {/* Атрибуция обязательна: данные © OpenStreetMap (ODbL); схема тайлов — OpenMapTiles, хостинг — OpenFreeMap или свой. */}
       <div style={{ position: 'absolute', right: 0, bottom: 0, zIndex: 6, padding: '2px 6px', fontSize: 10.5, lineHeight: 1.4, background: 'color-mix(in srgb, var(--color-neutral-100) 82%, transparent)', color: 'color-mix(in srgb, var(--color-text) 70%, transparent)' }}>
-        <a href="https://openfreemap.org" target="_blank" rel="noreferrer">OpenFreeMap</a> · © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">участники OpenStreetMap</a>
+        {SELF_HOSTED_MAP
+          ? <a href="https://openmaptiles.org" target="_blank" rel="noreferrer">© OpenMapTiles</a>
+          : <a href="https://openfreemap.org" target="_blank" rel="noreferrer">OpenFreeMap</a>} · © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">участники OpenStreetMap</a>
       </div>
     </div>
   );

@@ -36,6 +36,13 @@ server {
     proxy_read_timeout 1h;
   }
 
+  # Своя карта (deploy/map-setup.mjs): стиль, шрифты, значки и файл тайлов .pmtiles — карта читает его
+  # Range-запросами, nginx отдаёт куски файла сам.
+  location /map/ {
+    alias /srv/map/;
+    add_header Cache-Control "public, max-age=86400";
+  }
+
   # Статика сборки — с хешем в имени, кэшируется навсегда.
   location /_next/static/ {
     proxy_pass http://app:3000;

@@ -13,6 +13,7 @@ import { disablePush } from '@/lib/push-client';
 import { dateLabel, money, plural } from '@/lib/jobs';
 import { formatPhone } from '@/lib/validation';
 import { useFlash } from '@/components/Toast';
+import { SELF_HOSTED_MAP } from '@/components/map/style';
 import { AdSlot } from './AdSlot';
 import { useLive } from './Live';
 import { Chip, Corners, FIELD_ERR, LABEL, MUTED, initialsOf } from './ui';
@@ -192,10 +193,14 @@ export function ProfilePage() {
                 <span style={css('flex: 1 1 260px; font-size: 13px; line-height: 1.45; ' + MUTED)}>Шаблон для удобства. Платформа не оказывает юридических услуг и не проверяет договоры. В карточке смены шаблон заполняется условиями заказа.</span>
               </div>
             </Section>
+
+            <Section title="Удаление аккаунта" note="Отзыв согласия на обработку персональных данных.">
+              <DeleteAccount isEmp={isEmp} />
+            </Section>
           </div>
 
           <div style={css('border-top: 1px solid var(--color-divider); padding-top: 18px; font-size: 12.5px; line-height: 1.55; max-width: 720px; ' + MUTED)}>
-            Арена Работы — платформа сезонных работ. Площадка — посредник: договор и оплату стороны оформляют между собой. Картография: тайлы <a href="https://openfreemap.org" target="_blank" rel="noreferrer">OpenFreeMap</a>, данные © участники <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>, ODbL.
+            Арена Работы — платформа сезонных работ. Площадка — посредник: договор и оплату стороны оформляют между собой. Картография: {SELF_HOSTED_MAP ? <>тайлы © <a href="https://openmaptiles.org" target="_blank" rel="noreferrer">OpenMapTiles</a></> : <>тайлы <a href="https://openfreemap.org" target="_blank" rel="noreferrer">OpenFreeMap</a></>}, данные © участники <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>, ODbL.
           </div>
         </div>
 
@@ -515,6 +520,56 @@ function PasswordChange({ onDone }: { onDone: () => void }) {
         <button className={'btn btn-ghost ' + sty.c1d41128} onClick={onDone}>Отменить</button>
       </div>
       <div style={css('font-size: 12.5px; ' + MUTED)}>После смены остальные входы (другие телефоны и браузеры) завершатся.</div>
+    </div>
+  );
+}
+
+/** Удаление аккаунта: что стирается и что остаётся у второй стороны, пароль и слово-подтверждение. */
+function DeleteAccount({ isEmp }: { isEmp: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState({ password: '', confirm: '' });
+  const [err, setErr] = useState<{ field: string; message: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const remove = async () => {
+    if (!window.confirm('Удалить аккаунт без возможности восстановления?')) return;
+    setBusy(true); setErr(null);
+    try {
+      await api('/api/me/delete', f);
+      window.location.href = '/';
+    } catch (e) { setErr(errOf(e, 'Не удалось удалить аккаунт')); } finally { setBusy(false); }
+  };
+  const note = 'font-size: 13px; line-height: 1.5; ' + MUTED;
+  if (!open) {
+    return (
+      <div style={css('display: flex; gap: 12px; align-items: center; flex-wrap: wrap')}>
+        <button className="btn btn-ghost" onClick={() => setOpen(true)} style={css(BTN)}>Удалить аккаунт…</button>
+        <span style={css('flex: 1 1 260px; ' + note)}>Стираются имя, телефон, почта, пароль, фото профиля и {isEmp ? 'данные организации, объекты' : 'навыки, ИНН'}; войти больше нельзя.</span>
+      </div>
+    );
+  }
+  return (
+    <div style={css('display: grid; gap: 10px; max-width: 560px')}>
+      <div style={css(note)}>
+        Сразу стираются: имя, телефон, почта, пароль, город и база, фото профиля, {isEmp ? 'организация и ИНН, объекты' : 'навыки, инвентарь, ИНН'}, журнал уведомлений, подписки.
+        {isEmp ? ' Открытые заказы без нанятых снимаются.' : ' Ждущие отклики отзываются.'}{' '}
+        Остаются у второй стороны — без вашего имени, как «Удалённый пользователь»: заказы и смены, переписка, отзывы, споры, фото смен.
+        Пока идёт смена, не принята работа или открыт спор, удалить аккаунт нельзя.
+      </div>
+      <div className="field">
+        <label htmlFor="del-pass">Пароль</label>
+        <input id="del-pass" className="input" type="password" autoComplete="current-password" value={f.password} onChange={e => setF({ ...f, password: e.target.value })} />
+        {err?.field === 'password' && <div role="alert" style={css(FIELD_ERR)}>{err.message}</div>}
+      </div>
+      <div className="field">
+        <label htmlFor="del-confirm">Впишите слово УДАЛИТЬ</label>
+        <input id="del-confirm" className="input" value={f.confirm} onChange={e => setF({ ...f, confirm: e.target.value })} />
+        {err?.field === 'confirm' && <div role="alert" style={css(FIELD_ERR)}>{err.message}</div>}
+      </div>
+      {err && !['password', 'confirm'].includes(err.field) && <div role="alert" style={css(FIELD_ERR)}>{err.message}</div>}
+      <div style={css('display: flex; gap: 8px; flex-wrap: wrap')}>
+        <button className="btn btn-primary" onClick={remove} disabled={busy || !f.password || !f.confirm} style={css(BTN)}>Удалить аккаунт</button>
+        <button className="btn btn-ghost" onClick={() => { setOpen(false); setErr(null); }} style={css(BTN)}>Отменить</button>
+      </div>
     </div>
   );
 }

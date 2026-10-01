@@ -47,6 +47,8 @@ services:
       - ./deploy/nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
       - ${LETSENCRYPT_DIR:-/etc/letsencrypt}:/etc/letsencrypt:ro
       - certbot-www:/var/www/certbot:ro
+      # Своя карта: стиль, шрифты, значки, russia.pmtiles (DEPLOY.md, «Своя карта»)
+      - ${MAP_DIR:-./deploy/map}:/srv/map:ro
     depends_on:
       - app
 
