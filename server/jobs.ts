@@ -388,24 +388,45 @@ async function loadSubReviews(r: { id: string; employer_id: string }, viewer: Vi
 type HiredRow = { freelancer_id: string; is_lead: boolean; name: string; app_id: string | null };
 
 async function loadShift(jobId: string, employerId: string, empName: string, hired: HiredRow[], viewer: NonNullable<Viewer>, owner: boolean, db: Db): Promise<ShiftInfo> {
-  const [rep, acc, settle, reviews, complaint, withdrawal, noShow, msgs, photos, safety, disputes, dayDone] = await Promise.all([
-    one<{ reported_at: Date }>('SELECT reported_at FROM reports WHERE job_id = $1', [jobId], db),
-    one<{ accepted_at: Date; auto: boolean }>('SELECT accepted_at, auto FROM acceptances WHERE job_id = $1', [jobId], db),
-    one<{ employer_marked: boolean; freelancer_marked: boolean }>('SELECT employer_marked, freelancer_marked FROM settlements WHERE job_id = $1', [jobId], db),
+  const mine = owner || hired.some(h => h.freelancer_id === viewer.id);
+  // Однострочные сведения — одним запросом (раньше восемь отдельных: столько же соединений пула на одну карточку).
+  const [head, reviews, photos, safety, disputes] = await Promise.all([
+    one<{
+      reported_at: Date | null; accepted_at: Date | null; auto: boolean | null; employer_marked: boolean | null; freelancer_marked: boolean | null;
+      c_reason: string | null; c_at: Date | null; w_reason: string | null; w_notice: string | null; w_late: boolean | null; w_at: Date | null;
+      no_show_at: Date | null; msgs: number; day_done: boolean;
+    }>(
+      `SELECT (SELECT reported_at FROM reports WHERE job_id = $1) AS reported_at,
+              ac.accepted_at, ac.auto, st.employer_marked, st.freelancer_marked,
+              c.reason AS c_reason, c.created_at AS c_at,
+              w.reason AS w_reason, w.notice AS w_notice, w.late AS w_late, w.at AS w_at,
+              (SELECT at FROM no_shows WHERE job_id = $1 AND freelancer_id = $2) AS no_show_at,
+              (SELECT count(*) FROM messages WHERE job_id = $1 AND freelancer_id = $2)::int AS msgs,
+              -- Серия: спор возможен после первого сданного или принятого дня.
+              EXISTS (SELECT 1 FROM series_days WHERE job_id = $1 AND (reported_at IS NOT NULL OR accepted_at IS NOT NULL)) AS day_done
+         FROM (SELECT 1) x
+         LEFT JOIN acceptances ac ON ac.job_id = $1
+         LEFT JOIN settlements st ON st.job_id = $1
+         LEFT JOIN LATERAL (SELECT reason, created_at FROM complaints WHERE job_id = $1 AND author_id = $2 ORDER BY created_at DESC LIMIT 1) c ON true
+         LEFT JOIN LATERAL (SELECT reason, notice, late, at FROM withdrawals WHERE job_id = $1 AND freelancer_id = $2 ORDER BY at DESC LIMIT 1) w ON true`,
+      [jobId, viewer.id], db),
     query<{ target_id: string; rating: number; text: string; editable_until: Date }>(
       'SELECT target_id, rating, text, editable_until FROM reviews WHERE job_id = $1 AND author_id = $2', [jobId, viewer.id], db),
-    one<{ reason: string; created_at: Date }>('SELECT reason, created_at FROM complaints WHERE job_id = $1 AND author_id = $2 ORDER BY created_at DESC LIMIT 1', [jobId, viewer.id], db),
-    owner ? Promise.resolve(null) : one<{ reason: string; notice: string; late: boolean; at: Date }>(
-      'SELECT reason, notice, late, at FROM withdrawals WHERE job_id = $1 AND freelancer_id = $2 ORDER BY at DESC LIMIT 1', [jobId, viewer.id], db),
-    owner ? Promise.resolve(null) : one<{ at: Date }>('SELECT at FROM no_shows WHERE job_id = $1 AND freelancer_id = $2', [jobId, viewer.id], db),
-    owner ? Promise.resolve(null) : one<{ n: number }>('SELECT count(*)::int AS n FROM messages WHERE job_id = $1 AND freelancer_id = $2', [jobId, viewer.id], db),
-    owner || hired.some(h => h.freelancer_id === viewer.id) ? jobPhotos(jobId, viewer.id, db) : Promise.resolve([]),
+    mine ? jobPhotos(jobId, viewer.id, db) : Promise.resolve([]),
     query<{ freelancer_id: string; items: string[] }>(
       'SELECT freelancer_id, items FROM safety_checks WHERE job_id = $1 AND ($2 OR freelancer_id = $3)', [jobId, owner, viewer.id], db),
-    owner || hired.some(h => h.freelancer_id === viewer.id) ? jobDisputes(jobId, employerId, viewer.id, db) : Promise.resolve([]),
-    // Серия: спор возможен после первого сданного или принятого дня.
-    one('SELECT 1 FROM series_days WHERE job_id = $1 AND (reported_at IS NOT NULL OR accepted_at IS NOT NULL) LIMIT 1', [jobId], db)
+    mine ? jobDisputes(jobId, employerId, viewer.id, db) : Promise.resolve([])
   ]);
+  const h = head!;
+  const rep = h.reported_at ? { reported_at: h.reported_at } : null;
+  const acc = h.accepted_at ? { accepted_at: h.accepted_at, auto: !!h.auto } : null;
+  const settle = h.employer_marked == null ? null : { employer_marked: h.employer_marked, freelancer_marked: !!h.freelancer_marked };
+  const complaint = h.c_reason ? { reason: h.c_reason, created_at: h.c_at! } : null;
+  // Отказ, неявка и переписка — сведения исполнителя о себе; работодателю не нужны.
+  const withdrawal = !owner && h.w_reason ? { reason: h.w_reason, notice: h.w_notice!, late: !!h.w_late, at: h.w_at! } : null;
+  const noShow = !owner && h.no_show_at ? { at: h.no_show_at } : null;
+  const msgs = owner ? null : { n: h.msgs };
+  const dayDone = h.day_done;
   const openFor = new Set(disputes.filter(d => d.status === 'open' || d.status === 'review').map(d => d.appId ?? 'me'));
   const lead = hired.find(h => h.is_lead);
   const meHired = hired.find(h => h.freelancer_id === viewer.id);

@@ -207,6 +207,13 @@ describe('вход', () => {
     expect(e.status).toBe(429);
   });
 
+  it('параллельная пачка неверных паролей не обходит лимит', async () => {
+    const res = await Promise.allSettled(Array.from({ length: 30 }, () => auth.login('daniyar_s', 'wrong-pass', ctx)));
+    const statuses = res.map(r => (r.status === 'rejected' ? (r.reason as { status: number }).status : 200));
+    expect(statuses.filter(x => x === 401)).toHaveLength(10);
+    expect(statuses.filter(x => x === 429)).toHaveLength(20);
+  });
+
   it('успешные входы не тратят лимит попыток', async () => {
     for (let i = 0; i < 12; i++) await auth.login('daniyar_s', 'secret1', ctx);
     for (let i = 0; i < 9; i++) await expectErr(auth.login('daniyar_s', 'wrong-pass', ctx), 'password');

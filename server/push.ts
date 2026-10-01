@@ -3,6 +3,8 @@ import webpush from 'web-push';
 import { config } from './config';
 import { query } from './db';
 import { AppError } from './errors';
+import net from 'node:net';
+import { isPrivateAddress, safeHttpsAgent } from './safe-agent';
 import type { SessionUser } from './session';
 
 export type PushMessage = { title: string; body: string; url: string };
@@ -13,12 +15,13 @@ const vapidSender: PushSender = async (sub, msg) => {
   try {
     await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, JSON.stringify(msg), {
       vapidDetails: { subject: config.vapidSubject(), publicKey: config.vapidPublic(), privateKey: config.vapidPrivate() },
-      TTL: 6 * 3600, timeout: 8000
+      TTL: 6 * 3600, timeout: 8000, agent: safeHttpsAgent
     });
     return true;
   } catch (e) {
-    const code = (e as { statusCode?: number }).statusCode;
-    if (code === 404 || code === 410) return false;
+    const code = (e as { statusCode?: number; code?: string }).statusCode;
+    // Подписка недействительна (404/410) или ведёт во внутреннюю сеть — удаляем её.
+    if (code === 404 || code === 410 || (e as { code?: string }).code === 'EPRIVATE') return false;
     throw e;
   }
 };
@@ -43,8 +46,9 @@ export async function subscribePush(viewer: U | null, raw: unknown) {
   if (!/^https:\/\/[^\s]{10,500}$/.test(endpoint) || !/^[A-Za-z0-9_-]{20,200}$/.test(p256dh) || !/^[A-Za-z0-9_-]{8,100}$/.test(auth)) {
     throw new AppError(422, 'Браузер прислал неполную подписку — попробуйте ещё раз.');
   }
-  const host = new URL(endpoint).hostname;
-  if (/^(localhost|127\.|10\.|192\.168\.|169\.254\.|\[?::1)/.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host)) throw new AppError(422, 'Недопустимый адрес подписки.');
+  // Явно внутренние адреса отклоняем сразу; всё остальное проверяет агент при отправке — уже по IP после DNS.
+  const host = new URL(endpoint).hostname.replace(/^\[|\]$/g, '');
+  if (/^localhost$/i.test(host) || (net.isIP(host) && isPrivateAddress(host)) || /^\d+$/.test(host)) throw new AppError(422, 'Недопустимый адрес подписки.');
   await query(
     `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES ($1, $2, $3, $4)
      ON CONFLICT (endpoint) DO UPDATE SET user_id = $1, p256dh = $3, auth = $4`, [u.id, endpoint, p256dh, auth]);

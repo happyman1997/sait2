@@ -187,6 +187,10 @@ describe('веб-пуш', () => {
     push.setPushSender(async (s, m) => { if (s.endpoint.includes('abc2')) return false; got.push({ endpoint: s.endpoint, body: m.body, url: m.url }); return true; });
     await expectErr(push.subscribePush(fl, { endpoint: 'http://evil', keys: {} }), /неполную/);
     await expectErr(push.subscribePush(fl, { endpoint: 'https://127.0.0.1/xxxxxxxxxxxx', keys: sub().keys }), /Недопустимый/);
+    // Обходы текстовой проверки: десятичный IP, IPv6, IPv4 внутри IPv6, нулевой адрес.
+    for (const host of ['2130706433', '[::1]', '[::ffff:127.0.0.1]', '0.0.0.0', 'LOCALHOST']) {
+      await expectErr(push.subscribePush(fl, { endpoint: 'https://' + host + '/xxxxxxxxxxxx', keys: sub().keys }), /Недопустимый/);
+    }
     await push.subscribePush(fl, sub(1));
     await push.subscribePush(fl, sub(2));
     await prof.saveSettings(fl, { sms: false });

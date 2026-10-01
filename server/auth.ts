@@ -10,7 +10,7 @@ import { config } from './config';
 import { one, pool, query, tx, type Db } from './db';
 import { AppError, ModerationError } from './errors';
 import { dummyHash, hashPassword, verifyPassword } from './password';
-import { hit, limitOrThrow, peek } from './rate-limit';
+import { hit, limitOrThrow, refund } from './rate-limit';
 import { createSession, deleteUserSessions, type Ctx } from './session';
 import { codeMatches, codeSender, hashCode, type Channel } from './sms';
 
@@ -244,12 +244,13 @@ export async function login(identifier: unknown, password: unknown, ctx: Ctx) {
   const pass = typeof password === 'string' ? password : '';
   if (pass.length < 6) throw new AppError(422, 'Пароль — не короче 6 символов.', 'password');
 
-  // Лимит на аккаунт тратят только неудачные попытки: успешный вход владельца бюджет не съедает.
+  // Попытка на аккаунт списывается атомарно до проверки пароля — пачкой параллельных запросов лимит не обойти;
+  // успешный вход владельца её возвращает, бюджет тратят только неудачные.
   const idKey = 'login:id:' + (id.kind === 'phone' ? 'p:' + id.key : 'l:' + id.login.toLowerCase());
   const TOO_MANY = 'Слишком много попыток входа — подождите 15 минут или восстановите пароль.';
-  const gate = await peek(idKey, 10, 900);
-  if (!gate.ok) throw new AppError(429, TOO_MANY, undefined, { retryAfter: gate.retryAfter });
   if (ctx.ip) await limitOrThrow(`login:ip:${ctx.ip}`, 60, 900, 'Слишком много попыток входа — подождите 15 минут.');
+  const gate = await hit(idKey, 10, 900);
+  if (!gate.ok) throw new AppError(429, TOO_MANY, undefined, { retryAfter: gate.retryAfter });
 
   const user = await one<Parameters<typeof publicUser>[0] & { password_hash: string; status: string }>(
     `SELECT id, role, login, phone, email, name, city, base_lat, base_lng, avatar_url, created_at, password_hash, status
@@ -258,13 +259,12 @@ export async function login(identifier: unknown, password: unknown, ctx: Ctx) {
   );
   if (!user) {
     await verifyPassword(pass, await dummyHash());
-    await hit(idKey, 10, 900);
     throw new AppError(404, 'Аккаунт с таким ' + (id.kind === 'phone' ? 'номером' : 'логином') + ' не найден. Проверьте написание или зарегистрируйтесь.', 'identifier');
   }
   if (!(await verifyPassword(pass, user.password_hash))) {
-    await hit(idKey, 10, 900);
     throw new AppError(401, 'Неверный пароль. Проверьте раскладку или восстановите доступ.', 'password');
   }
+  await refund(idKey);
   if (user.status === 'blocked') throw new AppError(403, 'Аккаунт заблокирован за нарушение правил площадки. Напишите в поддержку.');
   const session = await createSession(user.id, ctx);
   return { user: publicUser(user), session };
