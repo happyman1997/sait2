@@ -3,7 +3,21 @@ import path from 'node:path';
 import type { Pool } from 'pg';
 
 // Простой раннер: файлы db/migrations/NNN_name.sql по порядку, каждый — в своей транзакции.
+// Несколько экземпляров при старте мигрируют по очереди: блокировка на время всего прогона.
+const LOCK_KEY = 4242_0002;
+
 export async function migrate(p: Pool, dir = path.join(process.cwd(), 'db', 'migrations'), log = console.log) {
+  const lock = await p.connect();
+  try {
+    await lock.query('SELECT pg_advisory_lock($1)', [LOCK_KEY]);
+    await run(p, dir, log);
+  } finally {
+    await lock.query('SELECT pg_advisory_unlock($1)', [LOCK_KEY]).catch(() => {});
+    lock.release();
+  }
+}
+
+async function run(p: Pool, dir: string, log: (s: string) => void) {
   await p.query(`CREATE TABLE IF NOT EXISTS schema_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
   const done = new Set((await p.query<{ name: string }>('SELECT name FROM schema_migrations')).rows.map(r => r.name));
   const files = fs.readdirSync(dir).filter(f => f.endsWith('.sql')).sort();

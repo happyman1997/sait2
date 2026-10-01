@@ -17,6 +17,8 @@ const nextConfig: NextConfig = {
   agentRules: false,
   serverExternalPackages: ['pg'],
   poweredByHeader: false,
+  // Docker-образ: минимальный сервер с только нужными модулями (Dockerfile задаёт NEXT_OUTPUT=standalone).
+  output: process.env.NEXT_OUTPUT === 'standalone' ? 'standalone' : undefined,
   async headers() {
     return [{ source: '/:path*', headers: SECURITY_HEADERS }];
   }

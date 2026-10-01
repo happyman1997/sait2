@@ -8,3 +8,9 @@ next-env.d.ts
 coverage/
 data/
 public/maplibre/
+
+# Развёртывание
+.env.production
+deploy/backups/
+deploy/letsencrypt/
+dist/
