@@ -155,13 +155,27 @@ describe('поиск', () => {
     await expectErr(jobs.listJobs({ today, q: 'сука' }, fl), 'q');
   });
 
+  it('вошедшим — общая выдача из кэша, но свой статус отклика и «мой заказ» всегда свежие', async () => {
+    const first = (await jobs.listJobs({ today }, fl)).jobs;
+    const snow = first.find(j => j.typeId === 'snow')!;
+    expect(snow.myStatus).toBeNull();
+    await jobs.applyToJob(snow.num, { reqConfirmed: true }, fl, today);
+    const again = (await jobs.listJobs({ today }, fl)).jobs;
+    expect(again.find(j => j.num === snow.num)!.myStatus).toBe('sent');
+    const forEmp = (await jobs.listJobs({ today }, emp)).jobs;
+    expect(forEmp.find(j => j.num === snow.num)!).toMatchObject({ mine: true, myStatus: null });
+    expect((await jobs.listJobs({ today }, null)).jobs.every(j => !j.mine && j.myStatus === null)).toBe(true);
+  });
+
   it('отменённые и прошедшие не показываются', async () => {
     const all = (await jobs.listJobs({ today }, fl)).jobs;
     await jobs.cancelJob(all.find(j => j.typeId === 'grass')!.num, { reason: 'погода изменилась', notice: 'больше суток' }, emp2);
     await query(`UPDATE jobs SET date = current_date - 3 WHERE type_id = 'load'`);
+    jobs.invalidateSearch();   // прямой SQL в обход приложения — кэш выдачи о нём не знает
     expect((await jobs.listJobs({ today }, fl)).jobs.map(j => j.typeId)).toEqual(['snow']);
     // серия с прошедшей первой датой остаётся в поиске
     await query(`UPDATE jobs SET repeat = 'график 2/2' WHERE type_id = 'load'`);
+    jobs.invalidateSearch();
     expect((await jobs.listJobs({ today }, fl)).jobs).toHaveLength(2);
   });
 });

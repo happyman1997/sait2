@@ -379,6 +379,7 @@ describe('сдача, приёмка и расчёт по дням серии', 
     // Все 9 выходов прошли: последний — 3 дня назад.
     await query('UPDATE jobs SET date = $2 WHERE num = $1', [j.num, plus(today, -59)]);
     await jobs.syncSeriesEnd((await one<{ id: string }>('SELECT id FROM jobs WHERE num = $1', [j.num]))!.id, pool());
+    jobs.invalidateSearch();   // прямой SQL в обход приложения — кэш выдачи о нём не знает
     expect(await search()).not.toContain(j.num);
     await expectErr(jobs.applyToJob(j.num, { reqConfirmed: true }, other, today), /закончилась/);
     expect(await sh.autoAcceptDue()).not.toContain(j.num);

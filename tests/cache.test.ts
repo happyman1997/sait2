@@ -28,6 +28,18 @@ describe('TtlCache', () => {
     expect(await c.get('c', async () => 'no')).toBe('c');
   });
 
+  it('просроченные записи убираются при вставке, не дожидаясь вытеснения по размеру; maxAge строже срока', async () => {
+    vi.useFakeTimers();
+    const c = new TtlCache<number>(1000, 100);
+    await c.get('a', async () => 1); await c.get('b', async () => 2);
+    await vi.advanceTimersByTimeAsync(1500);
+    await c.get('c', async () => 3);
+    expect(c.size).toBe(1);
+    await vi.advanceTimersByTimeAsync(600);
+    expect(await c.get('c', async () => 30, 500)).toBe(30);   // для этого вызова запись уже старая
+    vi.useRealTimers();
+  });
+
   it('ошибку не запоминает', async () => {
     const c = new TtlCache<number>(60_000, 10);
     await expect(c.get('k', async () => { throw new Error('сбой'); })).rejects.toThrow('сбой');

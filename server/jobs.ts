@@ -84,25 +84,53 @@ function toSummary(r: SummaryRow, viewer: Viewer): JobSummary {
 }
 
 /**
- * Выдача для гостей не зависит от зрителя — одинаковые запросы в пределах 20 с делят один расчёт и один ответ
- * (база округлена до ~100 м). Изменения заказов на этом инстансе сбрасывают кэш после фиксации транзакции,
- * на соседних — по времени.
+ * Выдача по карте почти не зависит от зрителя: одинаковые запросы (база округлена до ~100 м) делят один расчёт.
+ * Гостям — готовый ответ (и его JSON/gzip, http.ts) до 20 с; вошедшим — те же строки не старше 5 с плюс свои
+ * статусы откликов одним запросом и признак «мой заказ». Изменения заказов на этом инстансе сбрасывают кэш после
+ * фиксации транзакции, на соседних — по времени.
  */
-const guestSearch = new TtlCache<{ jobs: JobSummary[]; base: { lat: number; lng: number; label: string } }>(20_000, 500);
+type Base = { lat: number; lng: number; label: string };
+type Search = { rows: SummaryRow[]; base: Base; guest?: { jobs: JobSummary[]; base: Base } };
+// 200 записей по ≤500 строк — потолок памяти кэша; просроченные убираются при каждой вставке.
+const guestSearch = new TtlCache<Search>(20_000, 200);
+const VIEWER_MAX_AGE = 5_000;
 export function invalidateSearch() { afterCommit(() => { guestSearch.clear(); guestCard.clear(); }); }
 
 export async function listJobs(p: ListParams, viewer: Viewer, db: Db = pool()) {
-  if (!viewer && db === pool()) {
-    const b = baseOf(null, p.lat, p.lng);
-    const r3 = (x: number) => Math.round(x * 1000) / 1000;
-    const q: ListParams = { ...p, lat: r3(b.lat), lng: r3(b.lng) };
-    const key = JSON.stringify([q.lat, q.lng, q.today, (q.types || []).slice().sort(), q.minPay || 0, q.km || 0, q.when, (q.q || '').trim().toLowerCase()]);
-    return guestSearch.get(key, () => searchJobs(q, null, db));
+  if (db !== pool()) return searchJobs(p, viewer, db);
+  const b = baseOf(viewer, p.lat, p.lng);
+  const r3 = (x: number) => Math.round(x * 1000) / 1000;
+  const q: ListParams = { ...p, lat: r3(b.lat), lng: r3(b.lng) };
+  const key = JSON.stringify([q.lat, q.lng, b.label, q.today, (q.types || []).slice().sort(), q.minPay || 0, q.km || 0, q.when, (q.q || '').trim().toLowerCase()]);
+  // Считаем от округлённой точки; при промахе — сразу со статусами откликов того, кто спросил (один запрос, как без кэша).
+  let mineLoaded = false;
+  const load = async (): Promise<Search> => {
+    mineLoaded = true;
+    // База — округлённая (как в ключе), id зрителя — для статусов его откликов.
+    const r = await searchRows(q, viewer && { ...viewer, base_lat: q.lat!, base_lng: q.lng! }, db);
+    return { rows: r.rows, base: { ...r.base, label: b.label } };
+  };
+  if (!viewer) {
+    const hit = await guestSearch.get(key, load);
+    // Готовый гостевой ответ — один объект на запись кэша (его JSON и gzip кодируются один раз, http.ts).
+    return (hit.guest ??= { jobs: hit.rows.map(x => toSummary(x, null)), base: hit.base });
   }
-  return searchJobs(p, viewer, db);
+  const hit = await guestSearch.get(key, load, VIEWER_MAX_AGE);
+  const own = viewer.role === 'freelancer' && !mineLoaded && hit.rows.length
+    ? new Map((await query<{ job_id: string; status: AppStatus }>(
+      // Все свои отклики (обычно десятки) дешевле, чем передавать в запрос 500 id выдачи.
+      'SELECT job_id, status FROM applications WHERE freelancer_id = $1', [viewer.id], db)).rows
+      .map(x => [x.job_id, x.status]))
+    : null;
+  return { jobs: hit.rows.map(x => toSummary(own ? { ...x, my_status: own.get(x.id) ?? null } : x, viewer)), base: hit.base };
 }
 
 async function searchJobs(p: ListParams, viewer: Viewer, db: Db) {
+  const r = await searchRows(p, viewer, db);
+  return { jobs: r.rows.map(x => toSummary(x, viewer)), base: r.base };
+}
+
+async function searchRows(p: ListParams, viewer: Viewer, db: Db) {
   const base = baseOf(viewer, p.lat, p.lng);
   const q = (p.q || '').trim().slice(0, 100);
   if (q) {
@@ -138,7 +166,7 @@ async function searchJobs(p: ListParams, viewer: Viewer, db: Db) {
     params,
     db
   );
-  return { jobs: r.rows.map(x => toSummary(x, viewer)), base };
+  return { rows: r.rows, base };
 }
 
 /** Типы работ для фильтра: справочник + пользовательские, с числом открытых заказов. */
