@@ -27,6 +27,7 @@ export function ApplicantsBlock({ job, act, onChat, busy }: { job: JobDetail; ac
   return (
     <div className={sty.c6840f0a}>
       <div style={css(LABEL + '; margin-bottom: 10px')}>Откликнулись — {list.length}{crew > 1 ? ' · нанято ' + job.hired + (crew === Infinity ? '' : ' из ' + crew) : ''}</div>
+      {sent.length > 0 && open && <div style={css('font-size: 13px; margin: -4px 0 10px; ' + MUTED)}>Нанимая, вы заключаете с исполнителем договор на условиях заказа и <a href="/legal/offer#shift" target="_blank" rel="noreferrer">условиях смены</a>.</div>}
       <div className={sty.cd726313}>
         {list.map(a => (
           <div key={a.id} style={css('display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border: 1px solid ' + (a.status === 'hired' ? 'var(--color-accent)' : 'var(--color-divider)') + '; padding: 9px 11px')}>
@@ -134,7 +135,7 @@ export function ShiftBlock({ job, isOwner, act, onChat, onReview, busy }: {
       <ShiftPhotos job={job} act={act} busy={busy} />
       {job.status !== 'cancelled' && (
         <div style={css('font-size: 13px; margin-top: 8px; ' + MUTED)}>
-          <a href={'/api/contract-template?job=' + job.num} download>Шаблон договора ГПХ</a> с условиями этого заказа — заполняете и подписываете сами.
+          Договор на смену — условия заказа, договорённости в чате и <a href="/legal/offer#shift" target="_blank" rel="noreferrer">условия смены</a>. Подписывать ничего не нужно.
         </div>
       )}
 

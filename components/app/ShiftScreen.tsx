@@ -107,7 +107,7 @@ export function ShiftScreen() {
               <button className={'btn btn-secondary ' + sty.c0264645} onClick={() => live.openChat(job.num, live.me!.id)}>Чат с работодателем</button>
             )}
             <div style={css('font-size: 13px; margin-top: 8px; ' + MUTED)}>
-              <a href={'/api/contract-template?job=' + job.num} download>Шаблон договора ГПХ</a> на ваши дни — заполняете и подписываете сами.
+              Договор на смену — условия заказа, договорённости в чате и <a href="/legal/offer#shift" target="_blank" rel="noreferrer">условия смены</a>. Подписывать ничего не нужно.
             </div>
           </div>
         )}

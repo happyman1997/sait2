@@ -9,7 +9,6 @@ const jobs = await import('@/server/jobs');
 const sh = await import('@/server/shifts');
 const support = await import('@/server/support');
 const disputes = await import('@/server/disputes');
-const { contractTemplate } = await import('@/server/contract');
 const { doneSql } = await import('@/server/stats');
 const { AppError } = await import('@/server/errors');
 const { seriesDates, seriesDayLabel } = await import('@/lib/jobs');
@@ -332,9 +331,6 @@ describe('сдача, приёмка и расчёт по дням серии', 
     expect((await one<{ workers: string[] }>('SELECT workers FROM series_days WHERE day = $1', [today]))!.workers.sort()).toEqual([fl.id, sub.id].sort());
     await act(num, sub, today, 'paid');
     await expectErr(act(num, other, today, 'paid'), /стороны смены этого дня/);
-    // Договор для замены — с её днём, а не со всей серией.
-    const c = await contractTemplate(num, { ...sub, name: 'Иван Петров' } as never);
-    expect(c.text).toMatch(new RegExp('Срок выполнения: ' + today.split('-').reverse().join('\\.')));
   });
 
   it('отзывы для замены: после приёмки её дня, не дожидаясь конца серии; состав — после завершения', async () => {

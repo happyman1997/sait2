@@ -58,7 +58,7 @@ export function ApplicantsPage() {
           <Link href="/" className={'btn btn-primary ' + sty.c19d5231}>← Вернуться к карте</Link>
           <h2 className={sty.cfac1c55}>Отклики</h2>
         </div>
-        <div className={sty.c816d564}>Найм и отказы — в одном месте</div>
+        <div className={sty.c816d564}>Найм и отказы — в одном месте. Нанимая, вы заключаете с исполнителем договор на условиях заказа и <a href="/legal/offer#shift" target="_blank" rel="noreferrer">условиях смены</a>.</div>
 
         <div className={sty.ce24a1fb}>
           {!jobs && <div className={sty.c816d564}>Загружаем…</div>}

@@ -135,7 +135,7 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
             <button className={'btn btn-ghost btn-block ' + sty.cdf03ebe} onClick={onWithdraw} disabled={busy}>Отказаться</button>
           )}
           <div className={sty.cbca74d7}>
-            {isEmp ? 'Откликаться может только исполнитель — для этого нужен отдельный аккаунт.' : 'Отклик ни к чему не обязывает — условия и адрес можно прочитать ниже.'}
+            {isEmp ? 'Откликаться может только исполнитель — для этого нужен отдельный аккаунт.' : <>Пока вас не наняли, отклик можно отозвать. Найм — договор с работодателем на условиях заказа и <a href="/legal/offer#shift" target="_blank" rel="noreferrer">условиях смены</a>.</>}
           </div>
         </div>
       )}

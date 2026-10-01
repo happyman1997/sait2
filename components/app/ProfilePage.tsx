@@ -183,16 +183,6 @@ export function ProfilePage() {
               </div>
             </Section>
 
-            <Section title="Договор">
-              <div className={sty.caab70ba}>
-                <a className="btn btn-secondary" href="/api/contract-template" download onClick={() => flash('Шаблон ГПХ скачан — заполняют стороны сами')}
-                  style={css(BTN + '; display: inline-flex; align-items: center; gap: 8px; text-decoration: none')}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 15V3" /><path d="m7 10 5 5 5-5" /><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /></svg>
-                  Шаблон договора ГПХ
-                </a>
-                <span style={css('flex: 1 1 260px; font-size: 13px; line-height: 1.45; ' + MUTED)}>Шаблон для удобства. Платформа не оказывает юридических услуг и не проверяет договоры. В карточке смены шаблон заполняется условиями заказа.</span>
-              </div>
-            </Section>
 
             <Section title="Удаление аккаунта" note="Отзыв согласия на обработку персональных данных.">
               <DeleteAccount isEmp={isEmp} />

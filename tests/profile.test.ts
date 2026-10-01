@@ -21,7 +21,6 @@ const { setCodeSender } = await import('@/server/sms');
 const { sessionUser, createSession } = await import('@/server/session');
 const { AppError } = await import('@/server/errors');
 const { localISO } = await import('@/lib/jobs');
-const { contractTemplate } = await import('@/server/contract');
 const { publishMany } = await import('@/server/live');
 const cron = await import('@/server/cron');
 
@@ -278,20 +277,7 @@ describe('фото', () => {
   });
 });
 
-describe('договор и уборка', () => {
-  it('шаблон ГПХ: пустой — для всех, с условиями — только участнику заказа', async () => {
-    const blank = await contractTemplate(null, null);
-    expect(blank.text).toMatch(/ДОГОВОР ПОДРЯДА/);
-    expect(blank.text).toMatch(/не оказывает юридических услуг/);
-    const j = await jobs.createJob(form(), emp, today);
-    const mine = await contractTemplate(j.num, emp);
-    expect(mine.text).toMatch(/Москва, ул\. Тверская, 18/);
-    expect(mine.text).toMatch(/перевод на карту/);
-    expect(mine.filename).toBe('dogovor-gph-S-' + j.num + '.txt');
-    const other = await contractTemplate(j.num, fl);
-    expect(other.text).not.toMatch(/Тверская/);
-  });
-
+describe('файлы и уборка', () => {
   it('файлы идут через подключаемое хранилище (S3 в продакшене)', async () => {
     const { setStorage } = await import('@/server/storage');
     const mem = new Map<string, Uint8Array>();
