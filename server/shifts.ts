@@ -12,6 +12,7 @@ import { AppError, ModerationError } from './errors';
 import { addEvents, localClock, mailSupport } from './events';
 import { clientToday, getJob, initialsOf, invalidateSearch, seriesDatesFor, seriesHasHistory, SERIES_FIXED, shortName, syncSeriesEnd } from './jobs';
 import { publish } from './live';
+import { fuzzPoint, roughAddress } from './privacy';
 import { limitOrThrow } from './rate-limit';
 import type { SessionUser } from './session';
 import { doneSql } from './stats';
@@ -630,7 +631,7 @@ export async function myJobs(viewer: Viewer): Promise<MyJob[]> {
         WHERE ${emp ? 'j.employer_id = $1' : 'j.id IN (SELECT job_id FROM applications WHERE freelancer_id = $1 UNION SELECT job_id FROM series_subs WHERE freelancer_id = $1)'}
         ORDER BY k1, k2, k3 DESC, k4 DESC LIMIT 300
      )
-     SELECT j.num, j.title, j.type_id, t.label AS type_label, j.address, j.district, j.lat, j.lng, j.pay, j.unit, j.pay_type,
+     SELECT j.id, j.num, j.title, j.type_id, t.label AS type_label, j.address, j.district, j.lat, j.lng, j.pay, j.unit, j.pay_type,
             to_char(j.date, 'YYYY-MM-DD') AS date, j.volume, j.crew, j.urgent, j.repeat, j.status, j.created_at, j.employer_id,
             (SELECT count(*) FROM hires h WHERE h.job_id = j.id)::int AS hired,
             (SELECT count(*) FROM applications a WHERE a.job_id = j.id AND a.status IN ('sent', 'hired'))::int AS applicants,
@@ -646,7 +647,10 @@ export async function myJobs(viewer: Viewer): Promise<MyJob[]> {
             (SELECT count(*) FROM reviews v WHERE v.job_id = j.id AND v.author_id = $1)::int AS reviewed,
             ${emp ? '(SELECT count(*) FROM hires h WHERE h.job_id = j.id)::int' : '(CASE WHEN EXISTS (SELECT 1 FROM hires h WHERE h.job_id = j.id AND h.freelancer_id = $1) THEN 1 ELSE 0 END)'} AS reviewable,
             ${emp ? 'NULL' : `(SELECT json_agg(json_build_object('day', to_char(ss.day, 'YYYY-MM-DD'), 'status', ss.status) ORDER BY ss.day)
-                                FROM series_subs ss WHERE ss.job_id = j.id AND ss.freelancer_id = $1)`} AS sub_days
+                                FROM series_subs ss WHERE ss.job_id = j.id AND ss.freelancer_id = $1)`} AS sub_days,
+            ${emp ? 'false' : `coalesce((SELECT p.org_type FROM employer_profiles p WHERE p.user_id = j.employer_id), 'частное лицо') = 'частное лицо'
+              AND NOT EXISTS (SELECT 1 FROM hires h WHERE h.job_id = j.id AND h.freelancer_id = $1)
+              AND NOT EXISTS (SELECT 1 FROM series_subs ss WHERE ss.job_id = j.id AND ss.freelancer_id = $1 AND ss.status = 'hired')`} AS addr_hidden
        FROM top JOIN jobs j ON j.id = top.id JOIN job_types t ON t.id = j.type_id
        ${emp ? '' : 'LEFT JOIN applications a ON a.job_id = j.id AND a.freelancer_id = $1'}
        LEFT JOIN reports rp ON rp.job_id = j.id
@@ -658,7 +662,11 @@ export async function myJobs(viewer: Viewer): Promise<MyJob[]> {
     const reported = x.reported_at as Date | null, accepted = x.accepted_at as Date | null;
     return {
       num: Number(x.num), title: x.title as string, typeId: x.type_id as string, typeLabel: x.type_label as string,
-      address: x.address as string, district: x.district as string | null, lat: x.lat as number, lng: x.lng as number,
+      // Отклик ещё не принят, заказчик — частное лицо: как в выдаче, без дома и со сдвинутой точкой (privacy.ts).
+      ...(x.addr_hidden
+        ? { address: roughAddress(x.address as string, x.district as string | null), ...fuzzPoint(x.id as string, x.lat as number, x.lng as number) }
+        : { address: x.address as string, lat: x.lat as number, lng: x.lng as number }),
+      district: x.district as string | null, addressHidden: !!x.addr_hidden,
       pay: x.pay as number, unit: x.unit as string, payType: x.pay_type as string | null, date: x.date as string,
       volume: x.volume as string | null, crew: x.crew as number, urgent: x.urgent as boolean, repeat: x.repeat as string | null,
       status: x.status as JobStatus, hired: x.hired as number, applicants: x.applicants as number,
@@ -704,7 +712,7 @@ export async function applicantsBoard(viewer: Viewer) {
             (SELECT avg(rating)::float8 FROM reviews WHERE target_id = u.id) AS rating,
             (SELECT count(*) FROM reviews WHERE target_id = u.id)::int AS reviews,
             ${doneSql('u.id')} AS done,
-            u.no_show_count, fp.gear, fp.own_car, fp.work_cities, fp.skills, fp.custom_skills, (fp.npd_status = 'ok' AND fp.npd_checked_at > now() - interval '3 days') AS npd,
+            (SELECT count(*) FROM no_shows n WHERE n.freelancer_id = u.id AND n.at > now() - interval '12 months')::int AS no_show_count, fp.gear, fp.own_car, fp.work_cities, fp.skills, fp.custom_skills, (fp.npd_status = 'ok' AND fp.npd_checked_at > now() - interval '3 days') AS npd,
             EXISTS (SELECT 1 FROM user_marks m WHERE m.user_id = u.id AND m.kind = 'late_withdrawal' AND m.until > now()) AS late
        FROM applications a JOIN jobs j ON j.id = a.job_id JOIN users u ON u.id = a.freelancer_id
        LEFT JOIN freelancer_profiles fp ON fp.user_id = u.id

@@ -47,5 +47,6 @@ export const config = {
   dbStatementTimeoutMs: () => Math.max(1000, parseInt(env('DB_STATEMENT_TIMEOUT_MS', '15000'), 10) || 15000),
   // Токен для /api/metrics (Prometheus). Пусто — метрики закрыты.
   metricsToken: () => env('METRICS_TOKEN', ''),
-  offerVersion: '2026-09'
+  offerVersion: '2026-10',
+  pdConsentVersion: '2026-10'
 };

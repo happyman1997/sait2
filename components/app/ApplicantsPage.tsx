@@ -106,7 +106,7 @@ export function ApplicantsPage() {
                           <div className={sty.ccf142d6}>
                             {fact('рейтинг', p.rating != null ? p.rating.toFixed(1) + ' · ' + p.reviews + ' ' + plural(p.reviews, 'отзыв', 'отзыва', 'отзывов') : 'пока нет')}
                             {fact('смен', String(p.done))}
-                            {fact('невыходов', p.noShows ? String(p.noShows) : 'ни разу', p.noShows > 0)}
+                            {fact('невыходов за год', p.noShows ? String(p.noShows) : 'ни разу', p.noShows > 0)}
                             {fact('транспорт', p.ownCar ? 'свой' : 'нет')}
                             {p.cities.length > 0 && fact('города', p.cities.slice(0, 3).join(', '))}
                             {p.lateMark && fact('пометка', 'поздний отказ за 90 дней', true)}

@@ -20,10 +20,13 @@ type Complaint = {
 type UserRow = {
   id: string; login: string; name: string; phone: string; email: string; role: string; status: string; isStaff: boolean; createdAt: string;
   jobs: number; done: number; noShows: number; complaints: number; marks: number; actions: { action: string; note: string; at: string }[];
+  markList: { id: string; kind: string; reason: string; at: string }[];
+  reviewList: { id: string; rating: number; text: string; author: string; at: string }[];
 };
+const MARK: Record<string, string> = { late_cancel: 'поздняя отмена', late_withdrawal: 'поздний отказ', no_show: 'не вышел', complaint: 'жалоба', demoted: 'понижение' };
 
 const ROLE: Record<string, string> = { freelancer: 'исполнитель', employer: 'работодатель' };
-const ACTION: Record<string, string> = { block: 'заблокирован', unblock: 'разблокирован', complaint_confirmed: 'жалоба подтверждена', complaint_rejected: 'жалоба отклонена' };
+const ACTION: Record<string, string> = { block: 'заблокирован', unblock: 'разблокирован', complaint_confirmed: 'жалоба подтверждена', complaint_rejected: 'жалоба отклонена', unmark: 'отметка снята', review_removed: 'отзыв убран' };
 const when = (iso: string) => new Date(iso).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 const TAB = (on: boolean) => css('cursor: pointer; padding: 8px 14px; font-family: var(--font-heading); font-size: 13px; letter-spacing: .08em; text-transform: uppercase; border: 1px solid ' +
   (on ? 'var(--color-accent)' : 'var(--color-divider)') + '; background: ' + (on ? 'var(--color-accent)' : 'transparent') + '; color: ' + (on ? '#fff' : 'inherit'));
@@ -153,6 +156,18 @@ function Users() {
       search();
     } catch (e) { setErr(x => ({ ...x, [u.id]: e instanceof ApiError ? e.message : 'Не получилось' })); }
   };
+  // Обжалование: снять отметку / убрать отзыв. Причина — из того же поля, что и для блокировки.
+  const undo = async (u: UserRow, what: 'marks' | 'reviews', id: string) => {
+    setErr(e => ({ ...e, [u.id]: '' }));
+    try {
+      await api('/api/support/' + what + '/' + id, { note: note[u.id] || '' });
+      flash(what === 'marks' ? 'Отметка снята' : 'Отзыв убран');
+      setNote(n => ({ ...n, [u.id]: '' }));
+      search();
+    } catch (e) { setErr(x => ({ ...x, [u.id]: e instanceof ApiError ? e.message : 'Не получилось' })); }
+  };
+  const ROW = 'display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: 13px; margin-top: 4px';
+  const SMALL = 'padding: 2px 8px; height: auto; font-size: 12px';
   return (
     <>
       <form onSubmit={e => { e.preventDefault(); search(); }} className={sty.c6708c96}>
@@ -178,10 +193,32 @@ function Users() {
                 {u.actions.map((a, i) => <div key={i}>{when(a.at) + ' — ' + (ACTION[a.action] || a.action) + (a.note ? ': ' + a.note : '')}</div>)}
               </div>
             )}
+            {u.markList.length > 0 && (
+              <div style={css('margin-top: 8px')}>
+                <div style={css('font-size: 12.5px; ' + MUTED)}>Действующие отметки</div>
+                {u.markList.map(m => (
+                  <div key={m.id} style={css(ROW)}>
+                    <span>{when(m.at) + ' — ' + (MARK[m.kind] || m.kind) + (m.reason ? ': ' + m.reason : '')}</span>
+                    <button className="btn btn-ghost" style={css(SMALL)} onClick={() => undo(u, 'marks', m.id)}>Снять</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {u.reviewList.length > 0 && (
+              <div style={css('margin-top: 8px')}>
+                <div style={css('font-size: 12.5px; ' + MUTED)}>Отзывы о пользователе</div>
+                {u.reviewList.map(v => (
+                  <div key={v.id} style={css(ROW)}>
+                    <span>{v.rating + '★ · ' + v.author + (v.text ? ': «' + v.text + '»' : '')}</span>
+                    <button className="btn btn-ghost" style={css(SMALL)} onClick={() => undo(u, 'reviews', v.id)}>Убрать</button>
+                  </div>
+                ))}
+              </div>
+            )}
             {!u.isStaff && (
               <div className={sty.c2cb7c8c}>
                 <input className={'input ' + sty.c0c5fdec} value={note[u.id] || ''} onChange={e => setNote(n => ({ ...n, [u.id]: e.target.value }))} aria-label="Причина"
-                  placeholder={u.status === 'blocked' ? 'почему возвращаем доступ' : 'причина блокировки'} />
+                  placeholder={u.status === 'blocked' ? 'почему возвращаем доступ' : 'причина: блокировки, снятия отметки или отзыва'} />
                 <button className={(u.status === 'blocked' ? 'btn btn-secondary' : 'btn btn-primary') + ' ' + sty.c921d83b} onClick={() => block(u)}>
                   {u.status === 'blocked' ? 'Разблокировать' : 'Заблокировать'}
                 </button>

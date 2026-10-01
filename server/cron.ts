@@ -10,6 +10,8 @@ import { autoAcceptDue } from './shifts';
 import { remindSla } from './support';
 
 const LOCK_KEY = 4242_0001;
+const PAST_3Y = `coalesce(j.series_end, j.date) < current_date - interval '3 years'
+  AND (j.repeat IS NULL OR j.series_end IS NOT NULL OR j.status IN ('accepted', 'cancelled'))`;
 
 export async function runDueTasks(): Promise<{ skipped: boolean; autoAccepted: number[]; cleaned: number; sent?: number }> {
   const c = await pool().connect();
@@ -28,7 +30,11 @@ export async function runDueTasks(): Promise<{ skipped: boolean; autoAccepted: n
         `DELETE FROM notification_outbox WHERE status <> 'pending' AND created_at < now() - interval '30 days'`,
         // Журнал хранится полгода — дольше не нужен ни пользователю, ни для разборов.
         `DELETE FROM events WHERE created_at < now() - interval '180 days'`,
-        `DELETE FROM email_verifications WHERE expires_at < now() - interval '7 days'`
+        `DELETE FROM email_verifications WHERE expires_at < now() - interval '7 days'`,
+        // Срок хранения из политики ПДн: переписка, фото, споры и жалобы — 3 года после смены (общий срок исковой давности).
+        // Файлы фото уходят следом, в sweepFiles. Бессрочная серия без конца — только когда закрыта.
+        ...['messages', 'photos', 'disputes', 'complaints'].map(t =>
+          `DELETE FROM ${t} x USING jobs j WHERE x.job_id = j.id AND ${PAST_3Y}`)
       ]) cleaned += (await c.query(sql)).rowCount || 0;
       cleaned += await sweepFiles().catch(e => { console.error('[files]', (e as Error).message); return 0; });
       const { sent } = await processOutbox();

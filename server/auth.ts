@@ -181,11 +181,10 @@ export function publicUser(u: {
   };
 }
 
-/** Шаг 4: код + оферта → аккаунт и сессия. */
-export async function verifySignup(challengeId: unknown, code: unknown, offerAccepted: unknown, ctx: Ctx) {
-  if (offerAccepted !== true) {
-    throw new AppError(422, 'Без оферты и согласия на обработку данных аккаунт создать нельзя — отметьте галочку выше.', 'offer');
-  }
+/** Шаг 4: код + две отдельные галочки (оферта; согласие на обработку ПДн) → аккаунт и сессия. */
+export async function verifySignup(challengeId: unknown, code: unknown, accepted: { offer?: unknown; pd?: unknown }, ctx: Ctx) {
+  if (accepted.offer !== true) throw new AppError(422, 'Без принятия оферты аккаунт создать нельзя — отметьте галочку.', 'offer');
+  if (accepted.pd !== true) throw new AppError(422, 'Без согласия на обработку персональных данных аккаунт создать нельзя — отметьте галочку.', 'pdConsent');
   const pre = await loadChallenge(challengeId, 'signup', pool());
   await checkCode(pre, code, pool());
 
@@ -197,10 +196,10 @@ export async function verifySignup(challengeId: unknown, code: unknown, offerAcc
     let user;
     try {
       user = await one<Parameters<typeof publicUser>[0]>(
-        `INSERT INTO users (role, login, phone, phone_key, email, password_hash, name, city, base_lat, base_lng, offer_accepted_at, offer_version)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), $11)
+        `INSERT INTO users (role, login, phone, phone_key, email, password_hash, name, city, base_lat, base_lng, offer_accepted_at, offer_version, pd_consent_at, pd_consent_version)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), $11, now(), $12)
          RETURNING id, role, login, phone, email, name, city, base_lat, base_lng, avatar_url, created_at`,
-        [p.role, p.login, ch.phone, ch.phone_key, p.email, p.passwordHash, p.name, p.city, pt?.[0] ?? null, pt?.[1] ?? null, config.offerVersion],
+        [p.role, p.login, ch.phone, ch.phone_key, p.email, p.passwordHash, p.name, p.city, pt?.[0] ?? null, pt?.[1] ?? null, config.offerVersion, config.pdConsentVersion],
         db
       );
     } catch (e) {

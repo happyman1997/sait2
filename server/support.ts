@@ -189,6 +189,9 @@ export type UserRow = {
   id: string; login: string; name: string; phone: string; email: string; role: string; status: string; isStaff: boolean; createdAt: string;
   jobs: number; done: number; noShows: number; complaints: number; marks: number;
   actions: { action: string; note: string; at: string }[];
+  /** Действующие отметки и последние отзывы о пользователе — для обжалования (Правила площадки, п. 3–4). */
+  markList: { id: string; kind: string; reason: string; at: string }[];
+  reviewList: { id: string; rating: number; text: string; author: string; at: string }[];
 };
 
 export async function findUsers(viewer: U, q: unknown): Promise<UserRow[]> {
@@ -213,11 +216,70 @@ export async function findUsers(viewer: U, q: unknown): Promise<UserRow[]> {
       ORDER BY u.created_at DESC LIMIT 20`, [like, digits.slice(-10)]);
   const acts = await query<{ user_id: string; action: string; note: string; created_at: Date }>(
     `SELECT user_id, action, note, created_at FROM staff_actions WHERE user_id = ANY($1::uuid[]) ORDER BY created_at DESC`, [r.rows.map(u => u.id)]);
+  const ids = r.rows.map(u => u.id);
+  const [marks, revs] = await Promise.all([
+    query<{ id: string; user_id: string; kind: string; reason: string | null; created_at: Date }>(
+      `SELECT id, user_id, kind, reason, created_at FROM user_marks
+        WHERE user_id = ANY($1::uuid[]) AND kind <> 'blocked' AND coalesce(until, created_at + interval '90 days') > now()
+        ORDER BY created_at DESC`, [ids]),
+    query<{ id: string; target_id: string; rating: number; text: string; author: string; created_at: Date }>(
+      `SELECT v.id, v.target_id, v.rating, v.text, a.name AS author, v.created_at
+         FROM reviews v JOIN users a ON a.id = v.author_id
+        WHERE v.target_id = ANY($1::uuid[]) ORDER BY v.created_at DESC`, [ids])
+  ]);
   return r.rows.map(u => ({
     id: u.id, login: u.login, name: u.name, phone: u.phone, email: u.email, role: u.role, status: u.status, isStaff: u.is_staff,
     createdAt: u.created_at.toISOString(), jobs: u.jobs, done: u.done, noShows: u.no_show_count, complaints: u.complaints, marks: u.marks,
-    actions: acts.rows.filter(a => a.user_id === u.id).slice(0, 5).map(a => ({ action: a.action, note: a.note, at: a.created_at.toISOString() }))
+    actions: acts.rows.filter(a => a.user_id === u.id).slice(0, 5).map(a => ({ action: a.action, note: a.note, at: a.created_at.toISOString() })),
+    markList: marks.rows.filter(m => m.user_id === u.id).map(m => ({ id: m.id, kind: m.kind, reason: m.reason || '', at: m.created_at.toISOString() })),
+    reviewList: revs.rows.filter(v => v.target_id === u.id).slice(0, 10)
+      .map(v => ({ id: v.id, rating: v.rating, text: v.text, author: v.author, at: v.created_at.toISOString() }))
   }));
+}
+
+const noteOf = (raw: unknown, hint: string) => {
+  const note = raw && typeof raw === 'object' && typeof (raw as Record<string, unknown>).note === 'string'
+    ? ((raw as Record<string, unknown>).note as string).trim().slice(0, 1000) : '';
+  if (note.length < 5) throw new AppError(422, hint, 'note');
+  return note;
+};
+
+/** Обжалование удовлетворено: отметка снимается; для «Не вышел» — и из счётчика невыходов. Пользователь получает уведомление. */
+export async function removeMark(viewer: U, id: string, raw: unknown) {
+  const staff = await needStaff(viewer);
+  if (!UUID_RE.test(id)) throw new AppError(404, 'Отметка не найдена.');
+  const note = noteOf(raw, 'Укажите, почему снимаете отметку — это увидит пользователь.');
+  await tx(async (db) => {
+    const m = await one<{ user_id: string; kind: string; job_id: string | null; reason: string | null }>(
+      'DELETE FROM user_marks WHERE id = $1 RETURNING user_id, kind, job_id, reason', [id], db);
+    if (!m) throw new AppError(404, 'Отметка не найдена — возможно, её уже сняли.');
+    if (m.kind === 'blocked') throw new AppError(409, 'Блокировка снимается кнопкой «Разблокировать».');
+    if (m.kind === 'no_show' && m.job_id) {
+      const gone = await query('DELETE FROM no_shows WHERE job_id = $1 AND freelancer_id = $2', [m.job_id, m.user_id], db);
+      if (gone.rowCount) await query('UPDATE users SET no_show_count = greatest(0, no_show_count - 1) WHERE id = $1', [m.user_id], db);
+    }
+    await addEvents([{ userId: m.user_id, kind: 'complaint', deliver: true, text: 'Площадка сняла отметку «' + (m.reason || m.kind) + '»: ' + note }], db);
+    await audit(staff, 'unmark', m.user_id, null, (m.reason || m.kind) + ' — ' + note, db);
+  });
+  return { ok: true };
+}
+
+/** Отзыв с оскорблениями, чужими данными, угрозами или не о смене — убирается по жалобе (Правила площадки, п. 4.2). */
+export async function removeReview(viewer: U, id: string, raw: unknown) {
+  const staff = await needStaff(viewer);
+  if (!UUID_RE.test(id)) throw new AppError(404, 'Отзыв не найден.');
+  const note = noteOf(raw, 'Укажите основание — оно попадёт в журнал и уведомление автору.');
+  await tx(async (db) => {
+    const v = await one<{ author_id: string; target_id: string; text: string }>(
+      'DELETE FROM reviews WHERE id = $1 RETURNING author_id, target_id, text', [id], db);
+    if (!v) throw new AppError(404, 'Отзыв не найден — возможно, его уже удалили.');
+    await addEvents([
+      { userId: v.author_id, kind: 'complaint', deliver: true, text: 'Площадка убрала ваш отзыв: ' + note },
+      { userId: v.target_id, kind: 'complaint', deliver: true, text: 'Площадка убрала отзыв о вас: ' + note }
+    ], db);
+    await audit(staff, 'review_removed', v.target_id, null, '«' + v.text.slice(0, 80) + '» — ' + note, db);
+  });
+  return { ok: true };
 }
 
 /**

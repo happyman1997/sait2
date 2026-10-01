@@ -15,6 +15,7 @@ import { jobPhotos } from './files';
 import { publish } from './live';
 import { limitOrThrow } from './rate-limit';
 import type { SessionUser } from './session';
+import { fuzzPoint, isPrivateOrg, kmBetween, PRIVATE_NAME, roughAddress } from './privacy';
 import { doneSql } from './stats';
 
 export const DEFAULT_BASE = { lat: 55.7558, lng: 37.6173, label: 'Москва' };
@@ -62,24 +63,35 @@ const SUMMARY_COLS = `
   (SELECT count(*) FROM hires h WHERE h.job_id = j.id)::int AS hired,
   (SELECT count(*) FROM applications a WHERE a.job_id = j.id AND a.status IN ('sent', 'hired'))::int AS applicants,
   (SELECT a.status FROM applications a WHERE a.job_id = j.id AND a.freelancer_id = $1) AS my_status,
-  earth_distance(ll_to_earth($2, $3), j.pt) / 1000 AS distance_km`;
+  earth_distance(ll_to_earth($2, $3), j.pt) / 1000 AS distance_km,
+  coalesce((SELECT ep.org_type FROM employer_profiles ep WHERE ep.user_id = j.employer_id), 'частное лицо') AS org_type`;
 
 type SummaryRow = {
   id: string; num: string; title: string; type_id: string; type_label: string; address: string; district: string | null;
   lat: number; lng: number; pay: number; unit: string; pay_type: string | null; date: string; volume: string | null;
   crew: number; urgent: boolean; repeat: string | null; status: JobStatus; created_at: Date; employer_id: string;
-  hired: number; applicants: number; my_status: AppStatus | null; distance_km: number | null;
+  hired: number; applicants: number; my_status: AppStatus | null; distance_km: number | null; org_type: string;
 };
 
-function toSummary(r: SummaryRow, viewer: Viewer): JobSummary {
+/**
+ * base — точка, от которой считалось distance_km: для скрытого адреса расстояние пересчитывается до сдвинутой точки,
+ * иначе по расстояниям от разных баз точку можно было бы вычислить. revealed — зритель нанят (в т. ч. заменой дня).
+ */
+function toSummary(r: SummaryRow, viewer: Viewer, base?: { lat: number; lng: number }, revealed = false): JobSummary {
+  const mine = !!viewer && viewer.id === r.employer_id;
+  const hidden = isPrivateOrg(r.org_type) && !mine && !revealed && r.my_status !== 'hired';
+  const pt = hidden ? fuzzPoint(r.id, r.lat, r.lng) : { lat: r.lat, lng: r.lng };
+  const km = hidden ? (base ? kmBetween(base, pt) : r.distance_km == null ? null : Math.round(r.distance_km)) : r.distance_km;
   return {
-    num: Number(r.num), title: r.title, typeId: r.type_id, typeLabel: r.type_label, address: r.address, district: r.district,
-    lat: r.lat, lng: r.lng, pay: r.pay, unit: r.unit, payType: r.pay_type, date: r.date, volume: r.volume, crew: r.crew,
+    num: Number(r.num), title: r.title, typeId: r.type_id, typeLabel: r.type_label,
+    address: hidden ? roughAddress(r.address, r.district) : r.address, district: r.district,
+    lat: pt.lat, lng: pt.lng, pay: r.pay, unit: r.unit, payType: r.pay_type, date: r.date, volume: r.volume, crew: r.crew,
     urgent: r.urgent, repeat: r.repeat, status: r.status, hired: r.hired, applicants: r.applicants,
-    mine: !!viewer && viewer.id === r.employer_id,
+    mine,
     myStatus: viewer?.role === 'freelancer' ? r.my_status : null,
-    distanceKm: r.distance_km == null ? null : Math.round(r.distance_km * 10) / 10,
-    createdAt: r.created_at.toISOString()
+    distanceKm: km == null ? null : Math.round(km * 10) / 10,
+    createdAt: r.created_at.toISOString(),
+    addressHidden: hidden
   };
 }
 
@@ -101,6 +113,7 @@ export async function listJobs(p: ListParams, viewer: Viewer, db: Db = pool()) {
   const b = baseOf(viewer, p.lat, p.lng);
   const r3 = (x: number) => Math.round(x * 1000) / 1000;
   const q: ListParams = { ...p, lat: r3(b.lat), lng: r3(b.lng) };
+  const qBase = { lat: q.lat!, lng: q.lng! };
   const key = JSON.stringify([q.lat, q.lng, b.label, q.today, (q.types || []).slice().sort(), q.minPay || 0, q.km || 0, q.when, (q.q || '').trim().toLowerCase()]);
   // Считаем от округлённой точки; при промахе — сразу со статусами откликов того, кто спросил (один запрос, как без кэша).
   let mineLoaded = false;
@@ -113,7 +126,7 @@ export async function listJobs(p: ListParams, viewer: Viewer, db: Db = pool()) {
   if (!viewer) {
     const hit = await guestSearch.get(key, load);
     // Готовый гостевой ответ — один объект на запись кэша (его JSON и gzip кодируются один раз, http.ts).
-    return (hit.guest ??= { jobs: hit.rows.map(x => toSummary(x, null)), base: hit.base });
+    return (hit.guest ??= { jobs: hit.rows.map(x => toSummary(x, null, qBase)), base: hit.base });
   }
   const hit = await guestSearch.get(key, load, VIEWER_MAX_AGE);
   const own = viewer.role === 'freelancer' && !mineLoaded && hit.rows.length
@@ -124,12 +137,12 @@ export async function listJobs(p: ListParams, viewer: Viewer, db: Db = pool()) {
       .map(x => [x.job_id, x.status]))
     : null;
   // Выдача посчитана от округлённой точки, а своя метка базы на карте — точно на месте.
-  return { jobs: hit.rows.map(x => toSummary(own ? { ...x, my_status: own.get(x.id) ?? null } : x, viewer)), base: b };
+  return { jobs: hit.rows.map(x => toSummary(own ? { ...x, my_status: own.get(x.id) ?? null } : x, viewer, qBase)), base: b };
 }
 
 async function searchJobs(p: ListParams, viewer: Viewer, db: Db) {
   const r = await searchRows(p, viewer, db);
-  return { jobs: r.rows.map(x => toSummary(x, viewer)), base: r.base };
+  return { jobs: r.rows.map(x => toSummary(x, viewer, r.base)), base: r.base };
 }
 
 async function searchRows(p: ListParams, viewer: Viewer, db: Db) {
@@ -223,9 +236,10 @@ export async function getJob(num: number, viewer: Viewer, db: Db = pool()): Prom
 async function loadJob(num: number, viewer: Viewer, db: Db): Promise<JobDetail> {
   const r = await loadJobRow(num, viewer, db);
   if (!r) throw new AppError(404, 'Заказ не найден — возможно, его удалили.');
+  const base = baseOf(viewer);
   const owner = !!viewer && viewer.id === r.employer_id;
 
-  const [emp, cancel, hiredRows] = await Promise.all([
+  const [emp, cancel, hiredRows, sub] = await Promise.all([
     one<{ name: string; org_type: string | null; org_name: string | null; created_at: Date; rating: number | null; reviews: number; jobs: number }>(
       `SELECT u.name, p.org_type, p.org_name, u.created_at,
               (SELECT avg(rating)::float8 FROM reviews WHERE target_id = u.id) AS rating,
@@ -241,11 +255,18 @@ async function loadJob(num: number, viewer: Viewer, db: Db): Promise<JobDetail> 
          FROM hires h JOIN users u ON u.id = h.freelancer_id
          LEFT JOIN applications a ON a.job_id = h.job_id AND a.freelancer_id = h.freelancer_id
         WHERE h.job_id = $1 ORDER BY h.hired_at`,
-      [r.id], db)
+      [r.id], db),
+    viewer?.role === 'freelancer' && r.repeat
+      ? one(`SELECT 1 FROM series_subs WHERE job_id = $1 AND freelancer_id = $2 AND status = 'hired' LIMIT 1`, [r.id, viewer.id], db)
+      : Promise.resolve(null)
   ]);
-  const empName = emp && emp.org_type && emp.org_type !== 'частное лицо' && emp.org_name ? emp.org_name : shortName(emp?.name || '');
   const hired = hiredRows.rows;
   const meHired = viewer?.role === 'freelancer' ? hired.find(h => h.freelancer_id === viewer.id) : undefined;
+  // Нанят в основной состав или заменой дня — видит точный адрес и встречающего.
+  const insider = owner || !!meHired || !!sub;
+  // Имя частного заказчика — тем, кто с ним уже связан: откликнулся или нанят; остальным — «Частный заказчик».
+  const empName = emp && !isPrivateOrg(emp.org_type) && emp.org_name ? emp.org_name
+    : isPrivateOrg(emp?.org_type) && !insider && !r.my_status ? PRIVATE_NAME : shortName(emp?.name || '');
   // Телефон встречающего: владельцу и нанятому; в бригаде из нескольких человек — только старшему.
   const phoneForMe = owner || (!!meHired && (hired.length <= 1 || meHired.is_lead));
 
@@ -257,13 +278,13 @@ async function loadJob(num: number, viewer: Viewer, db: Db): Promise<JobDetail> 
   ]);
 
   return {
-    ...toSummary(r, viewer),
+    ...toSummary(r, viewer, base, insider),
     description: r.description,
     requirement: r.requirement,
     repeatNote: r.repeat_note,
     access: r.access,
     tools: r.tools,
-    meetName: r.meet_name,
+    meetName: insider ? r.meet_name : null,
     meetPhone: phoneForMe ? r.meet_phone : null,
     payWhen: r.pay_when,
     employer: {
@@ -281,7 +302,9 @@ async function loadJob(num: number, viewer: Viewer, db: Db): Promise<JobDetail> 
 /** Отклики на заказ — для работодателя: рейтинг, закрытые смены, «не вышел», инвентарь, статус НПД. */
 async function loadApplicants(jobId: string, db: Db): Promise<Applicant[]> {
   const apps = await query<{ id: string; freelancer_id: string; name: string; status: AppStatus; created_at: Date; no_show_count: number; gear: string[] | null; rating: number | null; done: number; is_lead: boolean | null; npd: boolean | null }>(
-    `SELECT a.id, a.freelancer_id, u.name, a.status, a.created_at, u.no_show_count, fp.gear, (fp.npd_status = 'ok' AND fp.npd_checked_at > now() - interval '3 days') AS npd,
+    `SELECT a.id, a.freelancer_id, u.name, a.status, a.created_at,
+            -- Невыходы — за последний год (Правила площадки): старая история не висит над человеком.
+            (SELECT count(*) FROM no_shows n WHERE n.freelancer_id = u.id AND n.at > now() - interval '12 months')::int AS no_show_count, fp.gear, (fp.npd_status = 'ok' AND fp.npd_checked_at > now() - interval '3 days') AS npd,
             (SELECT avg(rating)::float8 FROM reviews WHERE target_id = u.id) AS rating,
             ${doneSql('u.id')} AS done,
             (SELECT is_lead FROM hires h WHERE h.job_id = a.job_id AND h.freelancer_id = u.id) AS is_lead

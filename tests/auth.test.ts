@@ -51,7 +51,7 @@ async function expectErr(p: Promise<unknown>, field: string | undefined, text?: 
 
 async function register(input: Record<string, unknown>) {
   const s = await auth.startSignup(input, ctx);
-  return auth.verifySignup(s.challengeId, nextCode, true, ctx);
+  return auth.verifySignup(s.challengeId, nextCode, { offer: true, pd: true }, ctx);
 }
 
 beforeAll(async () => {
@@ -76,7 +76,7 @@ describe('регистрация', () => {
     expect(sent).toHaveLength(1);
     expect(await one('SELECT 1 FROM users')).toBeNull(); // до кода аккаунта нет
 
-    const { user, session } = await auth.verifySignup(s.challengeId, '4821', true, ctx);
+    const { user, session } = await auth.verifySignup(s.challengeId, '4821', { offer: true, pd: true }, ctx);
     expect(user).toMatchObject({ role: 'freelancer', login: 'daniyar_s', phone: '+79160000000', city: 'Москва' });
     expect(user.baseLat).toBeCloseTo(55.75, 1);
 
@@ -119,8 +119,8 @@ describe('регистрация', () => {
   it('гонка: два незавершённых кода на один номер — второй аккаунт не создаётся', async () => {
     const a = await auth.startSignup(freelancer(), ctx);
     const b = await auth.startSignup(employer({ phone: '+7 916 000 00 00' }), ctx);
-    await auth.verifySignup(a.challengeId, '4821', true, ctx);
-    await expectErr(auth.verifySignup(b.challengeId, '4821', true, ctx), 'phone', /как исполнитель/);
+    await auth.verifySignup(a.challengeId, '4821', { offer: true, pd: true }, ctx);
+    await expectErr(auth.verifySignup(b.challengeId, '4821', { offer: true, pd: true }, ctx), 'phone', /как исполнитель/);
   });
 
   it('модерация на сервере: ник, имя, свои навыки', async () => {
@@ -130,38 +130,39 @@ describe('регистрация', () => {
     await expectErr(auth.checkContacts(freelancer({ name: 'Mr.Suka' })), 'name');
   });
 
-  it('код: 3 попытки, затем только новый код; оферта обязательна', async () => {
+  it('код: 3 попытки, затем только новый код; оферта и согласие на ПДн — обе галочки обязательны', async () => {
     const s = await auth.startSignup(freelancer(), ctx);
-    await expectErr(auth.verifySignup(s.challengeId, '4821', false, ctx), 'offer', /оферты/);
-    await expectErr(auth.verifySignup(s.challengeId, '12', true, ctx), 'code', /четыре цифры/);
-    await expectErr(auth.verifySignup(s.challengeId, '0000', true, ctx), 'code', /осталось попыток: 2/);
-    await expectErr(auth.verifySignup(s.challengeId, '0000', true, ctx), 'code', /осталось попыток: 1/);
-    await expectErr(auth.verifySignup(s.challengeId, '0000', true, ctx), 'code', /Попытки исчерпаны/);
-    await expectErr(auth.verifySignup(s.challengeId, '4821', true, ctx), 'code', /Попытки исчерпаны/);
+    await expectErr(auth.verifySignup(s.challengeId, '4821', { offer: false, pd: true }, ctx), 'offer', /оферты/);
+    await expectErr(auth.verifySignup(s.challengeId, '4821', { offer: true }, ctx), 'pdConsent', /персональных данных/);
+    await expectErr(auth.verifySignup(s.challengeId, '12', { offer: true, pd: true }, ctx), 'code', /четыре цифры/);
+    await expectErr(auth.verifySignup(s.challengeId, '0000', { offer: true, pd: true }, ctx), 'code', /осталось попыток: 2/);
+    await expectErr(auth.verifySignup(s.challengeId, '0000', { offer: true, pd: true }, ctx), 'code', /осталось попыток: 1/);
+    await expectErr(auth.verifySignup(s.challengeId, '0000', { offer: true, pd: true }, ctx), 'code', /Попытки исчерпаны/);
+    await expectErr(auth.verifySignup(s.challengeId, '4821', { offer: true, pd: true }, ctx), 'code', /Попытки исчерпаны/);
 
     // после исчерпания попыток повторная отправка доступна сразу
     nextCode = '7777';
     const r = await auth.resendCode(s.challengeId, 'call', 'signup', ctx);
     expect(r.channel).toBe('call');
     expect(sent.at(-1)).toMatchObject({ channel: 'call' });
-    const { user } = await auth.verifySignup(s.challengeId, '7777', true, ctx);
+    const { user } = await auth.verifySignup(s.challengeId, '7777', { offer: true, pd: true }, ctx);
     expect(user.login).toBe('daniyar_s');
     // использованный код второй раз не срабатывает
-    await expectErr(auth.verifySignup(s.challengeId, '7777', true, ctx), undefined, /устарела/);
+    await expectErr(auth.verifySignup(s.challengeId, '7777', { offer: true, pd: true }, ctx), undefined, /устарела/);
   });
 
   it('параллельные попытки не обходят лимит в 3 кода', async () => {
     const s = await auth.startSignup(freelancer(), ctx);
     const wrong = ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009', '0010'];
-    const res = await Promise.allSettled(wrong.map(c => auth.verifySignup(s.challengeId, c, true, ctx)));
+    const res = await Promise.allSettled(wrong.map(c => auth.verifySignup(s.challengeId, c, { offer: true, pd: true }, ctx)));
     expect(res.every(r => r.status === 'rejected')).toBe(true);
     const row = await one<{ attempts: number }>('SELECT attempts FROM auth_challenges WHERE id = $1', [s.challengeId]);
     expect(row!.attempts).toBe(3);
-    await expectErr(auth.verifySignup(s.challengeId, '4821', true, ctx), 'code', /Попытки исчерпаны/);
+    await expectErr(auth.verifySignup(s.challengeId, '4821', { offer: true, pd: true }, ctx), 'code', /Попытки исчерпаны/);
   });
 
   it('мусорный id подтверждения — 400, а не ошибка базы', async () => {
-    await expectErr(auth.verifySignup('-'.repeat(36), '4821', true, ctx), undefined, /не найдена/);
+    await expectErr(auth.verifySignup('-'.repeat(36), '4821', { offer: true, pd: true }, ctx), undefined, /не найдена/);
   });
 
   it('повторная отправка не раньше чем через 60 секунд', async () => {
@@ -175,7 +176,7 @@ describe('регистрация', () => {
   it('просроченный код не принимается', async () => {
     const s = await auth.startSignup(freelancer(), ctx);
     await query(`UPDATE auth_challenges SET expires_at = now() - interval '1 second'`);
-    await expectErr(auth.verifySignup(s.challengeId, '4821', true, ctx), 'code', /устарел/);
+    await expectErr(auth.verifySignup(s.challengeId, '4821', { offer: true, pd: true }, ctx), 'code', /устарел/);
   });
 });
 

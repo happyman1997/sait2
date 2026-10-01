@@ -186,12 +186,57 @@ describe('карточка и отклик', () => {
     expect((await jobs.getJob(j.num, fl)).meetPhone).toBeNull();
     expect((await jobs.getJob(j.num, null)).meetPhone).toBeNull();
     expect((await jobs.getJob(j.num, emp2)).meetPhone).toBeNull();
-    expect((await jobs.getJob(j.num, fl)).meetName).toBe('Марат');
+    // Имя встречающего — тоже персональные данные третьего лица: только владельцу и нанятым.
+    expect((await jobs.getJob(j.num, fl)).meetName).toBeNull();
+    expect((await jobs.getJob(j.num, emp)).meetName).toBe('Марат');
     await jobs.applyToJob(j.num, {}, fl, today);
     const [{ id }] = (await query<{ id: string }>('SELECT id FROM jobs WHERE num = $1', [j.num])).rows;
     await query(`INSERT INTO hires (job_id, freelancer_id) VALUES ($1, $2)`, [id, fl.id]);
     await query(`UPDATE applications SET status = 'hired' WHERE freelancer_id = $1`, [fl.id]);
     expect((await jobs.getJob(j.num, fl)).meetPhone).toBe('+7 900 000-00-00');
+    expect((await jobs.getJob(j.num, fl)).meetName).toBe('Марат');
+  });
+
+  it('частный заказчик: до отклика — без имени, до найма — без дома и с примерной точкой', async () => {
+    const priv = await mkUser('employer', 'ivan_p', '9170000001', 'Иван Петров');
+    await query(`UPDATE employer_profiles SET org_type = 'частное лицо', org_name = NULL WHERE user_id = $1`, [priv.id]);
+    const j = await jobs.createJob(form({ address: 'Москва, ул. Тверская, 18, кв. 5' }), priv, today);
+    const km = (a: { lat: number; lng: number }) => Math.hypot((a.lat - MOSCOW.lat) * 111.3, (a.lng - MOSCOW.lng) * 111.3 * Math.cos(MOSCOW.lat * Math.PI / 180));
+
+    for (const viewer of [null, fl]) {
+      const g = await jobs.getJob(j.num, viewer);
+      expect(g.addressHidden).toBe(true);
+      expect(g.address).toBe('Москва, ул. Тверская');
+      expect(g.employer.name).toBe('Частный заказчик');
+      expect(km(g)).toBeGreaterThan(0.14);
+      expect(km(g)).toBeLessThan(0.36);
+      // Расстояние — до показанной точки, а не до настоящей.
+      expect(Math.abs((g.distanceKm ?? 0) - km(g))).toBeLessThan(0.11);
+    }
+    // В выдаче — та же точка, что в карточке (сдвиг детерминирован).
+    const listed = (await jobs.listJobs({ today }, null)).jobs.find(x => x.num === j.num)!;
+    const card = await jobs.getJob(j.num, null);
+    expect([listed.lat, listed.lng, listed.address]).toEqual([card.lat, card.lng, card.address]);
+
+    await jobs.applyToJob(j.num, {}, fl, today);
+    const applied = await jobs.getJob(j.num, fl);
+    expect(applied.employer.name).toBe('Иван П.');
+    expect(applied.addressHidden).toBe(true);
+
+    const own = await jobs.getJob(j.num, priv);
+    expect([own.address, own.lat, own.addressHidden]).toEqual(['Москва, ул. Тверская, 18, кв. 5', MOSCOW.lat, false]);
+
+    const [{ id }] = (await query<{ id: string }>('SELECT id FROM jobs WHERE num = $1', [j.num])).rows;
+    await query(`INSERT INTO hires (job_id, freelancer_id) VALUES ($1, $2)`, [id, fl.id]);
+    await query(`UPDATE applications SET status = 'hired' WHERE freelancer_id = $1 AND job_id = $2`, [fl.id, id]);
+    jobs.invalidateSearch();
+    const hired = await jobs.getJob(j.num, fl);
+    expect([hired.address, hired.lat, hired.lng, hired.addressHidden]).toEqual(['Москва, ул. Тверская, 18, кв. 5', MOSCOW.lat, MOSCOW.lng, false]);
+
+    // Организация — адрес виден всем сразу.
+    const org = await jobs.createJob(form(), emp, today);
+    const og = await jobs.getJob(org.num, null);
+    expect([og.address, og.addressHidden, og.employer.name]).toEqual(['Москва, ул. Тверская, 18', false, 'УК «Тверская»']);
   });
 
   it('отклик: работодателю нельзя, повторно нельзя, отзыв и повторный отклик можно', async () => {

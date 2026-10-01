@@ -101,6 +101,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
   const [attemptsLeft, setAttemptsLeft] = useState(3);
   const [resendIn, setResendIn] = useState(0);
   const [offerAccepted, setOfferAccepted] = useState(false);
+  const [pdConsent, setPdConsent] = useState(false);
   const [offerError, setOfferError] = useState('');
 
   // Вход и восстановление
@@ -235,8 +236,8 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
       return;
     }
     // Шаг 4: оферта + код
-    if (!offerAccepted) {
-      setOfferError('Без оферты и согласия на обработку данных аккаунт создать нельзя — отметьте галочку выше.');
+    if (!offerAccepted || !pdConsent) {
+      setOfferError(!offerAccepted ? 'Без принятия оферты аккаунт создать нельзя — отметьте галочку.' : 'Без согласия на обработку персональных данных аккаунт создать нельзя — отметьте галочку.');
       setErrTick(t => t + 1);
       return;
     }
@@ -244,7 +245,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
     if (code.length < 4) { setCodeError('Введите все четыре цифры'); return; }
     setBusy(true);
     try {
-      await api('/api/auth/signup/verify', { challengeId: challenge?.challengeId, code, offerAccepted });
+      await api('/api/auth/signup/verify', { challengeId: challenge?.challengeId, code, offerAccepted, pdConsent });
       flash('Аккаунт создан');
       done(role);
     } catch (e) {
@@ -673,8 +674,12 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
                     </div>
                     {challenge?.devCode && <div className={sty.cf8e1b45}>Режим разработки: код {challenge.devCode} (SMS не отправляется)</div>}
                     <label className={sty.c2ff6e93}>
-                      <input type="checkbox" checked={offerAccepted} onChange={e => { setOfferAccepted(e.target.checked); if (e.target.checked) setOfferError(''); }} className={sty.cdf98b21} />
-                      <span>Принимаю <Link href="/legal/offer" target="_blank">оферту на пользование сервисом</Link> и даю <Link href="/legal/personal-data" target="_blank">согласие на обработку персональных данных</Link>. Площадка — посредник: договор о работах стороны заключают между собой.</span>
+                      <input type="checkbox" checked={offerAccepted} onChange={e => { setOfferAccepted(e.target.checked); if (e.target.checked && pdConsent) setOfferError(''); }} className={sty.cdf98b21} />
+                      <span>Мне есть 18 лет, принимаю <Link href="/legal/offer" target="_blank">оферту</Link> и <Link href="/legal/rules" target="_blank">правила площадки</Link>. Площадка — посредник: договор о работах стороны заключают между собой.</span>
+                    </label>
+                    <label className={sty.c2ff6e93}>
+                      <input type="checkbox" checked={pdConsent} onChange={e => { setPdConsent(e.target.checked); if (e.target.checked && offerAccepted) setOfferError(''); }} className={sty.cdf98b21} />
+                      <span>Даю <Link href="/legal/consent" target="_blank">согласие на обработку персональных данных</Link> на условиях <Link href="/legal/personal-data" target="_blank">политики</Link>.</span>
                     </label>
                     {offerError && <div role="alert" style={{ ...css('font-size: 13.5px; font-weight: 600; line-height: 1.4; margin-top: 8px; color: var(--color-accent-900); border: 2px solid var(--color-accent-700); padding: 8px 10px; background: var(--color-accent-100)'), animation: stepErrAnim }}>{offerError}</div>}
                   </div>

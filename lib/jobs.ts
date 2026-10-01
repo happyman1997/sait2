@@ -29,6 +29,8 @@ export type JobSummary = {
   myStatus: AppStatus | null; // отклик текущего исполнителя
   distanceKm: number | null;
   createdAt: string;
+  /** Частный заказчик, зритель не нанят: адрес — без дома, точка сдвинута на 150–350 м. */
+  addressHidden: boolean;
 };
 
 export type Applicant = {

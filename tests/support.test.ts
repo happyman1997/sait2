@@ -137,6 +137,32 @@ describe('пользователи и блокировка', () => {
     expect((await jobs.getJob(j.num, emp)).applicantList).toEqual([]);
     await expectErr(sup.setBlocked(staff, staff.id, { blocked: true, note: 'проверка' }), /Себя/);
   });
+
+  it('обжалование: «Не вышел» снимается вместе со счётчиком; отзыв убирается, обе стороны узнают', async () => {
+    const j = await jobs.createJob(form(), emp, today);
+    await jobs.applyToJob(j.num, { reqConfirmed: true }, fl, today);
+    const app = (await jobs.getJob(j.num, emp)).applicantList![0].id;
+    await sh.staffAction(j.num, app, 'hire', emp);
+    await sh.staffAction(j.num, app, 'no-show', emp);
+    let [u] = await sup.findUsers(staff, 'daniyar');
+    expect([u.noShows, u.markList.map(m => m.kind)]).toEqual([1, ['no_show']]);
+    await expectErr(sup.removeMark(staff, u.markList[0].id, { note: '' }), /почему/);
+    await expectErr(sup.removeMark(fl, u.markList[0].id, { note: 'сам себе' }), /не найдена/, 404);
+    await sup.removeMark(staff, u.markList[0].id, { note: 'Работодатель перепутал исполнителя' });
+    [u] = await sup.findUsers(staff, 'daniyar');
+    expect([u.noShows, u.markList, u.actions[0].action]).toEqual([0, [], 'unmark']);
+    expect((await one<{ text: string }>(`SELECT text FROM events WHERE user_id = $1 AND text LIKE 'Площадка сняла%'`, [fl.id]))!.text).toMatch(/перепутал/);
+    await expectErr(sup.removeMark(staff, u.id, { note: 'нет такой' }), /не найдена/, 404);
+
+    const num = await acceptedShift();
+    await sh.saveReview(num, { rating: 1, text: 'Грубили на объекте' }, fl);
+    [u] = await sup.findUsers(staff, 'aigul');
+    expect(u.reviewList.map(v => v.text)).toEqual(['Грубили на объекте']);
+    await sup.removeReview(staff, u.reviewList[0].id, { note: 'Отзыв о другой смене' });
+    [u] = await sup.findUsers(staff, 'aigul');
+    expect(u.reviewList).toEqual([]);
+    expect((await query(`SELECT 1 FROM events WHERE text LIKE 'Площадка убрала%'`)).rowCount).toBe(2);
+  });
 });
 
 describe('работа поддержки: срок, назначение, шаблоны', () => {

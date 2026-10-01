@@ -28,8 +28,8 @@ export function applyState(j: JobDetail, role: Role, reqOk: boolean) {
 
 function brief(j: JobDetail) {
   return [
-    { label: 'Контакт на объекте', value: j.meetPhone ? (j.meetName || 'встречающий') + ' · ' + j.meetPhone : (j.meetName ? j.meetName + ' — ' : '') + 'телефон откроется после найма' },
-    { label: 'Как добраться', value: j.address + (j.district ? ' · ' + j.district : '') },
+    { label: 'Контакт на объекте', value: j.meetPhone ? (j.meetName || 'встречающий') + ' · ' + j.meetPhone : (j.meetName ? j.meetName + ' — ' : '') + 'имя и телефон откроются после найма' },
+    { label: 'Как добраться', value: j.address + (j.district ? ' · ' + j.district : '') + (j.addressHidden ? ' — точный адрес откроется после найма' : '') },
     { label: 'Доступ на объект', value: j.access.length ? j.access.join(', ') : 'уточняется у работодателя в чате после найма' },
     { label: 'Инвентарь', value: j.tools || 'уточняется у работодателя' },
     { label: 'Работа считается выполненной', value: (j.volume ? j.volume + ' — ' : '') + j.typeLabel.toLowerCase() + ', принято работодателем в карточке смены' },
@@ -68,7 +68,7 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
   const when = job.repeat ? 'с ' + dateLabel(job.date) : dateLabel(job.date);
 
   const specs = [
-    { label: 'Адрес', value: job.address },
+    { label: 'Адрес', value: job.addressHidden ? job.address + ' (частный заказчик: дом и точная метка — после найма)' : job.address },
     { label: 'Дата выхода', value: when },
     { label: 'График', value: job.repeat ? job.repeat + (job.repeatNote ? ' · ' + job.repeatNote : '') : 'разовый выход' },
     ...(crew > 1 ? [{ label: 'Людей в смене', value: (crew === Infinity ? 'сколько угодно' : crew + ' чел.') + ' · набрано ' + job.hired }] : []),

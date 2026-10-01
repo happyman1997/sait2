@@ -278,6 +278,19 @@ describe('фото', () => {
 });
 
 describe('файлы и уборка', () => {
+  it('срок хранения: переписка и фото смены старше 3 лет удаляются, свежие остаются', async () => {
+    const oldJob = await jobs.createJob(form(), emp, today);
+    const fresh = await jobs.createJob(form(), emp, today);
+    const ids = (await query<{ id: string; num: string }>('SELECT id, num FROM jobs WHERE num = ANY($1)', [[oldJob.num, fresh.num]])).rows;
+    for (const j of ids) {
+      await query(`INSERT INTO messages (job_id, freelancer_id, author_id, author_role, text) VALUES ($1, $2, $2, 'freelancer', 'Буду в 9')`, [j.id, fl.id]);
+    }
+    await query(`UPDATE jobs SET date = current_date - interval '3 years 1 day', status = 'accepted' WHERE num = $1`, [oldJob.num]);
+    await cron.runDueTasks();
+    const left = (await query<{ num: string }>('SELECT j.num FROM messages m JOIN jobs j ON j.id = m.job_id')).rows.map(r => Number(r.num));
+    expect(left).toEqual([fresh.num]);
+  });
+
   it('файлы идут через подключаемое хранилище (S3 в продакшене)', async () => {
     const { setStorage } = await import('@/server/storage');
     const mem = new Map<string, Uint8Array>();
