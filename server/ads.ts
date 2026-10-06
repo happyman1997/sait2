@@ -43,6 +43,8 @@ export async function clickAd(id: string): Promise<string> {
     `INSERT INTO ad_daily (ad_id, day, clicks) VALUES ($1, $2::date, 1)
      ON CONFLICT (ad_id, day) DO UPDATE SET clicks = ad_daily.clicks + 1`, [id, today()]);
   const u = new URL(ad.url);
+  // Переход — только на обычную веб-страницу рекламодателя.
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new AppError(404, 'Объявление не найдено.');
   if (!u.searchParams.has('erid')) u.searchParams.set('erid', ad.erid);
   return u.toString();
 }

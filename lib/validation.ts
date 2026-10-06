@@ -1,4 +1,5 @@
 // Проверки полей регистрации/входа — общие для клиента и сервера. Тексты ошибок — из прототипа.
+import { passwordProblem } from './password-policy';
 import { ACCESS, GEAR, JOB_TYPE_IDS, OBJECT_KINDS, ORG_TYPES, PASS_MODES, SAFETY_REQ, TOOLS } from './catalog';
 
 export type Role = 'freelancer' | 'employer';
@@ -87,18 +88,18 @@ export function contactsMissing(c: Partial<Contacts>, opts: { requirePassword?: 
   if ((c.name || '').trim().length < 2) miss.push('name');
   if (digitsOf(c.phone || '').length < 10) miss.push('phone');
   if (!LOGIN_RE.test((c.login || '').trim())) miss.push('login');
-  if (opts.requirePassword !== false && (c.password || '').length < 6) miss.push('password');
+  if (opts.requirePassword !== false && passwordProblem(c.password || '', { login: c.login, phone: c.phone })) miss.push('password');
   if (!EMAIL_RE.test((c.email || '').trim())) miss.push('email');
   if (!(c.city || '').trim()) miss.push('city');
   return miss;
 }
 
-export function contactsMessage(field: string, email: string): string {
+export function contactsMessage(field: string, email: string, c: Partial<Contacts> = {}): string {
   switch (field) {
     case 'name': return 'Укажите имя и фамилию — их видит вторая сторона в чате.';
     case 'phone': return 'Телефон нужен для кода подтверждения и связи на смене — минимум 10 цифр.';
     case 'login': return 'Придумайте логин: 3–20 символов — латиница, цифры, точка или подчёркивание.';
-    case 'password': return 'Пароль — не короче 6 символов.';
+    case 'password': return passwordProblem(c.password || '', { login: c.login, phone: c.phone }) || 'Придумайте пароль.';
     case 'email': return email.trim() ? 'Проверьте e-mail — похоже, в адресе опечатка.' : 'Укажите e-mail — на него придут чеки и важные уведомления.';
     default: return 'Укажите город — по нему подбираются смены рядом.';
   }
@@ -107,7 +108,7 @@ export function contactsMessage(field: string, email: string): string {
 export function validateContacts(c: Partial<Contacts>, opts?: { requirePassword?: boolean }): FieldError | null {
   const miss = contactsMissing(c, opts);
   if (!miss.length) return null;
-  return { field: miss[0], message: contactsMessage(miss[0], c.email || '') };
+  return { field: miss[0], message: contactsMessage(miss[0], c.email || '', c) };
 }
 
 export function validateProfile(role: Role, p: { freelancer?: Partial<FreelancerProfile>; employer?: Partial<EmployerProfile> }): FieldError | null {

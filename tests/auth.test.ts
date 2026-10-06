@@ -24,14 +24,14 @@ setCodeSender({
 const ctx = { ip: '10.0.0.1', userAgent: 'vitest' };
 
 const freelancer = (over: Record<string, unknown> = {}) => ({
-  role: 'freelancer', name: 'Данияр Сапаров', phone: '+7 916 000 00 00', login: 'daniyar_s', password: 'secret1',
+  role: 'freelancer', name: 'Данияр Сапаров', phone: '+7 916 000 00 00', login: 'daniyar_s', password: 'secret1!',
   email: 'd@mail.ru', city: 'Москва',
   freelancer: { skills: ['snow', 'bogus'], customSkills: ['вывоз снега'], gear: ['Триммер'], customGear: [], ownCar: true, workCities: ['Москва', 'Химки'] },
   ...over
 });
 
 const employer = (over: Record<string, unknown> = {}) => ({
-  role: 'employer', name: 'Айгуль Тлеубаева', phone: '8 (916) 111-11-11', login: 'aigul_t', password: 'secret2',
+  role: 'employer', name: 'Айгуль Тлеубаева', phone: '8 (916) 111-11-11', login: 'aigul_t', password: 'secret2!',
   email: 'a@mail.ru', city: 'Москва',
   employer: { orgType: 'УК / ТСЖ', orgName: 'УК «Тверская»', access: ['домофон'], tools: 'нужен свой инвентарь' },
   ...over
@@ -97,7 +97,10 @@ describe('регистрация', () => {
     await expectErr(auth.checkContacts(freelancer({ name: 'Д' })), 'name', /имя и фамилию/);
     await expectErr(auth.checkContacts(freelancer({ phone: '12345' })), 'phone', /минимум 10 цифр/);
     await expectErr(auth.checkContacts(freelancer({ login: 'да' })), 'login', /3–20 символов/);
-    await expectErr(auth.checkContacts(freelancer({ password: '123' })), 'password', /не короче 6/);
+    await expectErr(auth.checkContacts(freelancer({ password: '123' })), 'password', /не короче 8/);
+    await expectErr(auth.checkContacts(freelancer({ password: '12345678' })), 'password', /самых частых/);
+    await expectErr(auth.checkContacts(freelancer({ password: 'QWERTYUI' })), 'password', /самых частых/);
+    await expectErr(auth.checkContacts(freelancer({ login: 'daniyar_s', password: 'Daniyar_S' })), 'password', /Логин или номер/);
     await expectErr(auth.checkContacts(freelancer({ email: 'a@b' })), 'email', /опечатка/);
     await expectErr(auth.checkContacts(freelancer({ city: ' ' })), 'city', /город/);
   });
@@ -173,6 +176,24 @@ describe('регистрация', () => {
     expect(sent).toHaveLength(2);
   });
 
+  it('подбор кода: не больше 10 неверных кодов на номер в сутки — по всем запросам кода сразу', async () => {
+    const s = await auth.startSignup(freelancer(), ctx);
+    let fails = 0;
+    for (let send = 0; send < 4 && fails < 10; send++) {
+      if (send) await auth.resendCode(s.challengeId, 'sms', 'signup', ctx);
+      for (let k = 0; k < 3 && fails < 10; k++, fails++) await expectErr(auth.verifySignup(s.challengeId, '0000', { offer: true, pd: true }, ctx), 'code', /не совпал|исчерпаны/);
+    }
+    // Даже верный код больше не принимается: номер закрыт до завтра.
+    await query(`UPDATE auth_challenges SET last_sent_at = now() - interval '2 minutes'`);
+    await auth.resendCode(s.challengeId, 'sms', 'signup', ctx);
+    await expectErr(auth.verifySignup(s.challengeId, '4821', { offer: true, pd: true }, ctx), 'code', /попробуйте завтра/);
+  });
+
+  it('SMS на один номер — не больше 10 в сутки', async () => {
+    await query(`INSERT INTO rate_limits (key, window_start, count) VALUES ('sms:day:79160000000', now(), 10)`);
+    await expectErr(auth.startSignup(freelancer(), ctx), undefined, /уже отправлено много кодов/);
+  });
+
   it('просроченный код не принимается', async () => {
     const s = await auth.startSignup(freelancer(), ctx);
     await query(`UPDATE auth_challenges SET expires_at = now() - interval '1 second'`);
@@ -187,24 +208,24 @@ describe('вход', () => {
   });
 
   it('по логину (регистр не важен) и по телефону (последние 10 цифр); роль — из аккаунта', async () => {
-    expect((await auth.login('Daniyar_S', 'secret1', ctx)).user.role).toBe('freelancer');
-    expect((await auth.login('8 916 111 11 11', 'secret2', ctx)).user.role).toBe('employer');
-    expect((await auth.login('+7 (916) 000-00-00', 'secret1', ctx)).user.login).toBe('daniyar_s');
+    expect((await auth.login('Daniyar_S', 'secret1!', ctx)).user.role).toBe('freelancer');
+    expect((await auth.login('8 916 111 11 11', 'secret2!', ctx)).user.role).toBe('employer');
+    expect((await auth.login('+7 (916) 000-00-00', 'secret1!', ctx)).user.login).toBe('daniyar_s');
   });
 
   it('ошибки входа', async () => {
-    await expectErr(auth.login('', 'secret1', ctx), 'identifier', /Введите логин/);
-    await expectErr(auth.login('+7 916', 'secret1', ctx), 'identifier', /минимум 10/);
-    await expectErr(auth.login('д@', 'secret1', ctx), 'identifier', /Логин — 3–20/);
+    await expectErr(auth.login('', 'secret1!', ctx), 'identifier', /Введите логин/);
+    await expectErr(auth.login('+7 916', 'secret1!', ctx), 'identifier', /минимум 10/);
+    await expectErr(auth.login('д@', 'secret1!', ctx), 'identifier', /Логин — 3–20/);
     await expectErr(auth.login('daniyar_s', '123', ctx), 'password', /не короче 6/);
-    await expectErr(auth.login('nobody_here', 'secret1', ctx), 'identifier', /с таким логином не найден/);
-    await expectErr(auth.login('+7 999 000 00 00', 'secret1', ctx), 'identifier', /с таким номером не найден/);
+    await expectErr(auth.login('nobody_here', 'secret1!', ctx), 'identifier', /с таким логином не найден/);
+    await expectErr(auth.login('+7 999 000 00 00', 'secret1!', ctx), 'identifier', /с таким номером не найден/);
     await expectErr(auth.login('daniyar_s', 'wrong-pass', ctx), 'password', /Неверный пароль/);
   });
 
   it('ограничение частоты попыток входа', async () => {
     for (let i = 0; i < 10; i++) await expectErr(auth.login('daniyar_s', 'wrong-pass', ctx), 'password');
-    const e = await expectErr(auth.login('daniyar_s', 'secret1', ctx), undefined, /Слишком много попыток/);
+    const e = await expectErr(auth.login('daniyar_s', 'secret1!', ctx), undefined, /Слишком много попыток/);
     expect(e.status).toBe(429);
   });
 
@@ -216,15 +237,28 @@ describe('вход', () => {
   });
 
   it('успешные входы не тратят лимит попыток', async () => {
-    for (let i = 0; i < 12; i++) await auth.login('daniyar_s', 'secret1', ctx);
+    for (let i = 0; i < 12; i++) await auth.login('daniyar_s', 'secret1!', ctx);
     for (let i = 0; i < 9; i++) await expectErr(auth.login('daniyar_s', 'wrong-pass', ctx), 'password');
-    expect((await auth.login('daniyar_s', 'secret1', ctx)).user.login).toBe('daniyar_s');
+    expect((await auth.login('daniyar_s', 'secret1!', ctx)).user.login).toBe('daniyar_s');
   });
 
   it('заблокированный аккаунт не входит', async () => {
     await query(`UPDATE users SET status = 'blocked' WHERE login = 'daniyar_s'`);
-    const e = await expectErr(auth.login('daniyar_s', 'secret1', ctx), undefined, /заблокирован/);
+    const e = await expectErr(auth.login('daniyar_s', 'secret1!', ctx), undefined, /заблокирован/);
     expect(e.status).toBe(403);
+  });
+
+  it('сессия: не дольше 90 дней с входа; у поддержки — 12 часов без действий', async () => {
+    const { session } = await auth.login('daniyar_s', 'secret1!', ctx);
+    expect(await sessionUser(session.token)).not.toBeNull();
+    await query(`UPDATE sessions SET created_at = now() - interval '91 days'`);
+    expect(await sessionUser(session.token)).toBeNull();
+
+    const staff = await auth.login('daniyar_s', 'secret1!', ctx);
+    await query(`UPDATE users SET is_staff = true WHERE login = 'daniyar_s'`);
+    expect(await sessionUser(staff.session.token)).not.toBeNull();
+    await query(`UPDATE sessions SET last_seen_at = now() - interval '13 hours'`);
+    expect(await sessionUser(staff.session.token)).toBeNull();
   });
 });
 
@@ -238,13 +272,13 @@ describe('восстановление пароля', () => {
     await expectErr(auth.completeRecover(s.challengeId, 'newpass1', 'newpass1', ctx), undefined, /устарело/); // без кода нельзя
     await expectErr(auth.verifyRecover(s.challengeId, '0000'), 'code', /не совпал/);
     await auth.verifyRecover(s.challengeId, '5150');
-    await expectErr(auth.completeRecover(s.challengeId, 'short', 'short', ctx), 'password', /короче шести/);
+    await expectErr(auth.completeRecover(s.challengeId, 'short', 'short', ctx), 'password', /не короче 8/);
     await expectErr(auth.completeRecover(s.challengeId, 'newpass1', 'newpass2', ctx), 'password2', /не совпали/);
     const { user } = await auth.completeRecover(s.challengeId, 'newpass1', 'newpass1', ctx);
     expect(user.login).toBe('daniyar_s');
 
     expect(await sessionUser(old.token)).toBeNull();
-    await expectErr(auth.login('daniyar_s', 'secret1', ctx), 'password');
+    await expectErr(auth.login('daniyar_s', 'secret1!', ctx), 'password');
     expect((await auth.login('daniyar_s', 'newpass1', ctx)).user.login).toBe('daniyar_s');
   });
 

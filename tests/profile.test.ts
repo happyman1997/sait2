@@ -45,7 +45,7 @@ async function mkUser(role: 'freelancer' | 'employer', login: string, phoneKey: 
   const u = await one<{ id: string }>(
     `INSERT INTO users (role, login, phone, phone_key, email, password_hash, name, city, base_lat, base_lng, offer_accepted_at, offer_version)
      VALUES ($1, $2, '+7' || $3, $3, $2 || '@x.ru', $4, $5, 'Москва', $6, $7, now(), 't') RETURNING id`,
-    [role, login, phoneKey, await hashPassword('secret1'), name, at.lat, at.lng]);
+    [role, login, phoneKey, await hashPassword('secret1!'), name, at.lat, at.lng]);
   await query('INSERT INTO notification_settings (user_id) VALUES ($1)', [u!.id]);
   if (role === 'freelancer') await query(`INSERT INTO freelancer_profiles (user_id, skills, work_cities) VALUES ($1, '{snow}', '{Москва}')`, [u!.id]);
   else await query(`INSERT INTO employer_profiles (user_id, org_type) VALUES ($1, 'УК / ТСЖ')`, [u!.id]);
@@ -327,8 +327,8 @@ describe('файлы и уборка', () => {
 describe('телефон и пароль', () => {
   it('смена телефона: нужен пароль, код на новый номер', async () => {
     await expectErr(auth.startPhoneChange(fl.id, { phone: '+7 916 555 44 33', password: 'wrong' }, {}), /пароль/i, 'password');
-    await expectErr(auth.startPhoneChange(fl.id, { phone: '+7 916 111 11 11', password: 'secret1' }, {}), /занят|зарегистр/i, 'phone');
-    const s = await auth.startPhoneChange(fl.id, { phone: '+7 916 555 44 33', password: 'secret1' }, {});
+    await expectErr(auth.startPhoneChange(fl.id, { phone: '+7 916 111 11 11', password: 'secret1!' }, {}), /занят|зарегистр/i, 'phone');
+    const s = await auth.startPhoneChange(fl.id, { phone: '+7 916 555 44 33', password: 'secret1!' }, {});
     await expectErr(auth.verifyPhoneChange(emp.id, s.challengeId, '1234'), /другому аккаунту/);
     await auth.verifyPhoneChange(fl.id, s.challengeId, '1234');
     const u = await one<{ phone_key: string }>('SELECT phone_key FROM users WHERE id = $1', [fl.id]);
@@ -338,7 +338,7 @@ describe('телефон и пароль', () => {
   it('смена пароля завершает другие входы, текущий остаётся', async () => {
     const other = await createSession(fl.id, {});
     await expectErr(auth.changePassword(fl.id, { current: 'nope', password: 'newpass1', password2: 'newpass1' }, fl.session_id), /Текущий/, 'current');
-    await auth.changePassword(fl.id, { current: 'secret1', password: 'newpass1', password2: 'newpass1' }, fl.session_id);
+    await auth.changePassword(fl.id, { current: 'secret1!', password: 'newpass1', password2: 'newpass1' }, fl.session_id);
     expect(await sessionUser(other.token)).toBeNull();
     const left = await query('SELECT id FROM sessions WHERE user_id = $1', [fl.id]);
     expect(left.rows.map(r => r.id)).toEqual([fl.session_id]);

@@ -23,7 +23,7 @@ export async function runDueTasks(): Promise<{ skipped: boolean; autoAccepted: n
       // Одно соединение — запросы строго по очереди.
       let cleaned = 0;
       for (const sql of [
-        `DELETE FROM sessions WHERE expires_at < now()`,
+        `DELETE FROM sessions WHERE expires_at < now() OR created_at < now() - interval '90 days'`,
         `DELETE FROM auth_challenges WHERE expires_at < now() - interval '1 day'`,
         `DELETE FROM rate_limits WHERE window_start < now() - interval '1 day'`,
         `DELETE FROM daily_stats WHERE day < current_date - 30`,

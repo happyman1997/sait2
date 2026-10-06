@@ -1,8 +1,16 @@
 import crypto from 'node:crypto';
 import { one, pool, query, type Db } from './db';
 
-export const SESSION_COOKIE = 'arena_session';
+import { config } from './config';
+
+// По HTTPS — префикс __Host-: браузер примет cookie только с Secure, Path=/ и без Domain, поэтому её нельзя
+// подставить с поддомена или по http. На стенде без HTTPS — обычное имя.
+export const sessionCookieName = () => (config.secureCookies() ? '__Host-arena_session' : 'arena_session');
 export const SESSION_DAYS = 30;
+// Активная сессия продлевается, но не дольше этого срока с момента входа: украденная cookie не живёт вечно.
+export const SESSION_MAX_DAYS = 90;
+const STAFF_IDLE_MS = 12 * 3600_000;
+const STAFF_MAX_MS = 7 * 86400_000;
 
 export type Ctx = { ip?: string | null; userAgent?: string | null };
 
@@ -40,16 +48,21 @@ export async function createSession(userId: string, ctx: Ctx, db: Db = pool()): 
 /** Пользователь по токену; продлевает сессию (не чаще раза в час). */
 export async function sessionUser(token: string | undefined | null, db: Db = pool()): Promise<SessionUser | null> {
   if (!token || token.length > 100) return null;
-  const row = await one<SessionUser & { last_seen_at: Date }>(
+  const row = await one<SessionUser & { last_seen_at: Date; session_created_at: Date }>(
     `SELECT u.id, u.role, u.login, u.phone, u.email, u.name, u.city, u.base_lat, u.base_lng, u.base_label, u.avatar_url, u.status, u.is_staff, u.created_at,
-            s.id AS session_id, s.last_seen_at
+            s.id AS session_id, s.last_seen_at, s.created_at AS session_created_at
        FROM sessions s JOIN users u ON u.id = s.user_id
-      WHERE s.token_hash = $1 AND s.expires_at > now()`,
-    [sha256(token)],
+      WHERE s.token_hash = $1 AND s.expires_at > now() AND s.created_at > now() - make_interval(days => $2)`,
+    [sha256(token), SESSION_MAX_DAYS],
     db
   );
   // Заблокированный или удалённый аккаунт — входа нет.
   if (!row || row.status !== 'active') return null;
+  // Поддержка видит телефоны и переписку: её вход живёт не больше 7 дней и гаснет после 12 часов без действий.
+  if (row.is_staff && (Date.now() - row.last_seen_at.getTime() > STAFF_IDLE_MS || Date.now() - row.session_created_at.getTime() > STAFF_MAX_MS)) {
+    await query('DELETE FROM sessions WHERE id = $1', [row.session_id], db);
+    return null;
+  }
   if (Date.now() - row.last_seen_at.getTime() > 3600_000) {
     await query(
       `UPDATE sessions SET last_seen_at = now(), expires_at = now() + make_interval(days => $2) WHERE id = $1`,
@@ -57,7 +70,7 @@ export async function sessionUser(token: string | undefined | null, db: Db = poo
       db
     );
   }
-  const { last_seen_at: _l, ...user } = row;
+  const { last_seen_at: _l, session_created_at: _c, ...user } = row;
   return user;
 }
 

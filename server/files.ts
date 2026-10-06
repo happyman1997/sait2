@@ -1,6 +1,7 @@
 // Загрузка изображений: аватары (видны всем) и фото смены «до/после» (только участникам смены).
 // Тип определяется по сигнатуре файла, а не по расширению или Content-Type клиента.
 import { one, pool, query, tx, type Db } from './db';
+import { stripMetadata } from './exif';
 import { AppError } from './errors';
 import { publish } from './live';
 import { getStorage } from './storage';
@@ -24,9 +25,12 @@ async function store(ownerId: string, kind: 'avatar' | 'photo', file: unknown, j
   if (!(file instanceof Blob)) throw new AppError(422, 'Прикрепите изображение.', 'file');
   await limitOrThrow(`upload:${ownerId}`, 60, 3600, 'Слишком много загрузок подряд — попробуйте через час.');
   if (file.size > LIMIT[kind]) throw new AppError(413, 'Файл больше ' + LIMIT[kind] / 1024 / 1024 + ' МБ — уменьшите фото.', 'file');
-  const buf = new Uint8Array(await file.arrayBuffer());
-  const mime = sniff(buf);
+  const raw = new Uint8Array(await file.arrayBuffer());
+  const mime = sniff(raw);
   if (!mime) throw new AppError(415, 'Подходят только фото JPEG, PNG или WebP.', 'file');
+  // Без EXIF/XMP: в них GPS-координаты места съёмки (exif.ts).
+  const buf = stripMetadata(raw, mime);
+  if (!buf.length) throw new AppError(415, 'Файл повреждён — сохраните фото заново и попробуйте ещё раз.', 'file');
   const row = await one<{ id: string }>('INSERT INTO files (owner_id, kind, mime, size, job_id) VALUES ($1, $2, $3, $4, $5) RETURNING id',
     [ownerId, kind, mime, buf.length, jobId]);
   try {

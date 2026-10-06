@@ -9,8 +9,9 @@ import {
 import { config } from './config';
 import { one, pool, query, tx, type Db } from './db';
 import { AppError, ModerationError } from './errors';
+import { passwordProblem } from '@/lib/password-policy';
 import { dummyHash, hashPassword, verifyPassword } from './password';
-import { hit, limitOrThrow, refund } from './rate-limit';
+import { hit, limitOrThrow, refund, used } from './rate-limit';
 import { createSession, deleteUserSessions, type Ctx } from './session';
 import { codeMatches, codeSender, hashCode, type Channel } from './sms';
 
@@ -19,6 +20,19 @@ export const RESEND_SEC = 60;
 export const MAX_ATTEMPTS = 3;
 export const MAX_SENDS = 5;
 export const RECOVER_WINDOW_MIN = 15;
+// Код — 4 цифры (звонок-сброс даёт ровно 4). Подбор по номеру ограничен суточно, по всем запросам кода сразу:
+// иначе новые коды каждые несколько минут дают десятки попыток в час и захват аккаунта через восстановление.
+export const CODE_FAILS_PER_DAY = 10;
+// SMS на один номер в сутки — защита от «SMS-бомбы» по чужому номеру и от расходов на рассылку.
+export const SMS_PER_DAY = 10;
+const DAY = 86400;
+const TOO_MANY_FAILS = 'Слишком много неверных кодов для этого номера — попробуйте завтра или напишите в поддержку.';
+
+/** Отправка кода с суточным лимитом на номер (по всем сценариям: регистрация, восстановление, смена номера). */
+async function sendCode(phone: string, channel: Channel, purpose: 'signup' | 'recover' | 'phone', ctx: Ctx, db?: Db) {
+  await limitOrThrow('sms:day:' + phone.replace(/\D/g, ''), SMS_PER_DAY, DAY, 'На этот номер сегодня уже отправлено много кодов — попробуйте завтра.', db);
+  return codeSender().send(phone, channel, purpose, ctx.ip ?? undefined);
+}
 
 type ChallengeRow = {
   id: string;
@@ -101,7 +115,7 @@ export async function startSignup(raw: unknown, ctx: Ctx, db: Db = pool()): Prom
     [phone, pk, JSON.stringify(payload), CODE_TTL_MIN, ctx.ip ?? null],
     db
   );
-  const { code } = await codeSender().send(phone, 'sms', 'signup', ctx.ip ?? undefined);
+  const { code } = await sendCode(phone, 'sms', 'signup', ctx, db);
   await query('UPDATE auth_challenges SET code_hash = $2 WHERE id = $1', [row!.id, hashCode(row!.id, code)], db);
   return { challengeId: row!.id, channel: 'sms', sentTo: formatPhone(phone), resendIn: RESEND_SEC, expiresInSec: CODE_TTL_MIN * 60, ...devCode(code) };
 }
@@ -128,7 +142,7 @@ export async function resendCode(challengeId: unknown, channelRaw: unknown, purp
 
   let code = '';
   if (ch.code_hash !== null || purpose === 'signup') {
-    code = (await codeSender().send(ch.phone, channel, purpose, ctx.ip ?? undefined)).code;
+    code = (await sendCode(ch.phone, channel, purpose, ctx, db)).code;
   }
   await query(
     `UPDATE auth_challenges SET code_hash = $2, channel = $3, attempts = 0, sent_count = sent_count + 1,
@@ -151,7 +165,9 @@ async function checkCode(ch: ChallengeRow, code: unknown, db: Db) {
   if (ch.attempts >= MAX_ATTEMPTS) throw new AppError(422, 'Попытки исчерпаны — запросите новый код', 'code', { attemptsLeft: 0 });
   if (c.length < 4) throw new AppError(422, 'Введите все четыре цифры', 'code');
   if (ch.expires_at.getTime() < Date.now()) throw new AppError(422, 'Код устарел — запросите новый', 'code');
-  const used = await one<{ attempts: number }>(
+  const failKey = 'codefail:' + ch.phone_key;
+  if ((await used(failKey, DAY, db)) >= CODE_FAILS_PER_DAY) throw new AppError(429, TOO_MANY_FAILS, 'code', { attemptsLeft: 0 });
+  const spent = await one<{ attempts: number }>(
     `UPDATE auth_challenges SET attempts = attempts + 1
       WHERE id = $1 AND attempts < $2 AND consumed_at IS NULL AND code_hash IS NOT DISTINCT FROM $3
       RETURNING attempts`,
@@ -159,9 +175,11 @@ async function checkCode(ch: ChallengeRow, code: unknown, db: Db) {
     db
   );
   // Нет строки: попытки кончились параллельно или код успели перевыпустить — сравнивать не с чем.
-  if (!used) throw new AppError(422, 'Попытки исчерпаны — запросите новый код', 'code', { attemptsLeft: 0 });
+  if (!spent) throw new AppError(422, 'Попытки исчерпаны — запросите новый код', 'code', { attemptsLeft: 0 });
   if (!codeMatches(ch.id, c, ch.code_hash)) {
-    const left = MAX_ATTEMPTS - used.attempts;
+    const day = await hit(failKey, CODE_FAILS_PER_DAY, DAY, db);
+    if (!day.ok) throw new AppError(429, TOO_MANY_FAILS, 'code', { attemptsLeft: 0 });
+    const left = MAX_ATTEMPTS - spent.attempts;
     throw new AppError(422, left > 0 ? 'Код не совпал — осталось попыток: ' + left : 'Попытки исчерпаны — запросите новый код', 'code', { attemptsLeft: left });
   }
 }
@@ -293,7 +311,7 @@ export async function startRecover(identifier: unknown, ctx: Ctx): Promise<CodeS
   );
   let extra = {};
   if (user) {
-    const { code } = await codeSender().send(user.phone, 'sms', 'recover', ctx.ip ?? undefined);
+    const { code } = await sendCode(user.phone, 'sms', 'recover', ctx);
     await query('UPDATE auth_challenges SET code_hash = $2 WHERE id = $1', [row!.id, hashCode(row!.id, code)]);
     extra = devCode(code);
   }
@@ -310,7 +328,8 @@ export async function verifyRecover(challengeId: unknown, code: unknown) {
 export async function completeRecover(challengeId: unknown, password: unknown, password2: unknown, ctx: Ctx) {
   const p1 = typeof password === 'string' ? password : '';
   const p2 = typeof password2 === 'string' ? password2 : '';
-  if (p1.length < 6) throw new AppError(422, 'Пароль короче шести символов — так аккаунт уводят за вечер.', 'password');
+  const bad = passwordProblem(p1);
+  if (bad) throw new AppError(422, bad, 'password');
   if (p1 !== p2) throw new AppError(422, 'Пароли не совпали — проверьте второе поле.', 'password2');
   const hash = await hashPassword(p1);
   return tx(async (db) => {
@@ -352,7 +371,7 @@ export async function startPhoneChange(userId: string, raw: unknown, ctx: Ctx): 
     `INSERT INTO auth_challenges (purpose, phone, phone_key, user_id, channel, expires_at, ip)
      VALUES ('phone', $1, $2, $3, 'sms', now() + make_interval(mins => $4), $5) RETURNING id`,
     [phone, pk, userId, CODE_TTL_MIN, ctx.ip ?? null]);
-  const { code } = await codeSender().send(phone, 'sms', 'phone', ctx.ip ?? undefined);
+  const { code } = await sendCode(phone, 'sms', 'phone', ctx);
   await query('UPDATE auth_challenges SET code_hash = $2 WHERE id = $1', [row!.id, hashCode(row!.id, code)]);
   return { challengeId: row!.id, channel: 'sms', sentTo: formatPhone(phone), resendIn: RESEND_SEC, expiresInSec: CODE_TTL_MIN * 60, ...devCode(code) };
 }
@@ -376,7 +395,8 @@ export async function verifyPhoneChange(userId: string, challengeId: unknown, co
 export async function changePassword(userId: string, raw: unknown, keepSessionId: string | null) {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const next = typeof r.password === 'string' ? r.password : '';
-  if (next.length < 6) throw new AppError(422, 'Пароль короче шести символов — так аккаунт уводят за вечер.', 'password');
+  const bad = passwordProblem(next);
+  if (bad) throw new AppError(422, bad, 'password');
   if (next !== r.password2) throw new AppError(422, 'Пароли не совпали — проверьте второе поле.', 'password2');
   const me = await one<{ password_hash: string }>('SELECT password_hash FROM users WHERE id = $1', [userId]);
   if (!me || !(await verifyPassword(typeof r.current === 'string' ? r.current : '', me.password_hash))) throw new AppError(401, 'Текущий пароль неверный.', 'current');

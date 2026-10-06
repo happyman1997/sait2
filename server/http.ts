@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server';
 import { config } from './config';
 import { AppError } from './errors';
 import { observe } from './metrics';
-import { SESSION_COOKIE, sessionUser, type Ctx } from './session';
+import { sessionCookieName, sessionUser, type Ctx } from './session';
 
 /**
  * IP клиента. Первое значение X-Forwarded-For задаёт сам клиент — ему верить нельзя (обход лимитов).
@@ -108,20 +108,20 @@ async function handle<T>(fn: (req: Request) => Promise<T | NextResponse>, req: R
 }
 
 export function setSessionCookie(res: NextResponse, token: string, expiresAt: Date) {
-  res.cookies.set(SESSION_COOKIE, token, {
+  res.cookies.set(sessionCookieName(), token, {
     httpOnly: true, sameSite: 'lax', secure: config.secureCookies(), path: '/', expires: expiresAt
   });
   return res;
 }
 
 export function clearSessionCookie(res: NextResponse) {
-  res.cookies.set(SESSION_COOKIE, '', { httpOnly: true, sameSite: 'lax', secure: config.secureCookies(), path: '/', maxAge: 0 });
+  res.cookies.set(sessionCookieName(), '', { httpOnly: true, sameSite: 'lax', secure: config.secureCookies(), path: '/', maxAge: 0 });
   return res;
 }
 
 export async function currentUser() {
   const c = await cookies();
-  return sessionUser(c.get(SESSION_COOKIE)?.value);
+  return sessionUser(c.get(sessionCookieName())?.value);
 }
 
 export async function requireUser() {
@@ -130,17 +130,21 @@ export async function requireUser() {
   return u;
 }
 
-/** Защита от CSRF для изменяющих запросов: Origin должен совпадать с Host. */
+/**
+ * Защита от CSRF для изменяющих запросов. Браузер сам сообщает, откуда запрос: Sec-Fetch-Site (cross-site —
+ * отказ) и Origin — он должен совпадать с адресом сайта: PUBLIC_URL в продакшене (заголовкам Host/X-Forwarded-Host
+ * там не верим), Host — на стенде. Запрос без обоих заголовков — не из браузера; формы с чужих сайтов
+ * без cookie (SameSite=Lax) и без JSON (readJson) ничего не сделают.
+ */
 export async function assertSameOrigin(req: Request) {
+  const site = req.headers.get('sec-fetch-site');
+  if (site && site !== 'same-origin' && site !== 'none') throw new AppError(403, 'Запрос с чужого сайта отклонён.');
   const origin = req.headers.get('origin');
-  if (!origin) return; // не-браузерные клиенты; cookie SameSite=Lax закрывает кросс-сайтовые формы
-  const host = req.headers.get('x-forwarded-host') || req.headers.get('host');
-  try {
-    if (new URL(origin).host !== host) throw new AppError(403, 'Запрос с чужого сайта отклонён.');
-  } catch (e) {
-    if (e instanceof AppError) throw e;
-    throw new AppError(403, 'Запрос с чужого сайта отклонён.');
-  }
+  if (!origin) return;
+  const expected = config.isProd ? new URL(config.publicUrl()).host : req.headers.get('x-forwarded-host') || req.headers.get('host');
+  let host = '';
+  try { host = new URL(origin).host; } catch { /* «null» и мусор — чужой */ }
+  if (!host || host !== expected) throw new AppError(403, 'Запрос с чужого сайта отклонён.');
 }
 
 /** multipart/form-data (загрузка файлов). Размер тела ограничен на уровне прокси и проверкой в files.ts. */

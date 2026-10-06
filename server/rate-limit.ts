@@ -26,3 +26,10 @@ export async function limitOrThrow(key: string, limit: number, windowSec: number
   const r = await hit(key, limit, windowSec, db);
   if (!r.ok) throw new AppError(429, message, undefined, { retryAfter: r.retryAfter });
 }
+
+/** Сколько уже списано в текущем окне (без списания). */
+export async function used(key: string, windowSec: number, db: Db = pool()): Promise<number> {
+  const row = await one<{ count: number }>(
+    'SELECT count FROM rate_limits WHERE key = $1 AND window_start >= now() - make_interval(secs => $2)', [key, windowSec], db);
+  return row?.count ?? 0;
+}

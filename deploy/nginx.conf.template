@@ -1,5 +1,23 @@
 # nginx перед приложением. ${SERVER_NAME} подставляется при старте контейнера (envsubst).
 
+server_tokens off;
+
+# Частота запросов с одного IP. Точные лимиты (на номер, логин, аккаунт) — в приложении; здесь — грубый
+# фильтр от перебора и флуда, с запасом на мобильный NAT, где за одним адресом много людей.
+limit_req_zone $binary_remote_addr zone=auth:10m rate=30r/m;
+limit_req_zone $binary_remote_addr zone=api:20m rate=30r/s;
+limit_req_status 429;
+limit_conn_zone $binary_remote_addr zone=conn:10m;
+limit_conn_status 429;
+
+# Запросы на IP или чужое имя (сканеры, подмена Host) — без ответа; на 443 — даже без рукопожатия TLS.
+server {
+  listen 80 default_server;
+  listen 443 ssl default_server;
+  ssl_reject_handshake on;
+  return 444;
+}
+
 server {
   listen 80;
   server_name ${SERVER_NAME};
@@ -17,19 +35,24 @@ server {
   ssl_certificate_key /etc/letsencrypt/live/${SERVER_NAME}/privkey.pem;
   ssl_protocols TLSv1.2 TLSv1.3;
   ssl_session_cache shared:SSL:10m;
+  ssl_session_tickets off;
 
   # Фото до 8 МБ (+ запас на multipart).
   client_max_body_size 10m;
 
-  # Host с портом — для проверки Origin в приложении; IP клиента — справа в X-Forwarded-For (TRUST_PROXY_HOPS=1).
+  # IP клиента — справа в X-Forwarded-For (TRUST_PROXY_HOPS=1); адрес сайта для проверки Origin приложение берёт из PUBLIC_URL.
   proxy_http_version 1.1;
   proxy_set_header Host $http_host;
   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
   proxy_set_header X-Forwarded-Proto $scheme;
+  # Эти заголовки от клиента не пропускаем: адрес сайта приложение берёт из PUBLIC_URL, IP — из X-Forwarded-For.
+  proxy_set_header X-Forwarded-Host "";
+  proxy_set_header X-Real-IP $remote_addr;
   proxy_set_header Connection "";
 
   # Живые обновления (SSE): без буферизации и с долгим чтением.
   location = /api/stream {
+    limit_conn conn 20;
     proxy_pass http://app:3000;
     proxy_buffering off;
     proxy_cache off;
@@ -41,6 +64,19 @@ server {
   location /map/ {
     alias /srv/map/;
     add_header Cache-Control "public, max-age=86400";
+    add_header X-Content-Type-Options nosniff;
+  }
+
+  # Вход, регистрация, коды: перебор паролей и кодов.
+  location /api/auth/ {
+    limit_req zone=auth burst=30 nodelay;
+    proxy_pass http://app:3000;
+  }
+
+  location /api/ {
+    limit_req zone=api burst=60 nodelay;
+    proxy_pass http://app:3000;
+    proxy_read_timeout 60s;
   }
 
   # Статика сборки — с хешем в имени, кэшируется навсегда.

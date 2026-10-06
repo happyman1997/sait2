@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type Reac
 import { ApiError, api } from '@/lib/api';
 import { ACCESS, GEAR, JOB_TYPES, OBJECT_KINDS, ORG_TYPES, PASS_MODES, SAFETY_REQ, TOOLS } from '@/lib/catalog';
 import { css } from '@/lib/css';
+import { passwordProblem } from '@/lib/password-policy';
 import { contactsMessage, contactsMissing, validateProfile, type Role } from '@/lib/validation';
 import { showModeration } from '@/components/ModerationGuard';
 import { useFlash } from '@/components/Toast';
@@ -206,7 +207,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
     if (step === 2) {
       const miss = contactsMissing({ name, phone, login, password: pass, email, city });
       if (miss.length) {
-        flashFields(miss.map(m => (m === 'password' ? 'pass' : m)), contactsMessage(miss[0], email));
+        flashFields(miss.map(m => (m === 'password' ? 'pass' : m)), contactsMessage(miss[0], email, { login, phone, password: pass }));
         return;
       }
       setBusy(true);
@@ -368,7 +369,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
       return;
     }
     if (recoverStep === 3) {
-      if (recoverPass.length < 6) { showError('Пароль короче шести символов — так аккаунт уводят за вечер.'); return; }
+      { const bad = passwordProblem(recoverPass); if (bad) { showError(bad); return; } }
       if (recoverPass !== recoverPass2) { showError('Пароли не совпали — проверьте второе поле.'); return; }
       setBusy(true);
       try {
@@ -499,7 +500,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
                       </div>
                       <div className="field">
                         <label htmlFor="su-pass">Пароль <span style={css(REQ)}>обязательно</span></label>
-                        <input id="su-pass" className="input" type="password" value={pass} onChange={e => { setPass(e.target.value); setStepError(''); }} placeholder="не короче 6 символов" autoComplete="new-password" style={css(missStyle('pass', true))} />
+                        <input id="su-pass" className="input" type="password" value={pass} onChange={e => { setPass(e.target.value); setStepError(''); }} placeholder="не короче 8 символов" autoComplete="new-password" style={css(missStyle('pass', true))} />
                       </div>
                       <div className="field">
                         <label htmlFor="su-email">E-mail <span style={css(REQ)}>обязательно</span></label>
@@ -732,7 +733,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
                   <label htmlFor="rc-field">{recoverStep === 2 ? 'Код из SMS' : recoverStep === 3 ? 'Новый пароль' : 'Логин или телефон'}</label>
                   {recoverStep === 1 && <input id="rc-field" className="input" value={identifier} onChange={e => { setIdentifier(e.target.value); setStepError(''); }} onKeyDown={onEnter(recoverNext)} placeholder="daniyar_s или +7 916 000 00 00" autoComplete="username" />}
                   {recoverStep === 2 && <input id="rc-field" className={'input ' + 'fh ' + sty.ca9baefc} value={recoverCode} onChange={e => { setRecoverCode(e.target.value.replace(/\D/g, '').slice(0, 4)); setStepError(''); }} onKeyDown={onEnter(recoverNext)} inputMode="numeric" autoComplete="one-time-code" maxLength={4} placeholder="0000" autoFocus />}
-                  {recoverStep === 3 && <input id="rc-field" className="input" type="password" value={recoverPass} onChange={e => { setRecoverPass(e.target.value); setStepError(''); }} placeholder="не короче 6 символов" autoComplete="new-password" autoFocus />}
+                  {recoverStep === 3 && <input id="rc-field" className="input" type="password" value={recoverPass} onChange={e => { setRecoverPass(e.target.value); setStepError(''); }} placeholder="не короче 8 символов" autoComplete="new-password" autoFocus />}
                 </div>
                 {recoverStep === 3 && (
                   <div className={'field ' + sty.c691f5a5}>
