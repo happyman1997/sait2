@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Своя карта одной командой: тайлы региона (Planetiler, данные OpenStreetMap с Geofabrik), стиль, шрифты и значки.
 #   bash deploy/build-tiles.sh                     # Центральный федеральный округ — хватает 4 ГБ памяти, ~20–40 минут
-#   bash deploy/build-tiles.sh russia              # вся Россия с Крымом — 16–32 ГБ памяти, ~80 ГБ диска, несколько часов
+#   bash deploy/build-tiles.sh russia              # вся зона сайта (Россия, Крым, Севастополь, ДНР, ЛНР, Запорожская
+#                                                  # и Херсонская области) — 16–32 ГБ памяти, ~80 ГБ диска, несколько часов
 #   bash deploy/build-tiles.sh volga-fed-district https://arenarabot.ru
 # Запускать из папки проекта (/opt/arena). Работающий сайт не мешает: готовый файл подменяет старый в последний момент.
 # Потом — один раз: NEXT_PUBLIC_MAP_STYLE_URL=/map/style.json в .env.production и пересборка (скрипт подскажет).
@@ -55,20 +56,35 @@ echo "Регион: $AREA · сайт: $SITE · память для сборки
 WORK="$MAP_DIR/.build"
 mkdir -p "$WORK"
 OSM_ARGS=(--area="$AREA")
-# Выгрузка Geofabrik «russia» не включает Республику Крым и Севастополь — они отдельным файлом. Для всей России
-# скачиваем оба и склеиваем (osmium); CRIMEA=0 — без Крыма.
-if [ "$AREA" = russia ] && [ "${CRIMEA:-1}" != 0 ]; then
-  say "0/3 Данные OSM: Россия + Крымский федеральный округ"
+# Зона сайта: Россия, а также Республика Крым, Севастополь, ДНР, ЛНР, Запорожская и Херсонская области.
+# У Geofabrik они не в выгрузке «russia»: Крым и Севастополь — отдельным файлом (crimean-fed-district),
+# четыре области — внутри выгрузки Украины; из неё вырезаем прямоугольник этих областей (по краям в него попадают
+# и соседние районы — на карте это просто улицы без подписей стран и границ). Всё склеивается osmium в один файл.
+# ZONE=russia — только выгрузка «russia».
+if [ "$AREA" = russia ] && [ "${ZONE:-full}" != russia ]; then
+  say "0/3 Данные OSM: Россия, Крым и Севастополь, ДНР, ЛНР, Запорожская и Херсонская области"
   mkdir -p "$WORK/sources"
   docker run --rm "${RUN_OPTS[@]}" -v "$MAP_ABS:/data" -w /data/.build/sources "$TOOLS_IMAGE" sh -c '
     set -e
     apt-get update -qq && apt-get install -y -qq --no-install-recommends ca-certificates curl osmium-tool >/dev/null
-    for u in https://download.geofabrik.de/russia-latest.osm.pbf https://download.geofabrik.de/russia/crimean-fed-district-latest.osm.pbf; do
+    for u in https://download.geofabrik.de/russia-latest.osm.pbf \
+             https://download.geofabrik.de/russia/crimean-fed-district-latest.osm.pbf \
+             https://download.geofabrik.de/europe/ukraine-latest.osm.pbf; do
       f=$(basename "$u")
-      [ -f "$f.ok" ] || { echo "скачиваю $f"; curl -fL --retry 5 -C - -o "$f" "$u"; touch "$f.ok"; }
+      # Без докачки: обрывок вчерашнего файла со свежим хвостом был бы битым. Готовый файл — только целиком.
+      [ -f "$f.ok" ] || { echo "скачиваю $f"; curl -fL --retry 5 -o "$f.part" "$u"; mv "$f.part" "$f"; touch "$f.ok"; }
     done
-    [ -f russia-crimea.osm.pbf.ok ] || { echo "склеиваю"; osmium merge --overwrite -o russia-crimea.osm.pbf russia-latest.osm.pbf crimean-fed-district-latest.osm.pbf; touch russia-crimea.osm.pbf.ok; }'
-  OSM_ARGS=(--osm_path=/data/.build/sources/russia-crimea.osm.pbf)
+    # Выгрузки — с одного дня, иначе одни и те же объекты на стыке окажутся в разных версиях.
+    days=$(for f in russia-latest.osm.pbf crimean-fed-district-latest.osm.pbf ukraine-latest.osm.pbf; do
+      osmium fileinfo -g header.option.osmosis_replication_timestamp "$f" | cut -c1-10; done | sort -u | wc -l)
+    if [ "$days" -gt 1 ] && [ ! -f zone.osm.pbf.ok ]; then
+      rm -f ./*.pbf ./*.ok; echo "Geofabrik обновил данные во время скачивания — запустите скрипт ещё раз (скачает заново)."; exit 3
+    fi
+    # Донецкая, Луганская, Запорожская и Херсонская области: долгота 31.4–40.3, широта 45.4–50.3.
+    [ -f regions.osm.pbf.ok ] || { echo "вырезаю области"; osmium extract --overwrite -b 31.4,45.4,40.3,50.3 -o regions.osm.pbf ukraine-latest.osm.pbf; touch regions.osm.pbf.ok; }
+    [ -f zone.osm.pbf.ok ] || { echo "склеиваю"; osmium merge --overwrite -o zone.osm.pbf russia-latest.osm.pbf crimean-fed-district-latest.osm.pbf regions.osm.pbf; touch zone.osm.pbf.ok; }
+    rm -f ukraine-latest.osm.pbf'
+  OSM_ARGS=(--osm_path=/data/.build/sources/zone.osm.pbf)
 fi
 say "1/3 Тайлы (сборка — самый долгий шаг)"
 # Контейнер планетайлера пишет от root — потом отдаём файлы владельцу папки.

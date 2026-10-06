@@ -51,17 +51,33 @@ function toHit(h: NominatimHit): GeoHit {
   };
 }
 
+// Зона работы сайта: Россия, а также Республика Крым, Севастополь, ДНР, ЛНР, Запорожская и Херсонская области.
+// В данных OpenStreetMap адреса этих регионов отнесены к коду страны ua, поэтому ищем по ru и ua, а результаты
+// с кодом ua оставляем только из этих регионов (по названию региона или города на русском).
+const EXTRA_REGIONS = /Крым|Севастопол|Донецк|Луганск|Запорож|Херсон/i;
+
+export function inZone(a: Record<string, string> | undefined): boolean {
+  if (!a) return false;
+  // Код страны отдаёт Nominatim; если его нет (другой совместимый геокодер) — по названию страны, иначе не отсеиваем.
+  const code = a.country_code || (a.country === 'Россия' ? 'ru' : a.country === 'Украина' ? 'ua' : a.country ? 'other' : '');
+  if (code === 'ru' || code === '') return true;
+  if (code !== 'ua') return false;
+  return EXTRA_REGIONS.test([a.state, a.region, a.province, a.city].filter(Boolean).join(' '));
+}
+
 export async function geoSearch(q: string, limit = 5): Promise<GeoHit[]> {
   const u = new URL('/search', config.geocoderUrl());
   u.searchParams.set('format', 'json');
-  u.searchParams.set('limit', String(limit));
+  // С запасом: часть ответов отсеется по зоне.
+  u.searchParams.set('limit', String(limit * 3));
   u.searchParams.set('addressdetails', '1');
   u.searchParams.set('accept-language', 'ru');
-  u.searchParams.set('countrycodes', 'ru');
+  u.searchParams.set('countrycodes', 'ru,ua');
   u.searchParams.set('q', q);
   const list = (await getJson(u.toString())) as NominatimHit[];
   const seen = new Set<string>();
-  return (Array.isArray(list) ? list : []).map(toHit).filter(h => Number.isFinite(h.lat) && !seen.has(h.label) && seen.add(h.label));
+  return (Array.isArray(list) ? list : []).filter(h => inZone(h.address)).map(toHit)
+    .filter(h => Number.isFinite(h.lat) && !seen.has(h.label) && seen.add(h.label)).slice(0, limit);
 }
 
 export async function geoReverse(lat: number, lng: number): Promise<GeoHit | null> {

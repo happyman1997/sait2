@@ -259,7 +259,11 @@ export class SeasonMapView {
     let set = 0;
     style.layers.forEach((l) => {
       const layout = (l as { layout?: Record<string, unknown> }).layout;
-      if (BORDER.test(l.id) || (l.type === 'symbol' && GEOPOL.test(l.id))) {
+      // По названию слоя и по данным: слой границ (boundary) и подписи стран/регионов (place класса country/state…).
+      const src = (l as { 'source-layer'?: string })['source-layer'];
+      const filter = JSON.stringify((l as { filter?: unknown }).filter ?? '');
+      const geoLabel = src === 'place' && /"(country|continent|state|province)"/.test(filter);
+      if (BORDER.test(l.id) || src === 'boundary' || geoLabel || (l.type === 'symbol' && GEOPOL.test(l.id))) {
         try { this.map!.setLayoutProperty(l.id, 'visibility', 'none'); set++; } catch { /* слой не готов */ }
         return;
       }

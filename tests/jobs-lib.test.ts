@@ -66,7 +66,8 @@ describe('геокодер', () => {
 
   it('разбирает ответ Nominatim в короткий адрес и район', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify([
-      { lat: '55.765', lon: '37.605', display_name: '18, Тверская улица, Тверской, Москва, Центральный федеральный округ, 125009, Россия', address: { house_number: '18', road: 'Тверская улица', city: 'Москва', state: 'Москва' } },
+      { lat: '55.765', lon: '37.605', display_name: '18, Тверская улица, Тверской, Москва, Центральный федеральный округ, 125009, Россия', address: { house_number: '18', road: 'Тверская улица', city: 'Москва', state: 'Москва', country_code: 'ru' } },
+      { lat: '50.45', lon: '30.52', display_name: 'Хрещатик, Київ', address: { road: 'Хрещатик', city: 'Киев', state: 'Киев', country_code: 'ua' } },
       { lat: '55.765', lon: '37.605', display_name: 'дубль', address: { house_number: '18', road: 'Тверская улица', city: 'Москва' } }
     ]), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
@@ -74,7 +75,7 @@ describe('геокодер', () => {
     const hits = await geoSearch('Тверская 18');
     expect(hits).toEqual([{ lat: 55.765, lng: 37.605, label: 'Москва, Тверская улица, 18', sub: 'Центральный федеральный округ, 125009', district: 'Москва' }]);
     const url = new URL((fetchMock.mock.calls[0] as unknown as [string])[0]);
-    expect(url.searchParams.get('countrycodes')).toBe('ru');
+    expect(url.searchParams.get('countrycodes')).toBe('ru,ua');
     // второй одинаковый запрос берётся из кэша
     await geoSearch('Тверская 18');
     expect(fetchMock).toHaveBeenCalledTimes(1);
