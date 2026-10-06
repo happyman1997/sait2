@@ -41,7 +41,7 @@ MAP_ABS="$(cd "$MAP_DIR" && pwd)"
 # Память и диск: Planetiler берёт ~3/4 свободной памяти; диску нужен запас под исходник OSM и временные файлы.
 MEM_MB=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo)
 HEAP_MB=$(( MEM_MB * 3 / 4 ))
-if [ "$AREA" = russia ]; then NEED_MEM=12000; NEED_DISK=120; else NEED_MEM=2500; NEED_DISK=12; fi
+if [ "$AREA" = russia ]; then NEED_MEM=8000; NEED_DISK=80; else NEED_MEM=2500; NEED_DISK=12; fi
 [ "$HEAP_MB" -ge "$NEED_MEM" ] || die "мало свободной памяти: доступно ${MEM_MB} МБ, для «$AREA» нужно от $(( NEED_MEM * 4 / 3 )) МБ.
   Для всей России соберите на временном сервере (DEPLOY.md, раздел 9) или начните с округа."
 FREE_GB=$(df -Pk "$MAP_DIR" | awk 'NR==2 {print int($4/1024/1024)}')
