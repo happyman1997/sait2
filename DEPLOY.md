@@ -89,26 +89,30 @@ docker compose -f docker-compose.prod.yml --env-file .env.production exec -T db 
 
 ## 9. Своя карта (без зарубежных серверов)
 
-По умолчанию стиль и тайлы карты грузятся браузером с OpenFreeMap (за рубежом). Чтобы всё шло с вашего сервера:
+По умолчанию стиль и тайлы карты грузятся браузером с OpenFreeMap (за рубежом). Чтобы всё шло с вашего сервера — одна команда в папке проекта:
 
-1. **Тайлы России** — один файл `russia.pmtiles` (схема OpenMapTiles), собирается Planetiler из данных OpenStreetMap. Нужна машина с 16 ГБ RAM и ~60 ГБ диска, несколько часов; собрать можно и на другой машине, а файл (~10–15 ГБ) скопировать:
-   ```sh
-   mkdir -p deploy/map
-   docker run --rm -e JAVA_TOOL_OPTIONS="-Xmx12g" -v "$PWD/deploy/map:/data" ghcr.io/onthegomap/planetiler:latest \
-     --download --area=russia --output=/data/russia.pmtiles
-   ```
-2. **Стиль, шрифты подписей, значки** (стиль liberty, адреса переписываются на ваш сайт):
-   ```sh
-   docker run --rm -v "$PWD:/work" -w /work node:22-bookworm-slim node deploy/map-setup.mjs https://arenarabot.ru
-   ```
-3. В `.env.production`: `NEXT_PUBLIC_MAP_STYLE_URL=/map/style.json` (и `CSP_CONNECT_SRC=` пустой), затем пересборка:
-   ```sh
-   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
-   ```
+```sh
+bash deploy/build-tiles.sh                  # Центральный федеральный округ: 4 ГБ памяти, ~12 ГБ диска, 20–40 минут
+bash deploy/build-tiles.sh russia           # вся Россия: 16–32 ГБ памяти, ~150 ГБ диска, несколько часов
+```
 
-nginx отдаёт `deploy/map` по адресу `/map/` (другая папка — `MAP_DIR`); карта читает файл тайлов кусками (Range-запросы), отдельный сервер тайлов не нужен. Подпись на карте сменится на «© OpenMapTiles · © участники OpenStreetMap». Обновлять тайлы — повтором шага 1 раз в несколько месяцев.
+Скрипт:
+- собирает Planetiler'ом тайлы региона из данных OpenStreetMap (Geofabrik) в `deploy/map/russia.pmtiles`;
+- скачивает стиль liberty, шрифты подписей и значки и переписывает их адреса на ваш сайт — `PUBLIC_URL` из `.env.production` или второй аргумент;
+- проверяет результат и подсказывает, что включить.
 
-Проверено на стенде с тестовым файлом тайлов: карта рисуется, все запросы страницы — только на свой сервер, нарушений CSP нет. Шаги 1–2 на стенде не запускались (нужен доступ к Geofabrik и OpenFreeMap).
+Перед стартом скрипт проверяет память и диск. Пока идёт сборка, сайт работает со старой картой: новый файл подменяет старый только в конце.
+
+Включить один раз — в `.env.production`: `NEXT_PUBLIC_MAP_STYLE_URL=/map/style.json` и пустой `CSP_CONNECT_SRC=`, затем пересборка:
+```sh
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+```
+
+**Вся Россия при маленьком сервере.** Соберите на временном облачном сервере с почасовой оплатой (8 ядер, 32 ГБ, 150 ГБ) той же командой. Затем скопируйте `deploy/map/` на рабочий сервер (`rsync -a deploy/map/ root@<IP>:/opt/arena/deploy/map/`) и удалите временный. За пределами собранного региона карта будет пустой (без улиц), метки заказов видны везде.
+
+nginx отдаёт `deploy/map` по адресу `/map/` (другая папка — `MAP_DIR`); карта читает файл тайлов кусками (Range-запросы), отдельный сервер тайлов не нужен. Подпись на карте сменится на «© OpenMapTiles · © участники OpenStreetMap». Обновлять тайлы — повтором `build-tiles.sh` раз в несколько месяцев; пересборка сайта не нужна.
+
+Проверено на стенде с тестовым файлом тайлов: карта рисуется, все запросы страницы — только на свой сервер, нарушений CSP нет. Скрипт проверен с подставным Planetiler и локальным стилем; настоящая сборка на стенде не запускалась (нет доступа к Geofabrik и OpenFreeMap).
 
 Шрифт интерфейса (Golos Text) уже отдаётся со своего сервера — Google Fonts не используется.
 
