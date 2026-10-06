@@ -93,11 +93,11 @@ docker compose -f docker-compose.prod.yml --env-file .env.production exec -T db 
 
 ```sh
 bash deploy/build-tiles.sh                  # Центральный федеральный округ: 4 ГБ памяти, ~12 ГБ диска, 20–40 минут
-bash deploy/build-tiles.sh russia           # вся Россия: 16–32 ГБ памяти, ~150 ГБ диска, несколько часов
+bash deploy/build-tiles.sh russia           # вся Россия с Крымом: 16–32 ГБ памяти, ~80 ГБ диска, несколько часов
 ```
 
 Скрипт:
-- собирает Planetiler'ом тайлы региона из данных OpenStreetMap (Geofabrik) в `deploy/map/russia.pmtiles`;
+- собирает Planetiler'ом тайлы региона из данных OpenStreetMap (Geofabrik) в `deploy/map/russia.pmtiles`; для всей России добавляет Крымский федеральный округ (у Geofabrik он отдельным файлом);
 - скачивает стиль liberty, шрифты подписей и значки и переписывает их адреса на ваш сайт — `PUBLIC_URL` из `.env.production` или второй аргумент;
 - проверяет результат и подсказывает, что включить.
 
