@@ -67,24 +67,36 @@ if [ "$AREA" = russia ] && [ "${ZONE:-full}" != russia ]; then
   docker run --rm "${RUN_OPTS[@]}" -v "$MAP_ABS:/data" -w /data/.build/sources "$TOOLS_IMAGE" sh -c '
     set -e
     apt-get update -qq && apt-get install -y -qq --no-install-recommends ca-certificates curl osmium-tool >/dev/null
-    for u in https://download.geofabrik.de/russia-latest.osm.pbf \
-             https://download.geofabrik.de/russia/crimean-fed-district-latest.osm.pbf \
-             https://download.geofabrik.de/europe/ukraine-latest.osm.pbf; do
-      f=$(basename "$u")
-      # Без докачки: обрывок вчерашнего файла со свежим хвостом был бы битым. Готовый файл — только целиком.
-      [ -f "$f.ok" ] || { echo "скачиваю $f"; curl -fL --retry 5 -o "$f.part" "$u"; mv "$f.part" "$f"; touch "$f.ok"; }
-    done
+    FILES="russia-latest.osm.pbf crimean-fed-district-latest.osm.pbf ukraine-latest.osm.pbf"
+    fetch() {
+      for u in https://download.geofabrik.de/russia-latest.osm.pbf \
+               https://download.geofabrik.de/russia/crimean-fed-district-latest.osm.pbf \
+               https://download.geofabrik.de/europe/ukraine-latest.osm.pbf; do
+        f=$(basename "$u")
+        # Без докачки: обрывок вчерашнего файла со свежим хвостом был бы битым. Готовый файл — только целиком.
+        [ -f "$f.ok" ] || { echo "скачиваю $f"; curl -fL --retry 5 -o "$f.part" "$u"; mv "$f.part" "$f"; touch "$f.ok"; }
+      done
+    }
+    # Дата данных выгрузки (из заголовка файла); пусто — если в заголовке её нет.
+    stamp() { osmium fileinfo -g header.option.osmosis_replication_timestamp "$1" 2>/dev/null | cut -c1-10; }
     # Выгрузки — с одного дня, иначе одни и те же объекты на стыке окажутся в разных версиях.
-    days=$(for f in russia-latest.osm.pbf crimean-fed-district-latest.osm.pbf ukraine-latest.osm.pbf; do
-      osmium fileinfo -g header.option.osmosis_replication_timestamp "$f" | cut -c1-10; done | sort -u | wc -l)
-    if [ "$days" -gt 1 ] && [ ! -f zone.osm.pbf.ok ]; then
-      rm -f ./*.pbf ./*.ok; echo "Geofabrik обновил данные во время скачивания — запустите скрипт ещё раз (скачает заново)."; exit 3
-    fi
+    # Geofabrik обновляет данные раз в сутки; если обновление пришлось на скачивание — перекачиваем всё один раз.
+    for attempt in 1 2; do
+      fetch
+      [ -f zone.osm.pbf.ok ] && break
+      for f in $FILES; do d=$(stamp "$f"); echo "  $f: данные от ${d:-?}"; done
+      n=$(for f in $FILES; do stamp "$f"; done | grep . | sort -u | wc -l)
+      [ "$n" -le 1 ] && break
+      rm -f ./*.pbf ./*.ok
+      if [ "$attempt" = 2 ]; then echo "Даты выгрузок снова разные — запустите скрипт ещё раз через час."; exit 3; fi
+      echo "Выгрузки за разные дни (Geofabrik обновил данные) — скачиваю все заново."
+    done
     # Донецкая, Луганская, Запорожская и Херсонская области: долгота 31.4–40.3, широта 45.4–50.3.
     [ -f regions.osm.pbf.ok ] || { echo "вырезаю области"; osmium extract --overwrite -b 31.4,45.4,40.3,50.3 -o regions.osm.pbf ukraine-latest.osm.pbf; touch regions.osm.pbf.ok; }
     [ -f zone.osm.pbf.ok ] || { echo "склеиваю"; osmium merge --overwrite -o zone.osm.pbf russia-latest.osm.pbf crimean-fed-district-latest.osm.pbf regions.osm.pbf; touch zone.osm.pbf.ok; }
     rm -f ukraine-latest.osm.pbf'
-  OSM_ARGS=(--osm_path=/data/.build/sources/zone.osm.pbf)
+  # Охват — явно: в склеенном файле его может не быть, и тогда Planetiler рисовал бы океан по всему миру.
+  OSM_ARGS=(--osm_path=/data/.build/sources/zone.osm.pbf --bounds=-180,41,180,82.5)
 fi
 say "1/3 Тайлы (сборка — самый долгий шаг)"
 # Контейнер планетайлера пишет от root — потом отдаём файлы владельцу папки.
