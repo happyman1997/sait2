@@ -176,7 +176,7 @@ export class SeasonMapView {
     this.map = map;
     map.touchZoomRotate.disableRotation();
     map.addControl(new gl.NavigationControl({ showCompass: false, visualizePitch: false }), 'top-left');
-    map.addControl(new gl.ScaleControl({ unit: 'metric' }), 'bottom-left');
+    map.addControl(new gl.ScaleControl({ unit: 'metric' }), 'top-right');
     // Тайлы недоступны (нет сети) — карта остаётся рабочей: метки рисуются оверлеем по проекции.
     map.on('error', () => {});
 
