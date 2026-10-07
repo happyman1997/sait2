@@ -6,6 +6,7 @@
 #   bash deploy/build-tiles.sh volga-fed-district https://arenarabot.ru
 # Запускать из папки проекта (/opt/arena). Работающий сайт не мешает: готовый файл подменяет старый в последний момент.
 # Потом — один раз: NEXT_PUBLIC_MAP_STYLE_URL=/map/style.json в .env.production и пересборка (скрипт подскажет).
+# STYLE_ONLY=1 bash deploy/build-tiles.sh — тайлы уже есть, докачать только стиль, шрифты и значки.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -19,6 +20,8 @@ MIN_RUSSIA_MB="${MIN_RUSSIA_MB:-1000}"
 read -r -a RUN_OPTS <<< "${DOCKER_RUN_OPTS:-}"
 
 say() { printf '\n== %s\n' "$*"; }
+# Файлы, созданные контейнерами, принадлежат root: удаляем и отдаём их владельцу папки тоже через контейнер.
+as_root() { docker run --rm -v "$MAP_ABS:/data" "$TOOLS_IMAGE" sh -c "$1"; }
 die() { printf '\nОшибка: %s\n' "$*" >&2; exit 1; }
 
 case "$AREA" in
@@ -41,6 +44,7 @@ command -v docker >/dev/null || die "нужен Docker."
 mkdir -p "$MAP_DIR"
 MAP_ABS="$(cd "$MAP_DIR" && pwd)"
 
+if [ "${STYLE_ONLY:-0}" != 1 ]; then
 # Память и диск: Planetiler берёт ~3/4 свободной памяти; диску нужен запас под исходник OSM и временные файлы.
 MEM_MB=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo)
 HEAP_MB=$(( MEM_MB * 3 / 4 ))
@@ -50,8 +54,11 @@ NEED_DISK="${NEED_DISK_GB:-$NEED_DISK}"
   Для всей России соберите на временном сервере (DEPLOY.md, раздел 9) или начните с округа."
 FREE_GB=$(df -Pk "$MAP_DIR" | awk 'NR==2 {print int($4/1024/1024)}')
 [ "$FREE_GB" -ge "$NEED_DISK" ] || die "мало места на диске: свободно ${FREE_GB} ГБ, для «$AREA» нужно от ${NEED_DISK} ГБ."
-echo "Регион: $AREA · сайт: $SITE · память для сборки: $(( HEAP_MB / 1024 )) ГБ · свободно на диске: ${FREE_GB} ГБ"
+fi
+[ "${STYLE_ONLY:-0}" = 1 ] && echo "Только стиль, шрифты и значки · сайт: $SITE" || echo "Регион: $AREA · сайт: $SITE · память для сборки: $(( HEAP_MB / 1024 )) ГБ · свободно на диске: ${FREE_GB} ГБ"
 
+# STYLE_ONLY=1 — тайлы уже собраны (russia.pmtiles на месте), сделать только стиль, шрифты и значки.
+if [ "${STYLE_ONLY:-0}" != 1 ]; then
 # 1. Тайлы — во временный файл; старый russia.pmtiles работает, пока новый не готов.
 WORK="$MAP_DIR/.build"
 mkdir -p "$WORK"
@@ -111,15 +118,17 @@ if [ "$AREA" = russia ] && [ "$(stat -c %s "$OUT")" -lt $(( MIN_RUSSIA_MB * 1024
   die "файл тайлов подозрительно мал ($(du -h "$OUT" | cut -f1)) — похоже, собрался не тот регион. Пришлите вывод выше."
 fi
 mv -f "$OUT" "$MAP_DIR/russia.pmtiles"
-[ "${KEEP_SOURCES:-0}" = 1 ] || rm -rf "$WORK"
+[ "${KEEP_SOURCES:-0}" = 1 ] || as_root "rm -rf /data/.build"
 echo "Готово: $MAP_DIR/russia.pmtiles ($(du -h "$MAP_DIR/russia.pmtiles" | cut -f1))"
+fi
+[ -s "$MAP_DIR/russia.pmtiles" ] || die "нет файла тайлов $MAP_DIR/russia.pmtiles — запустите без STYLE_ONLY."
 
 # 2. Стиль, шрифты подписей, значки — с адресами на свой сайт (повторный запуск докачивает недостающее).
 say "2/3 Стиль, шрифты и значки"
 docker run --rm "${RUN_OPTS[@]}" ${MAP_SOURCE_STYLE:+-e MAP_SOURCE_STYLE="$MAP_SOURCE_STYLE"} \
   -v "$PWD/deploy/map-setup.mjs:/work/map-setup.mjs:ro" -v "$MAP_ABS:/map" -w /work "$NODE_IMAGE" node map-setup.mjs "$SITE" /map
 grep -q "pmtiles://$SITE/map/russia.pmtiles" "$MAP_DIR/style.json" || die "style.json не указывает на $SITE/map/russia.pmtiles."
-chown -R "$(stat -c %u:%g .)" "$MAP_DIR" 2>/dev/null || true
+as_root "chown -R $(id -u):$(id -g) /data"
 
 # 3. Что осталось сделать.
 say "3/3 Проверка настроек"
