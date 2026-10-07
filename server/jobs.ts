@@ -714,7 +714,7 @@ export async function cancelJob(num: number, raw: unknown, viewer: Viewer): Prom
   assertEmployer(viewer);
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const reason = s(r.reason, 200);
-  const notice = typeof r.notice === 'string' && NOTICES.includes(r.notice) ? r.notice : '';
+  let notice = typeof r.notice === 'string' && NOTICES.includes(r.notice) ? r.notice : '';
   if (!reason) throw new AppError(422, 'Укажите причину отмены — её увидят откликнувшиеся.', 'reason');
   if (!notice) throw new AppError(422, 'Отметьте, за сколько вы предупреждаете.', 'notice');
   const cat = badWordIn(reason);
@@ -724,6 +724,8 @@ export async function cancelJob(num: number, raw: unknown, viewer: Viewer): Prom
     const j = await ownJob(num, viewer, db, true);
     if (j.status === 'accepted') throw new AppError(409, 'Принятую работу отменить нельзя — напишите в чат и оставьте отзыв.');
     if (j.status === 'cancelled') throw new AppError(409, 'Заказ уже отменён.');
+    // В день выхода разовой смены до неё точно меньше суток, что бы ни выбрал работодатель.
+    if (!j.repeat && j.date <= localClock().day) notice = 'меньше суток';
     const late = notice === 'меньше суток' && j.hired > 0;
     await query('INSERT INTO cancellations (job_id, by_role, reason, notice, late) VALUES ($1, $2, $3, $4, $5)', [j.id, 'employer', reason, notice, late], db);
     await query(`UPDATE jobs SET status = 'cancelled', updated_at = now() WHERE id = $1`, [j.id], db);

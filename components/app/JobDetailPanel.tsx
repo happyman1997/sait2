@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { css } from '@/lib/css';
-import { crewOf, dateLabel, jobNum, jobStatus, money, type JobDetail, type JobSummary } from '@/lib/jobs';
+import { crewOf, dateLabel, jobNum, jobStatus, localISO, money, type JobDetail, type JobSummary } from '@/lib/jobs';
 import { ApplicantsBlock, LeaveShiftForm, MoveDateForm, ShiftBlock, type Act, type ReviewOpen } from './ShiftBlock';
 import { SeriesBlock } from './SeriesBlock';
 import { Corners, LABEL } from './ui';
@@ -57,7 +57,9 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
   const [person, setPerson] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [reason, setReason] = useState(CANCEL_REASONS[0]);
-  const [notice, setNotice] = useState('больше суток');
+  // В день выхода разовой смены отмена всегда поздняя — сервер считает так же.
+  const dayOf = !job.repeat && job.date <= localISO();
+  const [notice, setNotice] = useState(dayOf ? 'меньше суток' : 'больше суток');
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
 
@@ -206,7 +208,7 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
       {role === 'freelancer' && job.myStatus === 'hired' && (job.status === 'open' || job.status === 'staffed') && !leaveOpen && (
         <button className={'btn btn-ghost btn-block ' + sty.c5da0771} onClick={() => setLeaveOpen(true)}>Отказаться от смены</button>
       )}
-      {leaveOpen && <LeaveShiftForm act={act} busy={busy} onClose={() => setLeaveOpen(false)} />}
+      {leaveOpen && <LeaveShiftForm job={job} act={act} busy={busy} onClose={() => setLeaveOpen(false)} />}
 
       {closed && (
         <div className={'blueprint ' + sty.cae70be2}>
@@ -256,7 +258,7 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
           </div>
           <div className={'field ' + sty.ce5a6d3c}>
             <label htmlFor="cancel-notice">За сколько до выхода</label>
-            <select id="cancel-notice" className="input" value={notice} onChange={e => setNotice(e.target.value)}>
+            <select id="cancel-notice" className="input" value={notice} disabled={dayOf} onChange={e => setNotice(e.target.value)}>
               <option>больше суток</option>
               <option>меньше суток</option>
             </select>

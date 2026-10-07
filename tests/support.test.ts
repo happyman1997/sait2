@@ -143,6 +143,7 @@ describe('пользователи и блокировка', () => {
     await jobs.applyToJob(j.num, { reqConfirmed: true }, fl, today);
     const app = (await jobs.getJob(j.num, emp)).applicantList![0].id;
     await sh.staffAction(j.num, app, 'hire', emp);
+    await query('UPDATE jobs SET date = $2 WHERE num = $1', [j.num, today]);
     await sh.staffAction(j.num, app, 'no-show', emp);
     let [u] = await sup.findUsers(staff, 'daniyar');
     expect([u.noShows, u.markList.map(m => m.kind)]).toEqual([1, ['no_show']]);

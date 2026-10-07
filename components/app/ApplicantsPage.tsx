@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, api } from '@/lib/api';
 import { css } from '@/lib/css';
-import { crewOf, dateLabel, jobNum, jobStatus, money, plural, type MyJob } from '@/lib/jobs';
+import { crewOf, dateLabel, isOnCall, jobNum, jobStatus, localISO, money, plural, type MyJob } from '@/lib/jobs';
 import { useFlash } from '@/components/Toast';
 import { useLiveEvent } from './Live';
 import { Corners } from './ui';
@@ -122,7 +122,7 @@ export function ApplicantsPage() {
                           {p.status === 'hired' && open && crew > 1 && !p.isLead && (
                             <button className={'btn btn-secondary ' + sty.cd45451c} disabled={busy} onClick={() => act(j.num, 'applicants/' + p.id + '/lead', p.name + ' назначен старшим')}>Сделать старшим</button>
                           )}
-                          {p.status === 'hired' && open && (
+                          {p.status === 'hired' && open && (isOnCall(j.repeat) || j.date <= localISO()) && (
                             <button className={'btn btn-ghost ' + sty.cd45451c} disabled={busy}
                               onClick={() => { if (window.confirm('Снять ' + p.name + ' со смены? Остальные останутся, у исполнителя +1 к неявкам.')) act(j.num, 'applicants/' + p.id + '/no-show', p.name + ' снят со смены — набор открыт'); }}>Не вышел</button>
                           )}

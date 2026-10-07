@@ -137,6 +137,9 @@ describe('найм', () => {
     const { num, ids } = await jobWithApps([fl, fl2], { crew: '2' });
     await sh.staffAction(num, ids[0], 'hire', emp);
     await sh.staffAction(num, ids[1], 'hire', emp);
+    // До дня выхода «Не вышел» не ставится.
+    await expectErr(sh.staffAction(num, ids[0], 'no-show', emp), /в день выхода или позже/);
+    await query('UPDATE jobs SET date = $2 WHERE num = $1', [num, today]);
     const d = await sh.staffAction(num, ids[0], 'no-show', emp);
     expect(d.hired).toBe(1);
     expect(d.status).toBe('open');
@@ -165,6 +168,15 @@ describe('исполнитель', () => {
     const mark = await one<{ until: Date }>(`SELECT until FROM user_marks WHERE user_id = $1 AND kind = 'late_withdrawal'`, [fl.id]);
     expect(Math.round((mark!.until.getTime() - Date.now()) / 86400000)).toBe(90);
     await expectErr(sh.leaveShift(num, { reason: 'x', notice: 'больше суток' }, fl), /не наняты/);
+  });
+
+  it('в день выхода отказ всегда поздний, даже если выбрано «больше суток»', async () => {
+    const { num, ids } = await jobWithApps([fl]);
+    await sh.staffAction(num, ids[0], 'hire', emp);
+    await query('UPDATE jobs SET date = $2 WHERE num = $1', [num, today]);
+    const d = await sh.leaveShift(num, { reason: 'болезнь', notice: 'больше суток' }, fl);
+    expect(d.shift?.withdrawal).toMatchObject({ late: true });
+    expect(await one(`SELECT 1 FROM user_marks WHERE user_id = $1 AND kind = 'late_withdrawal'`, [fl.id])).not.toBeNull();
   });
 
   it('сдать работу: только нанятый; в бригаде — старший; дальше 7 дней на приёмку', async () => {

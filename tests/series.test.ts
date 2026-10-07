@@ -209,6 +209,7 @@ describe('серия в заказе', () => {
   it('«Не вышел» тоже закрывает его снятые дни', async () => {
     const { j, day } = await withSub(false);
     const app = (await jobs.getJob(j.num, emp)).applicantList!.find(a => a.thread === fl.id)!.id;
+    await query('UPDATE jobs SET date = $2 WHERE num = $1', [j.num, today]);
     await sh.staffAction(j.num, app, 'no-show', emp);
     expect(await freeOn(j.num, day)).toBe(0);
     expect(await one('SELECT 1 FROM series_skips WHERE freelancer_id = $1', [fl.id])).toBeNull();

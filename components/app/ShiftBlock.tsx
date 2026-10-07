@@ -5,7 +5,7 @@
 import { useId, useState } from 'react';
 import { css } from '@/lib/css';
 import { uploadForm } from '@/lib/image';
-import { COMPLAINT_KINDS, crewOf, dateLabel, DISPUTE_REASONS, isSeries, LEAVE_REASONS, localISO, money, plural, type DisputeInfo, type JobDetail } from '@/lib/jobs';
+import { COMPLAINT_KINDS, crewOf, dateLabel, DISPUTE_REASONS, isOnCall, isSeries, LEAVE_REASONS, localISO, money, plural, type DisputeInfo, type JobDetail } from '@/lib/jobs';
 import { Corners, LABEL } from './ui';
 import sty from './ShiftBlock.module.css';
 
@@ -23,6 +23,7 @@ export function ApplicantsBlock({ job, act, onChat, busy }: { job: JobDetail; ac
   const crew = crewOf(job);
   const full = job.hired >= crew;
   const open = job.status === 'open' || job.status === 'staffed';
+  const started = isOnCall(job.repeat) || job.date <= localISO();
   const sent = list.filter(a => a.status === 'sent');
   return (
     <div className={sty.c6840f0a}>
@@ -49,7 +50,7 @@ export function ApplicantsBlock({ job, act, onChat, busy }: { job: JobDetail; ac
               {a.status === 'hired' && <>
                 <button className={'btn btn-secondary ' + sty.c932c509} onClick={() => onChat(a.thread)}>Чат</button>
                 {crew > 1 && !a.isLead && open && <button className={'btn btn-ghost ' + sty.c93bbd0b} disabled={busy} onClick={() => act('applicants/' + a.id + '/lead', {}, a.name + ' назначен старшим')}>Сделать старшим</button>}
-                {open && <button className={'btn btn-ghost ' + sty.c93bbd0b} disabled={busy}
+                {open && started && <button className={'btn btn-ghost ' + sty.c93bbd0b} disabled={busy}
                   onClick={() => { if (window.confirm('Снять ' + a.name + ' со смены? Остальные останутся, набор откроется на одно место, у исполнителя +1 к неявкам.')) act('applicants/' + a.id + '/no-show', {}, a.name + ' снят со смены — набор открыт'); }}>Не вышел</button>}
               </>}
             </div>
@@ -234,7 +235,7 @@ export function ComplaintForm({ role, targets, act, busy, onClose, title = 'Жа
         </select>
       </div>
       <textarea className={'input ' + sty.c0d7b06f} rows={3} value={text} onChange={e => setText(e.target.value)} aria-label="Жалоба" placeholder="Что произошло, с датами и суммами" />
-      <div className={sty.cd225a54}>Площадка не возвращает деньги — она разбирает поведение на площадке: ответ за 3 рабочих дня, санкции — пометка, понижение в выдаче, блокировка.</div>
+      <div className={sty.cd225a54}>Площадка не возвращает деньги — она разбирает поведение на площадке: ответ за 3 рабочих дня, санкции — пометка в профиле или блокировка.</div>
       <div className={sty.c5c223c4}>
         <button className="btn btn-primary" disabled={busy} onClick={async () => { if (await act('complaint', { reason: kind, text, target: target || undefined }, 'Жалоба принята — ответ за 3 рабочих дня')) onClose(); }} style={css('flex: 1; ' + BTN)}>Отправить жалобу</button>
         <button className={'btn btn-ghost ' + sty.c4066974} onClick={onClose}>Назад</button>
@@ -244,9 +245,11 @@ export function ComplaintForm({ role, targets, act, busy, onClose, title = 'Жа
 }
 
 /** Отказ исполнителя от смены после найма: причина и срок; меньше суток — пометка на 90 дней. */
-export function LeaveShiftForm({ act, busy, onClose }: { act: Act; busy: boolean; onClose: () => void }) {
+export function LeaveShiftForm({ job, act, busy, onClose }: { job: JobDetail; act: Act; busy: boolean; onClose: () => void }) {
   const [reason, setReason] = useState(LEAVE_REASONS[0]);
-  const [notice, setNotice] = useState('больше суток');
+  // В день выхода разовой смены отказ всегда поздний — сервер считает так же.
+  const dayOf = !job.repeat && job.date <= localISO();
+  const [notice, setNotice] = useState(dayOf ? 'меньше суток' : 'больше суток');
   const late = notice !== 'больше суток';
   return (
     <div className={'blueprint ' + sty.c0a5aa83}>
@@ -258,10 +261,10 @@ export function LeaveShiftForm({ act, busy, onClose }: { act: Act; busy: boolean
       </div>
       <div className={'field ' + sty.ce5a6d3c}>
         <label htmlFor="lv-notice">За сколько до выхода</label>
-        <select id="lv-notice" className="input" value={notice} onChange={e => setNotice(e.target.value)}><option>больше суток</option><option>меньше суток</option></select>
+        <select id="lv-notice" className="input" value={notice} disabled={dayOf} onChange={e => setNotice(e.target.value)}><option>больше суток</option><option>меньше суток</option></select>
       </div>
       <div className={sty.c3e92d4d}>
-        {late ? 'Поздний отказ: пометка в профиле на 90 дней и понижение в выдаче по срочным заказам. Денежных штрафов платформа не взимает.' : 'Отказ заранее: заказ вернётся в поиск, на рейтинг не влияет.'}
+        {late ? 'Поздний отказ: пометка в профиле на 90 дней. Денежных штрафов платформа не взимает.' : 'Отказ заранее: заказ вернётся в поиск, на рейтинг не влияет.'}
       </div>
       <div className={sty.c5c223c4}>
         <button className="btn btn-primary" disabled={busy} onClick={async () => { if (await act('leave', { reason, notice }, 'Вы отказались от смены')) onClose(); }} style={css('flex: 1; ' + BTN)}>Подтвердить отказ</button>

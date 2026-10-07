@@ -162,6 +162,8 @@ export async function staffAction(num: number, appId: string, action: StaffActio
       // «Не вышел» снимает со смены только этого исполнителя, остальные остаются.
       if (!isHired) throw new AppError(409, '«Не вышел» отмечается только для нанятого исполнителя.');
       if (j.status !== 'open' && j.status !== 'staffed') throw new AppError(409, 'Работа уже сдана или смена закрыта — «Не вышел» не отмечается.');
+      // До дня выхода не выйти невозможно: иначе отметку на 90 дней можно было бы поставить за отказ договориться.
+      if (!isOnCall(j.repeat) && j.date > localClock().day) throw new AppError(409, '«Не вышел» отмечается в день выхода или позже — ' + dateLabel(j.date) + '.');
       await query('DELETE FROM hires WHERE job_id = $1 AND freelancer_id = $2', [j.id, a.freelancer_id], db);
       await query(`UPDATE applications SET status = 'rejected', decided_at = now(), updated_at = now() WHERE id = $1`, [appId], db);
       await dropSkips(j.id, a.freelancer_id, db);
@@ -198,7 +200,7 @@ export async function leaveShift(num: number, raw: unknown, viewer: Viewer): Pro
   if (u.role !== 'freelancer') throw new AppError(403, 'Отказаться от смены может только исполнитель.');
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const reason = typeof r.reason === 'string' ? r.reason.trim().slice(0, 200) : '';
-  const notice = typeof r.notice === 'string' && NOTICES.includes(r.notice) ? r.notice : '';
+  let notice = typeof r.notice === 'string' && NOTICES.includes(r.notice) ? r.notice : '';
   if (!reason) throw new AppError(422, 'Укажите причину — её увидит работодатель.', 'reason');
   if (!notice) throw new AppError(422, 'Отметьте, за сколько вы предупреждаете.', 'notice');
   const cat = badWordIn(reason);
@@ -208,6 +210,8 @@ export async function leaveShift(num: number, raw: unknown, viewer: Viewer): Pro
     const hired = await hiredOf(j.id, db);
     if (!hired.some(h => h.freelancer_id === u.id)) throw new AppError(409, 'Вы не наняты на эту смену.');
     if (j.status !== 'open' && j.status !== 'staffed') throw new AppError(409, 'Работа уже сдана или смена закрыта — отказаться нельзя.');
+    // В день выхода разовой смены до неё точно меньше суток, что бы ни выбрал исполнитель.
+    if (!j.repeat && j.date <= localClock().day) notice = 'меньше суток';
     const late = notice === 'меньше суток';
     await query('DELETE FROM hires WHERE job_id = $1 AND freelancer_id = $2', [j.id, u.id], db);
     await query(`UPDATE applications SET status = 'withdrawn', withdrawn_at = now(), updated_at = now() WHERE job_id = $1 AND freelancer_id = $2`, [j.id, u.id], db);
@@ -421,7 +425,6 @@ export async function markSettled(num: number, viewer: Viewer): Promise<JobDetai
   return getJob(num, viewer);
 }
 
-/** Кому адресован отзыв/жалоба: работодатель выбирает нанятого (id отклика), исполнитель — работодателя. */
 /** Выходил ли исполнитель в принятый день серии (замена или ушедший из состава). */
 const workedAcceptedDay = (jobId: string, freelancerId: string, db: Db) =>
   one('SELECT 1 FROM series_days WHERE job_id = $1 AND accepted_at IS NOT NULL AND $2::uuid = ANY(workers) LIMIT 1', [jobId, freelancerId], db);
