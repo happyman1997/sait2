@@ -194,6 +194,14 @@ describe('регистрация', () => {
     await expectErr(auth.startSignup(freelancer(), ctx), undefined, /уже отправлено много кодов/);
   });
 
+  it('общий суточный бюджет SMS исчерпан — код не отправляется, поддержке одно письмо', async () => {
+    await query(`INSERT INTO rate_limits (key, window_start, count) VALUES ('sms:all', now(), 300)`);
+    await expectErr(auth.startSignup(freelancer(), ctx), undefined, /не получается отправить код/);
+    await expectErr(auth.startSignup(freelancer({ phone: '+7 916 000-00-01', login: 'other_one' }), ctx), undefined, /не получается отправить код/);
+    const mails = await query<{ n: number }>(`SELECT count(*)::int AS n FROM notification_outbox WHERE subject = 'Исчерпан суточный лимит SMS' AND created_at > now() - interval '1 minute'`);
+    expect(mails.rows[0].n).toBe(1);
+  });
+
   it('просроченный код не принимается', async () => {
     const s = await auth.startSignup(freelancer(), ctx);
     await query(`UPDATE auth_challenges SET expires_at = now() - interval '1 second'`);

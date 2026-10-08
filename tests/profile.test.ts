@@ -181,6 +181,15 @@ describe('журнал и доставка', () => {
     expect((await ev.processOutbox()).sent).toBe(3);
   });
 
+  it('общий суточный бюджет SMS: уведомлениям — до 80%, дальше SMS не уходят', async () => {
+    await loud(fl);
+    await query(`INSERT INTO rate_limits (key, window_start, count) VALUES ('sms:all', now(), 240)`);
+    await jobs.createJob(form(), emp, today);
+    expect(await ev.processOutbox()).toEqual({ sent: 0, failed: 1 });
+    expect(sms).toHaveLength(0);
+    expect((await one<{ error: string }>(`SELECT error FROM notification_outbox WHERE channel = 'sms'`))!.error).toMatch(/лимит SMS/);
+  });
+
   it('тихие часы откладывают отправку; срочное проходит, если разрешено', async () => {
     const { hour } = ev.localClock();
     // Тихие часы — ровно текущий час.

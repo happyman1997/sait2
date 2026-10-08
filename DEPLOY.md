@@ -15,8 +15,12 @@
 ```sh
 git clone <репозиторий> /opt/arena && cd /opt/arena
 cp .env.production.example .env.production
-nano .env.production        # обязательный блок: домен, пароли, SMS, почта, геокодер
+nano .env.production        # обязательный блок: домен, пароли, SMS, почта, геокодер, реквизиты ИП
 ```
+
+Без реквизитов ИП (`OPERATOR_*`), обработчиков данных (`PROCESSOR_*`), адреса сайта и ключа кодов приложение не запустится: в журнале (`docker compose ... logs app`) будет список того, что не заполнено. Так в оферте и политике не окажется «[ФИО]». Проверить сборку на своём компьютере без реквизитов можно с `ALLOW_INCOMPLETE_CONFIG=1` — на сервере эту строку не ставить.
+
+В личном кабинете SMS.ru задайте дневной лимит расходов; на сайте свой потолок — `SMS_DAILY_LIMIT` (300 SMS в сутки, коды и уведомления вместе). Когда он исчерпан, поддержке приходит письмо.
 
 ## 3. Сертификат Let's Encrypt (первый выпуск)
 
@@ -63,19 +67,36 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --bui
 ## 6. Резервные копии
 
 ```sh
-sh deploy/backup.sh          # deploy/backups/arena-ГГГГММДД-ЧЧММ.dump, хранятся 14 дней
+sh deploy/backup.sh
 ```
 
-В cron ежедневно: `30 3 * * * cd /opt/arena && sh deploy/backup.sh >> deploy/backups/backup.log 2>&1`. Копии стоит дополнительно уносить с сервера (S3, другой сервер).
+Скрипт делает копию базы (`deploy/backups/arena-ГГГГММДД-ЧЧММ.dump`) и, если фото хранятся на сервере, а не в S3, архив фото (`uploads-….tar.gz`). На сервере копии хранятся 14 дней, и каждая сразу уходит в объектное хранилище, в папку `backups/` (30 дней, `BACKUP_KEEP_DAYS`). Если сервер сломается, копии останутся.
 
-Восстановление:
+Хранилище для копий — в `.env.production`. Надёжнее отдельный бакет со своим ключом: тогда взлом сайта не сотрёт и копии.
+
+```sh
+BACKUP_S3_BUCKET=arena-backups      # пусто — бакет фото S3_BUCKET, папка backups/
+BACKUP_S3_ACCESS_KEY=...            # пусто — ключ S3_ACCESS_KEY
+BACKUP_S3_SECRET_KEY=...
+```
+
+Бакет создаётся в консоли Yandex Cloud (Object Storage → «Создать бакет», доступ — **закрытый**), ключ — у сервисного аккаунта с ролью `storage.editor` на этот бакет. Если хранилище не задано, скрипт пишет «ВНИМАНИЕ: копия только на сервере».
+
+В cron ежедневно: `30 3 * * * cd /opt/arena && sh deploy/backup.sh >> deploy/backups/backup.log 2>&1`.
+
+Восстановление базы (копию из хранилища сначала скачать в консоли Yandex Cloud в `deploy/backups/`):
 
 ```sh
 docker compose -f docker-compose.prod.yml --env-file .env.production exec -T db \
   pg_restore -U arena -d arena --clean --if-exists < deploy/backups/<файл>.dump
 ```
 
-Фото лежат в томе `uploads` (или в S3, если задан `S3_BUCKET`) — том тоже включите в резервное копирование.
+Восстановление фото (если они хранились на сервере):
+
+```sh
+docker compose -f docker-compose.prod.yml --env-file .env.production exec -T app \
+  sh -c 'cd /app/data && tar -xzf -' < deploy/backups/uploads-<дата>.tar.gz
+```
 
 ## 7. Мониторинг
 

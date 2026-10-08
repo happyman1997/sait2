@@ -15,6 +15,8 @@ export const config = {
   codeSecret: () => env('AUTH_CODE_SECRET', isProd ? undefined : 'dev-only-code-secret'),
   smsProvider: () => env('SMS_PROVIDER', isProd ? undefined : 'console') as 'console' | 'smsru',
   smsRuApiId: () => env('SMSRU_API_ID'),
+  // Потолок SMS в сутки на всю площадку (коды и уведомления) — защита от расходов на чужие рассылки (sms-budget.ts).
+  smsDailyLimit: () => Math.max(1, parseInt(env('SMS_DAILY_LIMIT', '300'), 10) || 300),
   // Только для разработки: фиксированный код вместо случайного (как 1234 в прототипе).
   devFixedCode: () => (isProd ? '' : env('SMS_DEV_FIXED_CODE', '')),
   secureCookies: () => env('SECURE_COOKIES', isProd ? '1' : '0') === '1',

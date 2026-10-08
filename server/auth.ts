@@ -14,6 +14,7 @@ import { dummyHash, hashPassword, verifyPassword } from './password';
 import { hit, limitOrThrow, refund, used } from './rate-limit';
 import { createSession, deleteUserSessions, type Ctx } from './session';
 import { codeMatches, codeSender, hashCode, type Channel } from './sms';
+import { spendSmsForCode } from './sms-budget';
 
 export const CODE_TTL_MIN = 5;
 export const RESEND_SEC = 60;
@@ -31,6 +32,7 @@ const TOO_MANY_FAILS = 'Слишком много неверных кодов д
 /** Отправка кода с суточным лимитом на номер (по всем сценариям: регистрация, восстановление, смена номера). */
 async function sendCode(phone: string, channel: Channel, purpose: 'signup' | 'recover' | 'phone', ctx: Ctx, db?: Db) {
   await limitOrThrow('sms:day:' + phone.replace(/\D/g, ''), SMS_PER_DAY, DAY, 'На этот номер сегодня уже отправлено много кодов — попробуйте завтра.', db);
+  await spendSmsForCode();
   return codeSender().send(phone, channel, purpose, ctx.ip ?? undefined);
 }
 

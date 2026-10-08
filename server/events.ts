@@ -6,6 +6,7 @@ import { publishMany } from './live';
 import { getMailer } from './mail';
 import { deliverPush } from './push';
 import { codeSender } from './sms';
+import { spendSmsForNotice } from './sms-budget';
 
 export type EventRow = {
   userId: string | null | undefined;
@@ -111,6 +112,11 @@ export async function processOutbox(limit = 50): Promise<{ sent: number; failed:
       RETURNING o.id, o.user_id, o.channel, o.to_addr, o.subject, o.body, o.attempts`, [limit]);
   let sent = 0, failed = 0;
   for (const m of due.rows) {
+    if (m.channel === 'sms' && !(await spendSmsForNotice())) {
+      await query(`UPDATE notification_outbox SET status = 'failed', error = 'суточный лимит SMS (SMS_DAILY_LIMIT)' WHERE id = $1`, [m.id]);
+      failed++;
+      continue;
+    }
     try {
       if (m.channel === 'sms') await codeSender().sendText(m.to_addr, m.body);
       else if (m.channel === 'push') await deliverPush(m.user_id!, { title: 'Арена Работы', body: m.body, url: m.subject || '/' });

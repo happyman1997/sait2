@@ -1,9 +1,9 @@
-// Служебные скрипты для Docker-образа: миграции, сотрудники поддержки, cron, реклама — в самодостаточные .mjs
+// Служебные скрипты для Docker-образа: миграции, сотрудники поддержки, cron, реклама, выгрузка копий — в самодостаточные .mjs
 // (dist/scripts), чтобы в образе не нужны были tsx и исходники. Запуск: node scripts/bundle-scripts.mjs
 import { build } from 'esbuild';
 
 await build({
-  entryPoints: ['scripts/migrate.ts', 'scripts/staff.ts', 'scripts/cron.ts', 'scripts/ads.ts'],
+  entryPoints: ['scripts/migrate.ts', 'scripts/staff.ts', 'scripts/cron.ts', 'scripts/ads.ts', 'scripts/backup-upload.ts'],
   outdir: 'dist/scripts',
   outExtension: { '.js': '.mjs' },
   bundle: true,
@@ -15,4 +15,4 @@ await build({
   banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" },
   logLevel: 'warning'
 });
-console.log('dist/scripts: migrate, staff, cron, ads');
+console.log('dist/scripts: migrate, staff, cron, ads, backup-upload');
