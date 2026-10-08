@@ -17,7 +17,9 @@ import { codeMatches, codeSender, hashCode, type Channel } from './sms';
 import { spendSmsForCode } from './sms-budget';
 
 export const CODE_TTL_MIN = 5;
-export const RESEND_SEC = 60;
+// Один код (SMS или звонок) на номер — не чаще раза в 2 минуты, по всем сценариям сразу:
+// новая регистрация, восстановление или «Позвонить вместо SMS» паузу не обходят.
+export const RESEND_SEC = 120;
 export const MAX_ATTEMPTS = 3;
 export const MAX_SENDS = 5;
 export const RECOVER_WINDOW_MIN = 15;
@@ -29,11 +31,33 @@ export const SMS_PER_DAY = 10;
 const DAY = 86400;
 const TOO_MANY_FAILS = 'Слишком много неверных кодов для этого номера — попробуйте завтра или напишите в поддержку.';
 
-/** Отправка кода с суточным лимитом на номер (по всем сценариям: регистрация, восстановление, смена номера). */
+const waitLabel = (sec: number) => {
+  const m = Math.floor(sec / 60), r = sec % 60;
+  return [m ? m + ' мин' : '', r ? r + ' с' : ''].filter(Boolean).join(' ') || '1 с';
+};
+
+/**
+ * Пауза между кодами на один номер (key — phone_key). Счётчик — через пул, не в транзакции запроса:
+ * откат не должен снимать паузу после уже отправленного SMS.
+ */
+async function codeGap(key: string) {
+  const r = await hit('sms:gap:' + key, 1, RESEND_SEC, pool());
+  if (!r.ok) throw new AppError(429, 'Код уже отправлен — новый можно запросить через ' + waitLabel(r.retryAfter) + '.', undefined, { retryAfter: r.retryAfter });
+}
+
+/** Отправка кода: пауза 2 минуты и суточный лимит на номер (по всем сценариям), общий бюджет SMS. */
 async function sendCode(phone: string, channel: Channel, purpose: 'signup' | 'recover' | 'phone', ctx: Ctx, db?: Db) {
+  const key = phoneKey(phone)!;
+  await codeGap(key);
   await limitOrThrow('sms:day:' + phone.replace(/\D/g, ''), SMS_PER_DAY, DAY, 'На этот номер сегодня уже отправлено много кодов — попробуйте завтра.', db);
   await spendSmsForCode();
-  return codeSender().send(phone, channel, purpose, ctx.ip ?? undefined);
+  try {
+    return await codeSender().send(phone, channel, purpose, ctx.ip ?? undefined);
+  } catch (e) {
+    // Провайдер не отправил — пауза не нужна, можно сразу попробовать ещё раз.
+    await refund('sms:gap:' + key, pool());
+    throw e;
+  }
 }
 
 type ChallengeRow = {
@@ -135,10 +159,10 @@ async function loadChallenge(id: unknown, purpose: 'signup' | 'recover' | 'phone
 export async function resendCode(challengeId: unknown, channelRaw: unknown, purpose: 'signup' | 'recover' | 'phone', ctx: Ctx, db: Db = pool()): Promise<CodeSent> {
   const channel: Channel = channelRaw === 'call' ? 'call' : 'sms';
   const ch = await loadChallenge(challengeId, purpose, db);
+  // Пауза одинакова для всех: и после неверных кодов, и при смене SMS на звонок (и для «пустого» восстановления —
+  // иначе по ответу можно было бы понять, есть ли аккаунт).
   const wait = RESEND_SEC - Math.floor((Date.now() - ch.last_sent_at.getTime()) / 1000);
-  if (wait > 0 && ch.attempts < MAX_ATTEMPTS && channel === ch.channel) {
-    throw new AppError(429, `Новый код можно запросить через ${wait} с.`, 'code', { retryAfter: wait });
-  }
+  if (wait > 0) throw new AppError(429, 'Код уже отправлен — новый можно запросить через ' + waitLabel(wait) + '.', 'code', { retryAfter: wait });
   if (ch.sent_count >= MAX_SENDS) throw new AppError(429, 'Слишком много попыток — начните регистрацию заново через час.', 'code');
   await limitOrThrow(`code:phone:${ch.phone_key}`, 8, 3600, 'Слишком много запросов кода на этот номер — попробуйте через час.', db);
 
@@ -312,6 +336,8 @@ export async function startRecover(identifier: unknown, ctx: Ctx): Promise<CodeS
     [user?.phone ?? '', pk, user?.id ?? null, CODE_TTL_MIN, ctx.ip ?? null]
   );
   let extra = {};
+  // Для чужого логина пауза та же, что для настоящего номера (pk совпадает с phone_key аккаунта), — ответы не различаются.
+  if (!user) await codeGap(pk);
   if (user) {
     const { code } = await sendCode(user.phone, 'sms', 'recover', ctx);
     await query('UPDATE auth_challenges SET code_hash = $2 WHERE id = $1', [row!.id, hashCode(row!.id, code)]);

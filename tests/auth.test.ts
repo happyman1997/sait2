@@ -23,6 +23,12 @@ setCodeSender({
 
 const ctx = { ip: '10.0.0.1', userAgent: 'vitest' };
 
+// «Прошло 2 минуты»: пауза между кодами снята и у подтверждения, и у номера.
+const afterPause = async () => {
+  await query(`UPDATE auth_challenges SET last_sent_at = now() - interval '3 minutes'`);
+  await query(`UPDATE rate_limits SET window_start = now() - interval '3 minutes' WHERE key LIKE 'sms:gap:%'`);
+};
+
 const freelancer = (over: Record<string, unknown> = {}) => ({
   role: 'freelancer', name: 'Данияр Сапаров', phone: '+7 916 000 00 00', login: 'daniyar_s', password: 'secret1!',
   email: 'd@mail.ru', city: 'Москва',
@@ -121,6 +127,7 @@ describe('регистрация', () => {
 
   it('гонка: два незавершённых кода на один номер — второй аккаунт не создаётся', async () => {
     const a = await auth.startSignup(freelancer(), ctx);
+    await afterPause();
     const b = await auth.startSignup(employer({ phone: '+7 916 000 00 00' }), ctx);
     await auth.verifySignup(a.challengeId, '4821', { offer: true, pd: true }, ctx);
     await expectErr(auth.verifySignup(b.challengeId, '4821', { offer: true, pd: true }, ctx), 'phone', /как исполнитель/);
@@ -143,8 +150,10 @@ describe('регистрация', () => {
     await expectErr(auth.verifySignup(s.challengeId, '0000', { offer: true, pd: true }, ctx), 'code', /Попытки исчерпаны/);
     await expectErr(auth.verifySignup(s.challengeId, '4821', { offer: true, pd: true }, ctx), 'code', /Попытки исчерпаны/);
 
-    // после исчерпания попыток повторная отправка доступна сразу
+    // после исчерпания попыток — новый код, но не раньше паузы в 2 минуты (и звонок тоже)
     nextCode = '7777';
+    await expectErr(auth.resendCode(s.challengeId, 'call', 'signup', ctx), 'code', /через 2 мин/);
+    await afterPause();
     const r = await auth.resendCode(s.challengeId, 'call', 'signup', ctx);
     expect(r.channel).toBe('call');
     expect(sent.at(-1)).toMatchObject({ channel: 'call' });
@@ -168,10 +177,14 @@ describe('регистрация', () => {
     await expectErr(auth.verifySignup('-'.repeat(36), '4821', { offer: true, pd: true }, ctx), undefined, /не найдена/);
   });
 
-  it('повторная отправка не раньше чем через 60 секунд', async () => {
+  it('один код на номер — не чаще раза в 2 минуты, и новая регистрация паузу не обходит', async () => {
     const s = await auth.startSignup(freelancer(), ctx);
-    await expectErr(auth.resendCode(s.challengeId, 'sms', 'signup', ctx), 'code', /через \d+ с/);
+    expect(s.resendIn).toBe(120);
+    await expectErr(auth.resendCode(s.challengeId, 'sms', 'signup', ctx), 'code', /через (2 мин|1 мин \d+ с)/);
+    await expectErr(auth.startSignup(freelancer({ login: 'daniyar_2' }), ctx), undefined, /Код уже отправлен/);
     await query(`UPDATE auth_challenges SET last_sent_at = now() - interval '61 seconds'`);
+    await expectErr(auth.resendCode(s.challengeId, 'sms', 'signup', ctx), 'code', /через \d+ с/);
+    await afterPause();
     await auth.resendCode(s.challengeId, 'sms', 'signup', ctx);
     expect(sent).toHaveLength(2);
   });
@@ -180,11 +193,11 @@ describe('регистрация', () => {
     const s = await auth.startSignup(freelancer(), ctx);
     let fails = 0;
     for (let send = 0; send < 4 && fails < 10; send++) {
-      if (send) await auth.resendCode(s.challengeId, 'sms', 'signup', ctx);
+      if (send) { await afterPause(); await auth.resendCode(s.challengeId, 'sms', 'signup', ctx); }
       for (let k = 0; k < 3 && fails < 10; k++, fails++) await expectErr(auth.verifySignup(s.challengeId, '0000', { offer: true, pd: true }, ctx), 'code', /не совпал|исчерпаны/);
     }
     // Даже верный код больше не принимается: номер закрыт до завтра.
-    await query(`UPDATE auth_challenges SET last_sent_at = now() - interval '2 minutes'`);
+    await afterPause();
     await auth.resendCode(s.challengeId, 'sms', 'signup', ctx);
     await expectErr(auth.verifySignup(s.challengeId, '4821', { offer: true, pd: true }, ctx), 'code', /попробуйте завтра/);
   });
@@ -273,6 +286,7 @@ describe('вход', () => {
 describe('восстановление пароля', () => {
   it('логин → код → новый пароль → вход; старые сессии и пароль больше не работают', async () => {
     const { session: old } = await register(freelancer());
+    await afterPause();
     nextCode = '5150';
     const s = await auth.startRecover('daniyar_s', ctx);
     expect(sent.at(-1)).toMatchObject({ phone: '+79160000000', code: '5150' });
@@ -295,6 +309,12 @@ describe('восстановление пароля', () => {
     expect(s.challengeId).toMatch(/[0-9a-f-]{36}/);
     expect(sent).toHaveLength(0);
     await expectErr(auth.verifyRecover(s.challengeId, '4821'), 'code', /не совпал/);
+    // Пауза в 2 минуты одинакова для чужого логина и настоящего аккаунта — по ответу их не различить.
+    await expectErr(auth.startRecover('ghost_user', ctx), undefined, /Код уже отправлен/);
+    await register(freelancer());
+    await afterPause();
+    await auth.startRecover('daniyar_s', ctx);
+    await expectErr(auth.startRecover('daniyar_s', ctx), undefined, /Код уже отправлен/);
   });
 });
 

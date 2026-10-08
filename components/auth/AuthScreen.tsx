@@ -666,10 +666,10 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
                       ))}
                     </div>
                     <div className={sty.cf4bc04d}>
-                      <button className={'btn btn-ghost ' + sty.c8dc805f} onClick={() => resend(codeChannel)} disabled={(resendIn > 0 && attemptsLeft > 0) || busy}>
+                      <button className={'btn btn-ghost ' + sty.c8dc805f} onClick={() => resend(codeChannel)} disabled={resendIn > 0 || busy}>
                         {resendIn > 0 ? 'Отправить снова через ' + Math.floor(resendIn / 60) + ':' + String(resendIn % 60).padStart(2, '0') : 'Отправить код снова'}
                       </button>
-                      <button className={'btn btn-ghost ' + sty.c8dc805f} onClick={() => resend(codeChannel === 'call' ? 'sms' : 'call')} disabled={busy}>
+                      <button className={'btn btn-ghost ' + sty.c8dc805f} onClick={() => resend(codeChannel === 'call' ? 'sms' : 'call')} disabled={resendIn > 0 || busy}>
                         {codeChannel === 'call' ? 'Прислать SMS' : 'Позвонить вместо SMS'}
                       </button>
                     </div>
