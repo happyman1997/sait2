@@ -744,6 +744,29 @@ export async function applicantsBoard(viewer: Viewer) {
   };
 }
 
+export type ApplicantReview = { rating: number; text: string; at: string; work: string };
+
+/**
+ * Отзывы об откликнувшемся — работодателю заказа, на который он откликнулся: оценка, текст, вид работ и дата.
+ * Без имени автора и названия заказа: другим работодателям это не нужно, а в названии бывает адрес.
+ */
+export async function applicantReviews(num: number, appId: string, viewer: Viewer): Promise<{ reviews: ApplicantReview[]; total: number }> {
+  const u = needUser(viewer);
+  if (!UUID_RE.test(appId)) throw new AppError(404, 'Отклик не найден.');
+  const a = await one<{ freelancer_id: string; employer_id: string }>(
+    'SELECT a.freelancer_id, j.employer_id FROM applications a JOIN jobs j ON j.id = a.job_id WHERE a.id = $1 AND j.num = $2', [appId, num]);
+  if (!a) throw new AppError(404, 'Отклик не найден.');
+  if (u.role !== 'employer' || u.id !== a.employer_id) throw new AppError(403, 'Отзывы об исполнителе видит работодатель заказа, на который он откликнулся.');
+  const r = await query<{ rating: number; text: string; created_at: Date; work: string; total: number }>(
+    `SELECT v.rating, v.text, v.created_at, t.label AS work, count(*) OVER ()::int AS total
+       FROM reviews v JOIN jobs j ON j.id = v.job_id JOIN job_types t ON t.id = j.type_id
+      WHERE v.target_id = $1 ORDER BY v.created_at DESC LIMIT 50`, [a.freelancer_id]);
+  return {
+    reviews: r.rows.map(x => ({ rating: x.rating, text: x.text, at: x.created_at.toISOString(), work: x.work })),
+    total: r.rows[0]?.total ?? 0
+  };
+}
+
 export { LEAVE_REASONS };
 
 /** Чек-лист «Перед выходом»: отмечает нанятый исполнитель, пока работа не принята. */

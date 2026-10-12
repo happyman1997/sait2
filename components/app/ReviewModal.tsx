@@ -56,7 +56,7 @@ export function ReviewModal() {
           ))}
         </div>
         <textarea className={'input ' + sty.c04583f7} rows={3} value={text} onChange={e => setText(e.target.value)} aria-label="Отзыв" placeholder="Пришёл вовремя, двор чистый, фото прислал сам" />
-        <div className={sty.cda9536f}>Отзыв виден в профиле второй стороны и влияет на рейтинг. Исправить или удалить его можно в течение 10 минут.</div>
+        <div className={sty.cda9536f}>Отзыв виден в профиле второй стороны и влияет на рейтинг; отзыв об исполнителе видят и работодатели, на чьи заказы он откликается, — без вашего имени. Исправить или удалить отзыв можно в течение 10 минут.</div>
         {error && <div role="alert" className={sty.c4ee8292}>{error}</div>}
         <div className={sty.c5c223c4}>
           <button className={'btn btn-primary ' + sty.ca96b295} onClick={() => submit()} disabled={busy}>{review.rating ? 'Сохранить отзыв' : 'Отправить отзыв'}</button>

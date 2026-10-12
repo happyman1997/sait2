@@ -7,6 +7,7 @@ import { ApiError, api } from '@/lib/api';
 import { css } from '@/lib/css';
 import { crewOf, dateLabel, isOnCall, jobNum, jobStatus, localISO, money, plural, type MyJob } from '@/lib/jobs';
 import { useFlash } from '@/components/Toast';
+import { ApplicantReviews } from './ApplicantReviews';
 import { useLiveEvent } from './Live';
 import { Corners } from './ui';
 import sty from './ApplicantsPage.module.css';
@@ -113,6 +114,7 @@ export function ApplicantsPage() {
                           </div>
                           {p.skills.length > 0 && <div className={sty.c3fdcf88}>{p.skills.slice(0, 6).join(' · ')}</div>}
                           <div className={sty.c6a6caf2}>{p.gear.length ? 'Инвентарь: ' + p.gear.slice(0, 4).join(', ') : 'Свой инвентарь не указан'}</div>
+                          <ApplicantReviews num={j.num} appId={p.id} count={p.reviews} />
                         </div>
                         <div className={sty.c671b9fc}>
                           {p.status === 'sent' && open && <>

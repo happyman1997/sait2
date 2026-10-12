@@ -268,6 +268,24 @@ describe('приёмка, расчёт, отзывы, жалобы', () => {
     await expectErr(sh.saveReview(num, { rating: 5 }, fl2), /стороны смены/);
   });
 
+  it('отзывы об исполнителе видит работодатель, на чей заказ он откликнулся, — без имени автора', async () => {
+    const { num, ids } = await accepted();
+    await sh.saveReview(num, { rating: 4, text: 'Пришёл вовремя, двор чистый', target: ids[0] }, emp);
+    // Другой работодатель: исполнитель откликнулся на его заказ.
+    const j2 = await jobs.createJob(form(), emp2, today);
+    await jobs.applyToJob(j2.num, { reqConfirmed: true }, fl, today);
+    const app = (await jobs.getJob(j2.num, emp2)).applicantList!.find(a => a.thread === fl.id)!;
+    expect(app).toMatchObject({ rating: 4, reviews: 1 });
+    const r = await sh.applicantReviews(j2.num, app.id, emp2);
+    expect(r.total).toBe(1);
+    expect(r.reviews).toEqual([{ rating: 4, text: 'Пришёл вовремя, двор чистый', at: expect.any(String), work: expect.any(String) }]);
+    expect(JSON.stringify(r)).not.toMatch(/Айгуль|Тлеубаева|author/);
+    // Не владелец заказа и сам исполнитель — нельзя; чужой отклик — не найден.
+    await expectErr(sh.applicantReviews(j2.num, app.id, emp), /работодатель заказа/);
+    await expectErr(sh.applicantReviews(j2.num, app.id, fl), /работодатель заказа/);
+    await expectErr(sh.applicantReviews(num, app.id, emp), /не найден/);
+  });
+
   it('отзыв до приёмки нельзя', async () => {
     const { num, ids } = await jobWithApps([fl]);
     await sh.staffAction(num, ids[0], 'hire', emp);

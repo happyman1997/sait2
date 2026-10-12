@@ -6,6 +6,7 @@ import { useId, useState } from 'react';
 import { css } from '@/lib/css';
 import { uploadForm } from '@/lib/image';
 import { COMPLAINT_KINDS, crewOf, dateLabel, DISPUTE_REASONS, isOnCall, isSeries, LEAVE_REASONS, localISO, money, plural, type DisputeInfo, type JobDetail } from '@/lib/jobs';
+import { ApplicantReviews } from './ApplicantReviews';
 import { Corners, LABEL } from './ui';
 import sty from './ShiftBlock.module.css';
 
@@ -31,7 +32,7 @@ export function ApplicantsBlock({ job, act, onChat, busy }: { job: JobDetail; ac
       {sent.length > 0 && open && <div style={css('font-size: 13px; margin: -4px 0 10px; ' + MUTED)}>Нанимая, вы заключаете с исполнителем договор на условиях заказа и <a href="/legal/offer#shift" target="_blank" rel="noreferrer">условиях смены</a>.</div>}
       <div className={sty.cd726313}>
         {list.map(a => (
-          <div key={a.id} style={css('display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border: 1px solid ' + (a.status === 'hired' ? 'var(--color-accent)' : 'var(--color-divider)') + '; padding: 9px 11px')}>
+          <div key={a.id} style={css('display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; border: 1px solid ' + (a.status === 'hired' ? 'var(--color-accent)' : 'var(--color-divider)') + '; padding: 9px 11px')}>
             <div className={'fh ' + sty.c9e20072}>{a.initials}</div>
             <div className={sty.c9f3d743}>
               <div className={sty.cc6d16d8}>
@@ -39,8 +40,9 @@ export function ApplicantsBlock({ job, act, onChat, busy }: { job: JobDetail; ac
                 {a.status === 'hired' && <span className="tag tag-accent" style={{ whiteSpace: 'nowrap' }}>{a.isLead ? 'старший' : 'нанят'}</span>}
                 {a.npd && <span className="tag tag-outline" title="Статус НПД подтверждён ФНС" style={{ whiteSpace: 'nowrap' }}>самозанятый ✓</span>}
               </div>
-              <div style={css('font-size: 13px; ' + MUTED)}>{a.rating != null ? 'рейтинг ' + a.rating.toFixed(1) : 'пока без оценок'} · {a.done} смен{a.noShows ? ' · невыходов за год ' + a.noShows : ''}</div>
+              <div style={css('font-size: 13px; ' + MUTED)}>{a.rating != null ? 'рейтинг ' + a.rating.toFixed(1) + ' (' + a.reviews + ')' : 'пока без оценок'} · {a.done} смен{a.noShows ? ' · невыходов за год ' + a.noShows : ''}</div>
               <div style={css('font-size: 13px; ' + MUTED)}>{a.gear}</div>
+              <ApplicantReviews num={job.num} appId={a.id} count={a.reviews} />
             </div>
             <div className={sty.c33d0c28}>
               {a.status === 'sent' && open && <>

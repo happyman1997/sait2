@@ -1,0 +1,24 @@
+/* Отзывы об откликнувшемся в его карточке (ApplicantReviews.tsx). */
+.wrap { margin-top: 6px; }
+.toggle {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.list {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-left: 2px solid var(--color-divider);
+  max-height: 320px;
+  overflow-y: auto;
+}
+.head { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.stars { color: var(--color-accent); letter-spacing: .08em; font-size: 14px; }
+.muted { font-size: 12.5px; color: color-mix(in srgb, var(--color-text) 62%, transparent); }
+.text { font-size: 13.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.note { font-size: 12px; color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+.error { font-size: 13px; color: var(--color-accent-900); }

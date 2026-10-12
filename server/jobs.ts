@@ -301,11 +301,12 @@ async function loadJob(num: number, viewer: Viewer, db: Db): Promise<JobDetail> 
 
 /** Отклики на заказ — для работодателя: рейтинг, закрытые смены, «не вышел», инвентарь, статус НПД. */
 async function loadApplicants(jobId: string, db: Db): Promise<Applicant[]> {
-  const apps = await query<{ id: string; freelancer_id: string; name: string; status: AppStatus; created_at: Date; no_show_count: number; gear: string[] | null; rating: number | null; done: number; is_lead: boolean | null; npd: boolean | null }>(
+  const apps = await query<{ id: string; freelancer_id: string; name: string; status: AppStatus; created_at: Date; no_show_count: number; gear: string[] | null; rating: number | null; reviews: number; done: number; is_lead: boolean | null; npd: boolean | null }>(
     `SELECT a.id, a.freelancer_id, u.name, a.status, a.created_at,
             -- Невыходы — за последний год (Правила площадки): старая история не висит над человеком.
             (SELECT count(*) FROM no_shows n WHERE n.freelancer_id = u.id AND n.at > now() - interval '12 months')::int AS no_show_count, fp.gear, (fp.npd_status = 'ok' AND fp.npd_checked_at > now() - interval '3 days') AS npd,
             (SELECT avg(rating)::float8 FROM reviews WHERE target_id = u.id) AS rating,
+            (SELECT count(*) FROM reviews WHERE target_id = u.id)::int AS reviews,
             ${doneSql('u.id')} AS done,
             (SELECT is_lead FROM hires h WHERE h.job_id = a.job_id AND h.freelancer_id = u.id) AS is_lead
        FROM applications a JOIN users u ON u.id = a.freelancer_id LEFT JOIN freelancer_profiles fp ON fp.user_id = u.id
@@ -315,7 +316,7 @@ async function loadApplicants(jobId: string, db: Db): Promise<Applicant[]> {
     db
   );
   return apps.rows.map(a => ({
-    id: a.id, thread: a.freelancer_id, name: shortName(a.name), initials: initialsOf(a.name), rating: a.rating == null ? null : Math.round(a.rating * 10) / 10, done: a.done,
+    id: a.id, thread: a.freelancer_id, name: shortName(a.name), initials: initialsOf(a.name), rating: a.rating == null ? null : Math.round(a.rating * 10) / 10, reviews: a.reviews, done: a.done,
     noShows: a.no_show_count, gear: (a.gear || []).filter(g => g !== 'Ничего нет').slice(0, 2).join(', ') || 'свой инвентарь не указан',
     status: a.status, isLead: !!a.is_lead, appliedAt: a.created_at.toISOString(), npd: !!a.npd
   }));

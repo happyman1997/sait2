@@ -39,6 +39,7 @@ export type Applicant = {
   name: string;
   initials: string;
   rating: number | null;
+  reviews: number;            // отзывов о нём — тексты по кнопке «Отзывы»
   done: number;
   noShows: number;
   gear: string;
