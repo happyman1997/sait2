@@ -403,7 +403,7 @@ function PhoneChange({ onDone }: { onDone: () => void }) {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
-  const [sent, setSent] = useState<{ challengeId: string; sentTo: string; resendIn: number; devCode?: string } | null>(null);
+  const [sent, setSent] = useState<{ challengeId: string; channel: 'sms' | 'call'; sentTo: string; resendIn: number; devCode?: string } | null>(null);
   const [wait, setWait] = useState(0);
   const [err, setErr] = useState<{ field: string; message: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -417,15 +417,15 @@ function PhoneChange({ onDone }: { onDone: () => void }) {
   const start = async () => {
     setBusy(true); setErr(null);
     try {
-      const r = await api<{ challengeId: string; sentTo: string; resendIn: number; devCode?: string }>('/api/me/phone/start', { phone, password });
+      const r = await api<{ challengeId: string; channel: 'sms' | 'call'; sentTo: string; resendIn: number; devCode?: string }>('/api/me/phone/start', { phone, password });
       setSent(r); setWait(r.resendIn); setPassword('');
     } catch (e) { setErr(errOf(e, 'Не удалось отправить код')); } finally { setBusy(false); }
   };
-  const resend = async () => {
+  const resend = async (channel?: 'sms' | 'call') => {
     if (!sent) return;
     try {
-      const r = await api<{ resendIn: number; devCode?: string }>('/api/me/phone/resend', { challengeId: sent.challengeId });
-      setSent({ ...sent, devCode: r.devCode }); setWait(r.resendIn);
+      const r = await api<{ channel: 'sms' | 'call'; resendIn: number; devCode?: string }>('/api/me/phone/resend', { challengeId: sent.challengeId, channel });
+      setSent({ ...sent, channel: r.channel, devCode: r.devCode }); setWait(r.resendIn);
     } catch (e) { setErr(errOf(e, 'Не удалось отправить код')); }
   };
   const verify = async () => {
@@ -460,14 +460,17 @@ function PhoneChange({ onDone }: { onDone: () => void }) {
         </>
       ) : (
         <>
-          <div className={sty.c30c0749}>{'Код отправлен в SMS на ' + sent.sentTo + '.'}{sent.devCode && <span style={css(MUTED)}>{' Код для разработки: ' + sent.devCode}</span>}</div>
+          <div className={sty.c30c0749}>{sent.channel === 'call'
+            ? 'На ' + sent.sentTo + ' позвонят. Отвечать не нужно — введите последние 4 цифры номера, с которого звонят.'
+            : 'Код отправлен в SMS на ' + sent.sentTo + '.'}{sent.devCode && <span style={css(MUTED)}>{' Код для разработки: ' + sent.devCode}</span>}</div>
           <div className={sty.ca80eb44}>
             <div className={'field ' + sty.c0a9e77d}>
-              <label htmlFor="ph-code">Код из SMS</label>
+              <label htmlFor="ph-code">{sent.channel === 'call' ? 'Последние 4 цифры номера' : 'Код из SMS'}</label>
               <input id="ph-code" className="input" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 4))} />
             </div>
             <button className={'btn btn-primary ' + sty.cad84e51} onClick={verify} disabled={busy || code.length < 4}>Подтвердить</button>
-            <button className={'btn btn-ghost ' + sty.c8dc805f} onClick={resend} disabled={wait > 0}>{wait > 0 ? 'Повторно через ' + wait + ' с' : 'Прислать ещё раз'}</button>
+            <button className={'btn btn-ghost ' + sty.c8dc805f} onClick={() => resend()} disabled={wait > 0}>{(sent.channel === 'call' ? 'Позвонить снова' : 'Прислать ещё раз') + (wait > 0 ? ' через ' + wait + ' с' : '')}</button>
+            {sent.channel === 'call' && <button className={'btn btn-ghost ' + sty.c8dc805f} onClick={() => resend('sms')} disabled={wait > 0}>Звонок не пришёл — SMS</button>}
           </div>
           {err && <div role="alert" style={css(FIELD_ERR)}>{err.message}</div>}
         </>

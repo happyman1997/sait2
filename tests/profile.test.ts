@@ -69,7 +69,8 @@ async function expectErr(p: Promise<unknown>, text?: RegExp, field?: string) {
 }
 
 /** Настройки без тихих часов — чтобы доставка не зависела от времени запуска тестов. */
-const loud = (u: SU, over: Record<string, unknown> = {}) => prof.saveSettings(u, { quietOn: false, ...over });
+// SMS у новых пользователей выключены по умолчанию — для проверок доставки включаем явно.
+const loud = (u: SU, over: Record<string, unknown> = {}) => prof.saveSettings(u, { quietOn: false, sms: true, ...over });
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, 0x49, 0x48, 0x44, 0x52]);
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46]);
@@ -143,8 +144,10 @@ describe('база и настройки', () => {
   });
 
   it('настройки: допустимые значения сохраняются, мусор — нет', async () => {
-    const s = await prof.saveSettings(fl, { radiusKm: 100, dailyCap: 30, quietFrom: 23, quietTo: 6, sms: false, email: 'да' });
-    expect(s).toMatchObject({ radiusKm: 100, dailyCap: 30, quietFrom: 23, quietTo: 6, sms: false, email: false });
+    // По умолчанию: SMS выключены, письма включены (уходят только на подтверждённый адрес).
+    expect(await prof.getSettings(fl)).toMatchObject({ sms: false, email: true, push: true });
+    const s = await prof.saveSettings(fl, { radiusKm: 100, dailyCap: 30, quietFrom: 23, quietTo: 6, sms: true, email: 'да' });
+    expect(s).toMatchObject({ radiusKm: 100, dailyCap: 30, quietFrom: 23, quietTo: 6, sms: true, email: true });
     const s2 = await prof.saveSettings(fl, { radiusKm: 77, dailyCap: 1000, quietFrom: 25 });
     expect(s2).toMatchObject({ radiusKm: 100, dailyCap: 30, quietFrom: 23 });
   });
@@ -193,7 +196,7 @@ describe('журнал и доставка', () => {
   it('тихие часы откладывают отправку; срочное проходит, если разрешено', async () => {
     const { hour } = ev.localClock();
     // Тихие часы — ровно текущий час.
-    await prof.saveSettings(fl, { quietOn: true, quietFrom: hour, quietTo: (hour + 1) % 24, urgentBypass: true });
+    await prof.saveSettings(fl, { sms: true, quietOn: true, quietFrom: hour, quietTo: (hour + 1) % 24, urgentBypass: true });
     await jobs.createJob(form(), emp, today);
     expect((await ev.processOutbox()).sent).toBe(0);
     await jobs.createJob(form({ urgent: true, dateISO: today }), emp, today);

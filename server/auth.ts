@@ -15,6 +15,7 @@ import { hit, limitOrThrow, refund, used } from './rate-limit';
 import { createSession, deleteUserSessions, type Ctx } from './session';
 import { codeMatches, codeSender, hashCode, type Channel } from './sms';
 import { spendSmsForCode } from './sms-budget';
+import { sendEmailVerification } from './verify';
 
 export const CODE_TTL_MIN = 5;
 // Один код (SMS или звонок) на номер — не чаще раза в 2 минуты, по всем сценариям сразу:
@@ -134,16 +135,17 @@ export async function startSignup(raw: unknown, ctx: Ctx, db: Db = pool()): Prom
   if (ctx.ip) await limitOrThrow(`code:ip:${ctx.ip}`, 30, 3600, 'Слишком много запросов кода — попробуйте позже.', db);
 
   const { password, ...rest } = s;
+  const first = config.codeChannel();
   const payload: StoredSignup = { ...rest, phone, passwordHash: await hashPassword(password) };
   const row = await one<{ id: string }>(
     `INSERT INTO auth_challenges (purpose, phone, phone_key, payload, channel, expires_at, ip)
-     VALUES ('signup', $1, $2, $3, 'sms', now() + make_interval(mins => $4), $5) RETURNING id`,
-    [phone, pk, JSON.stringify(payload), CODE_TTL_MIN, ctx.ip ?? null],
+     VALUES ('signup', $1, $2, $3, $6, now() + make_interval(mins => $4), $5) RETURNING id`,
+    [phone, pk, JSON.stringify(payload), CODE_TTL_MIN, ctx.ip ?? null, first],
     db
   );
-  const { code } = await sendCode(phone, 'sms', 'signup', ctx, db);
+  const { code } = await sendCode(phone, first, 'signup', ctx, db);
   await query('UPDATE auth_challenges SET code_hash = $2 WHERE id = $1', [row!.id, hashCode(row!.id, code)], db);
-  return { challengeId: row!.id, channel: 'sms', sentTo: formatPhone(phone), resendIn: RESEND_SEC, expiresInSec: CODE_TTL_MIN * 60, ...devCode(code) };
+  return { challengeId: row!.id, channel: first, sentTo: formatPhone(phone), resendIn: RESEND_SEC, expiresInSec: CODE_TTL_MIN * 60, ...devCode(code) };
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -155,10 +157,10 @@ async function loadChallenge(id: unknown, purpose: 'signup' | 'recover' | 'phone
   return row;
 }
 
-/** «Отправить код снова» / «Позвонить вместо SMS». */
+/** «Позвонить снова» / «Прислать код в SMS»: без явного способа — тем же, что и в прошлый раз. */
 export async function resendCode(challengeId: unknown, channelRaw: unknown, purpose: 'signup' | 'recover' | 'phone', ctx: Ctx, db: Db = pool()): Promise<CodeSent> {
-  const channel: Channel = channelRaw === 'call' ? 'call' : 'sms';
   const ch = await loadChallenge(challengeId, purpose, db);
+  const channel: Channel = channelRaw === 'call' || channelRaw === 'sms' ? channelRaw : ch.channel;
   // Пауза одинакова для всех: и после неверных кодов, и при смене SMS на звонок (и для «пустого» восстановления —
   // иначе по ответу можно было бы понять, есть ли аккаунт).
   const wait = RESEND_SEC - Math.floor((Date.now() - ch.last_sent_at.getTime()) / 1000);
@@ -273,6 +275,8 @@ export async function verifySignup(challengeId: unknown, code: unknown, accepted
     }
     await query('INSERT INTO notification_settings (user_id) VALUES ($1)', [uid], db);
     await query(`INSERT INTO events (user_id, kind, text) VALUES ($1, 'account', 'Аккаунт создан')`, [uid], db);
+    // Письмо для подтверждения почты — сразу: уведомления на почту бесплатны, а SMS по умолчанию выключены.
+    await sendEmailVerification({ id: uid, role: p.role }, db);
     await query('UPDATE auth_challenges SET consumed_at = now(), verified_at = now(), payload = NULL WHERE id = $1', [ch.id], db);
     const session = await createSession(uid, ctx, db);
     return { user: publicUser(user!), session };
@@ -318,7 +322,7 @@ export async function login(identifier: unknown, password: unknown, ctx: Ctx) {
 /** Код на привязанный номер. Не раскрываем, существует ли аккаунт: для чужого логина — «пустой» вызов. */
 export async function startRecover(identifier: unknown, ctx: Ctx): Promise<CodeSent> {
   const raw = typeof identifier === 'string' ? identifier.trim() : '';
-  if (!raw) throw new AppError(422, 'Укажите логин или телефон аккаунта — код придёт по SMS на привязанный номер.', 'identifier');
+  if (!raw) throw new AppError(422, 'Укажите логин или телефон аккаунта — код придёт на привязанный номер.', 'identifier');
   const id = parseIdentifier(raw);
   if (id.kind === 'invalid') throw new AppError(422, id.message, 'identifier');
   if (ctx.ip) await limitOrThrow(`recover:ip:${ctx.ip}`, 20, 3600, 'Слишком много запросов — попробуйте позже.');
@@ -329,21 +333,22 @@ export async function startRecover(identifier: unknown, ctx: Ctx): Promise<CodeS
   );
   const pk = user?.phone_key ?? (id.kind === 'phone' ? id.key : 'l:' + id.login.toLowerCase());
   await limitOrThrow(`recover:${pk}`, 5, 3600, 'Слишком много запросов кода — попробуйте через час.');
+  const first = config.codeChannel();
 
   const row = await one<{ id: string }>(
     `INSERT INTO auth_challenges (purpose, phone, phone_key, user_id, channel, expires_at, ip)
-     VALUES ('recover', $1, $2, $3, 'sms', now() + make_interval(mins => $4), $5) RETURNING id`,
-    [user?.phone ?? '', pk, user?.id ?? null, CODE_TTL_MIN, ctx.ip ?? null]
+     VALUES ('recover', $1, $2, $3, $6, now() + make_interval(mins => $4), $5) RETURNING id`,
+    [user?.phone ?? '', pk, user?.id ?? null, CODE_TTL_MIN, ctx.ip ?? null, first]
   );
   let extra = {};
   // Для чужого логина пауза та же, что для настоящего номера (pk совпадает с phone_key аккаунта), — ответы не различаются.
   if (!user) await codeGap(pk);
   if (user) {
-    const { code } = await sendCode(user.phone, 'sms', 'recover', ctx);
+    const { code } = await sendCode(user.phone, first, 'recover', ctx);
     await query('UPDATE auth_challenges SET code_hash = $2 WHERE id = $1', [row!.id, hashCode(row!.id, code)]);
     extra = devCode(code);
   }
-  return { challengeId: row!.id, channel: 'sms', sentTo: raw, resendIn: RESEND_SEC, expiresInSec: CODE_TTL_MIN * 60, ...extra };
+  return { challengeId: row!.id, channel: first, sentTo: raw, resendIn: RESEND_SEC, expiresInSec: CODE_TTL_MIN * 60, ...extra };
 }
 
 export async function verifyRecover(challengeId: unknown, code: unknown) {
@@ -395,13 +400,14 @@ export async function startPhoneChange(userId: string, raw: unknown, ctx: Ctx): 
   const taken = await one<{ role: Role }>('SELECT role FROM users WHERE phone_key = $1', [pk]);
   if (taken) throw new AppError(409, takenMessage('phone', taken.role), 'phone');
   await limitOrThrow(`code:phone:${pk}`, 5, 3600, 'Слишком много запросов кода на этот номер — попробуйте через час.');
+  const first = config.codeChannel();
   const row = await one<{ id: string }>(
     `INSERT INTO auth_challenges (purpose, phone, phone_key, user_id, channel, expires_at, ip)
-     VALUES ('phone', $1, $2, $3, 'sms', now() + make_interval(mins => $4), $5) RETURNING id`,
-    [phone, pk, userId, CODE_TTL_MIN, ctx.ip ?? null]);
-  const { code } = await sendCode(phone, 'sms', 'phone', ctx);
+     VALUES ('phone', $1, $2, $3, $6, now() + make_interval(mins => $4), $5) RETURNING id`,
+    [phone, pk, userId, CODE_TTL_MIN, ctx.ip ?? null, first]);
+  const { code } = await sendCode(phone, first, 'phone', ctx);
   await query('UPDATE auth_challenges SET code_hash = $2 WHERE id = $1', [row!.id, hashCode(row!.id, code)]);
-  return { challengeId: row!.id, channel: 'sms', sentTo: formatPhone(phone), resendIn: RESEND_SEC, expiresInSec: CODE_TTL_MIN * 60, ...devCode(code) };
+  return { challengeId: row!.id, channel: first, sentTo: formatPhone(phone), resendIn: RESEND_SEC, expiresInSec: CODE_TTL_MIN * 60, ...devCode(code) };
 }
 
 export async function verifyPhoneChange(userId: string, challengeId: unknown, code: unknown) {

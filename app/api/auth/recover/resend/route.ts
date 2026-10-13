@@ -4,5 +4,5 @@ import { assertSameOrigin, readJson, requestCtx, route } from '@/server/http';
 export const POST = route(async (req) => {
   await assertSameOrigin(req);
   const b = await readJson(req);
-  return resendCode(b.challengeId, 'sms', 'recover', await requestCtx());
+  return resendCode(b.challengeId, b.channel, 'recover', await requestCtx());
 });

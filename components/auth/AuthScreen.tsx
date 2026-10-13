@@ -335,20 +335,20 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
 
   // ─── Восстановление ───
 
-  const recoverSend = async () => {
+  const recoverSend = async (channel?: 'sms' | 'call') => {
     const v = identifier.trim();
-    if (!v) { setRecoverSent(false); showError('Укажите логин или телефон аккаунта — код придёт по SMS на привязанный номер.'); return; }
+    if (!v) { setRecoverSent(false); showError('Укажите логин или телефон аккаунта — код придёт на привязанный номер.'); return; }
     setBusy(true);
     try {
       const c = challenge && recoverStep === 2
-        ? await api<CodeSent>('/api/auth/recover/resend', { challengeId: challenge.challengeId })
+        ? await api<CodeSent>('/api/auth/recover/resend', { challengeId: challenge.challengeId, channel })
         : await api<CodeSent>('/api/auth/recover/start', { identifier: v });
       setChallenge(c);
       setStepError('');
       setRecoverSent(true);
       setRecoverStep(2);
       setRecoverCode('');
-      flash('Код восстановления отправлен на ' + v);
+      flash(c.channel === 'call' ? 'Звоним на номер аккаунта — введите последние 4 цифры' : 'Код восстановления отправлен в SMS');
     } catch (e) {
       showError(e instanceof ApiError ? e.message : 'Не получилось отправить код — попробуйте ещё раз.');
     } finally { setBusy(false); }
@@ -491,7 +491,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
                       <div className="field">
                         <label htmlFor="su-phone">Телефон <span style={css(REQ)}>обязательно</span></label>
                         <input id="su-phone" className="input" type="tel" value={phone} onChange={e => { setPhone(e.target.value); setStepError(''); }} placeholder="+7 916 000 00 00" autoComplete="tel" style={css(missStyle('phone', true))} />
-                        <span style={css(HINT)}>Единственная проверка — придёт код по SMS. Номер подходит и для входа.</span>
+                        <span style={css(HINT)}>Единственная проверка — вам позвонят, код — последние 4 цифры номера. Номер подходит и для входа.</span>
                       </div>
                       <div className="field">
                         <label htmlFor="su-login">Логин <span style={css(REQ)}>обязательно</span></label>
@@ -643,7 +643,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
                     <h3 className={sty.c93ff964}>Подтверждение</h3>
                     <div className={sty.cd2d7539}>
                       {codeChannel === 'call'
-                        ? 'Звоним на ' + phoneShown + ' — введите последние 4 цифры номера'
+                        ? <>Сейчас на {phoneShown} позвонят. <b>Отвечать не нужно</b> — введите последние 4 цифры номера, с которого звонят. Например, +7 495 123-<b>45-67</b> → код 4567.</>
                         : 'Код отправлен по SMS на ' + phoneShown + ' · действует 5 минут'}
                     </div>
                     <div className={sty.c318e55a}>
@@ -653,7 +653,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
                             (code.length === i ? 'var(--color-accent)' : 'var(--color-divider)') + '; color: ' + (code[i] ? 'var(--color-text)' : 'color-mix(in srgb, var(--color-text) 35%, transparent)'))}>{code[i] || '·'}</div>
                         ))}
                       </div>
-                      <input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={4} value={code} aria-label="Код из SMS" autoFocus
+                      <input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={4} value={code} aria-label="Код подтверждения" autoFocus
                         onChange={e => { if (attemptsLeft > 0) { setCode(e.target.value.replace(/\D/g, '').slice(0, 4)); setCodeError(''); } }}
                         // eslint-disable-next-line react-hooks/refs -- onEnter возвращает обработчик события, ref читается только при нажатии
                         onKeyDown={onEnter(nextStep)}
@@ -667,13 +667,13 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
                     </div>
                     <div className={sty.cf4bc04d}>
                       <button className={'btn btn-ghost ' + sty.c8dc805f} onClick={() => resend(codeChannel)} disabled={resendIn > 0 || busy}>
-                        {resendIn > 0 ? 'Отправить снова через ' + Math.floor(resendIn / 60) + ':' + String(resendIn % 60).padStart(2, '0') : 'Отправить код снова'}
+                        {(codeChannel === 'call' ? 'Позвонить снова' : 'Отправить SMS снова') + (resendIn > 0 ? ' через ' + Math.floor(resendIn / 60) + ':' + String(resendIn % 60).padStart(2, '0') : '')}
                       </button>
                       <button className={'btn btn-ghost ' + sty.c8dc805f} onClick={() => resend(codeChannel === 'call' ? 'sms' : 'call')} disabled={resendIn > 0 || busy}>
-                        {codeChannel === 'call' ? 'Прислать SMS' : 'Позвонить вместо SMS'}
+                        {codeChannel === 'call' ? 'Звонок не пришёл — прислать SMS' : 'Позвонить вместо SMS'}
                       </button>
                     </div>
-                    {challenge?.devCode && <div className={sty.cf8e1b45}>Режим разработки: код {challenge.devCode} (SMS не отправляется)</div>}
+                    {challenge?.devCode && <div className={sty.cf8e1b45}>Режим разработки: код {challenge.devCode} (звонок и SMS не отправляются)</div>}
                     <label className={sty.c2ff6e93}>
                       <input type="checkbox" checked={offerAccepted} onChange={e => { setOfferAccepted(e.target.checked); if (e.target.checked && pdConsent) setOfferError(''); }} className={sty.cdf98b21} />
                       <span>Мне есть 18 лет, принимаю <Link href="/legal/offer" target="_blank">оферту</Link> и <Link href="/legal/rules" target="_blank">правила площадки</Link>. Площадка — посредник: договор о работах стороны заключают между собой.</span>
@@ -724,13 +724,15 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
                 <h3 className={sty.c7aae9d4}>Восстановление аккаунта</h3>
                 <div className={sty.cb19513b}>
                   {recoverStep === 2
-                    ? 'Мы отправили четыре цифры на номер, привязанный к ' + (identifier.trim() || 'аккаунту') + '.'
+                    ? (challenge?.channel === 'call'
+                      ? 'На номер, привязанный к ' + (identifier.trim() || 'аккаунту') + ', позвонят. Отвечать не нужно — код это последние 4 цифры номера, с которого звонят.'
+                      : 'Мы отправили четыре цифры в SMS на номер, привязанный к ' + (identifier.trim() || 'аккаунту') + '.')
                     : recoverStep === 3
                       ? 'Код принят. Задайте новый пароль — старый перестанет работать сразу после сохранения.'
-                      : 'Укажите логин или телефон аккаунта — пришлём SMS-код на привязанный номер.'}
+                      : 'Укажите логин или телефон аккаунта — на привязанный номер позвонят, код — последние 4 цифры номера.'}
                 </div>
                 <div className={'field ' + sty.c6840f0a}>
-                  <label htmlFor="rc-field">{recoverStep === 2 ? 'Код из SMS' : recoverStep === 3 ? 'Новый пароль' : 'Логин или телефон'}</label>
+                  <label htmlFor="rc-field">{recoverStep === 2 ? (challenge?.channel === 'call' ? 'Последние 4 цифры номера' : 'Код из SMS') : recoverStep === 3 ? 'Новый пароль' : 'Логин или телефон'}</label>
                   {recoverStep === 1 && <input id="rc-field" className="input" value={identifier} onChange={e => { setIdentifier(e.target.value); setStepError(''); }} onKeyDown={onEnter(recoverNext)} placeholder="daniyar_s или +7 916 000 00 00" autoComplete="username" />}
                   {recoverStep === 2 && <input id="rc-field" className={'input ' + 'fh ' + sty.ca9baefc} value={recoverCode} onChange={e => { setRecoverCode(e.target.value.replace(/\D/g, '').slice(0, 4)); setStepError(''); }} onKeyDown={onEnter(recoverNext)} inputMode="numeric" autoComplete="one-time-code" maxLength={4} placeholder="0000" autoFocus />}
                   {recoverStep === 3 && <input id="rc-field" className="input" type="password" value={recoverPass} onChange={e => { setRecoverPass(e.target.value); setStepError(''); }} placeholder="не короче 8 символов" autoComplete="new-password" autoFocus />}
@@ -744,13 +746,14 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
                 {stepError && <div role="alert" style={{ ...css(ALERT), animation: stepErrAnim }}>{stepError}</div>}
                 {recoverSent && recoverStep === 2 && (
                   <div className={sty.c48c42b0}>
-                    Если аккаунт «{identifier.trim()}» существует, код придёт по SMS в течение минуты.{challenge?.devCode ? ' Режим разработки: код ' + challenge.devCode + '.' : ''}
+                    Если аккаунт «{identifier.trim()}» существует, {challenge?.channel === 'call' ? 'звонок поступит' : 'код придёт по SMS'} в течение минуты.{challenge?.devCode ? ' Режим разработки: код ' + challenge.devCode + '.' : ''}
                   </div>
                 )}
                 <button className="btn btn-primary btn-block blueprint" onClick={recoverNext} disabled={busy} style={css('margin-top: 22px; ' + PRIMARY)}>
                   <Corners />{recoverStep === 2 ? 'Подтвердить код' : recoverStep === 3 ? 'Сохранить пароль и войти' : 'Прислать код восстановления'}
                 </button>
-                {recoverStep === 2 && <button onClick={recoverSend} disabled={busy} style={css('margin-top: 12px; ' + UNDERLINE_BTN)}>Отправить код снова</button>}
+                {recoverStep === 2 && <button onClick={() => recoverSend()} disabled={busy} style={css('margin-top: 12px; ' + UNDERLINE_BTN)}>{challenge?.channel === 'call' ? 'Позвонить снова' : 'Отправить SMS снова'}</button>}
+                {recoverStep === 2 && challenge?.channel === 'call' && <button onClick={() => recoverSend('sms')} disabled={busy} style={css('margin-top: 12px; margin-left: 18px; ' + UNDERLINE_BTN)}>Звонок не пришёл — прислать SMS</button>}
                 <div><button onClick={() => switchMode('login')} style={css(LINK_BTN)}>← Вернуться ко входу</button></div>
               </div>
             )}

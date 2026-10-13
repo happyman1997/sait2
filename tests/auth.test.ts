@@ -79,7 +79,9 @@ describe('регистрация', () => {
   it('полный цикл исполнителя: код → аккаунт, профиль, сессия', async () => {
     const s = await auth.startSignup(freelancer(), ctx);
     expect(s.sentTo).toBe('+7 916 000-00-00');
-    expect(sent).toHaveLength(1);
+    // Первый способ — звонок (код — последние 4 цифры номера); SMS — запасной.
+    expect(s.channel).toBe('call');
+    expect(sent).toEqual([expect.objectContaining({ channel: 'call' })]);
     expect(await one('SELECT 1 FROM users')).toBeNull(); // до кода аккаунта нет
 
     const { user, session } = await auth.verifySignup(s.challengeId, '4821', { offer: true, pd: true }, ctx);
@@ -91,6 +93,10 @@ describe('регистрация', () => {
 
     const profile = await auth.loadProfile(user.id, 'freelancer');
     expect(profile).toMatchObject({ skills: ['snow'], customSkills: ['вывоз снега'], ownCar: true, workCities: ['Москва', 'Химки'] });
+    // Сразу после регистрации — письмо для подтверждения почты (уведомления по почте бесплатны, SMS выключены).
+    const mail = await one<{ to_addr: string; subject: string }>(`SELECT to_addr, subject FROM notification_outbox WHERE user_id = $1`, [user.id]);
+    expect(mail).toMatchObject({ to_addr: 'd@mail.ru', subject: expect.stringMatching(/подтвердите e-mail/) });
+    expect(await one(`SELECT 1 FROM notification_settings WHERE user_id = $1 AND NOT sms AND email`, [user.id])).not.toBeNull();
   });
 
   it('работодатель: телефон с 8 нормализуется, профиль сохраняется', async () => {
@@ -185,8 +191,11 @@ describe('регистрация', () => {
     await query(`UPDATE auth_challenges SET last_sent_at = now() - interval '61 seconds'`);
     await expectErr(auth.resendCode(s.challengeId, 'sms', 'signup', ctx), 'code', /через \d+ с/);
     await afterPause();
-    await auth.resendCode(s.challengeId, 'sms', 'signup', ctx);
-    expect(sent).toHaveLength(2);
+    // Без явного способа — тем же, что и в прошлый раз (звонок); «прислать SMS» — явно.
+    expect((await auth.resendCode(s.challengeId, undefined, 'signup', ctx)).channel).toBe('call');
+    await afterPause();
+    expect((await auth.resendCode(s.challengeId, 'sms', 'signup', ctx)).channel).toBe('sms');
+    expect(sent.map(x => x.channel)).toEqual(['call', 'call', 'sms']);
   });
 
   it('подбор кода: не больше 10 неверных кодов на номер в сутки — по всем запросам кода сразу', async () => {
