@@ -90,6 +90,8 @@ export async function deleteAccount(viewer: U | null, raw: unknown) {
       'DELETE FROM events WHERE user_id = $1',
       'DELETE FROM notification_settings WHERE user_id = $1',
       'DELETE FROM employer_profiles WHERE user_id = $1',
+      'DELETE FROM user_identities WHERE user_id = $1',
+      'DELETE FROM oauth_flows WHERE user_id = $1',
       'DELETE FROM freelancer_profiles WHERE user_id = $1'
     ]) await query(sql, [viewer.id], db);
   });

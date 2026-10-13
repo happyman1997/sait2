@@ -50,6 +50,10 @@ export const config = {
   compressJson: () => env('COMPRESS_JSON', '1') === '1',
   dbPoolMax: () => Math.max(2, parseInt(env('DB_POOL_MAX', '10'), 10) || 10),
   dbStatementTimeoutMs: () => Math.max(1000, parseInt(env('DB_STATEMENT_TIMEOUT_MS', '15000'), 10) || 15000),
+  // Вход через Яндекс ID и VK ID (server/oauth.ts). Пустой ID приложения — кнопки нет.
+  yandexClientId: () => env('YANDEX_CLIENT_ID', ''),
+  yandexClientSecret: () => env('YANDEX_CLIENT_SECRET', ''),
+  vkClientId: () => env('VK_CLIENT_ID', ''),
   // Токен для /api/metrics (Prometheus). Пусто — метрики закрыты.
   metricsToken: () => env('METRICS_TOKEN', ''),
   offerVersion: '2026-10',

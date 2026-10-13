@@ -11,6 +11,7 @@ import { sendEmailVerification } from './verify';
 import { shortName } from './jobs';
 import type { SessionUser } from './session';
 import { doneSql } from './stats';
+import { enabledProviders, identitiesOf } from './oauth';
 
 type U = SessionUser;
 
@@ -33,7 +34,7 @@ export async function getProfile(viewer: U | null) {
             email_verified_at
        FROM users WHERE id = $1`, [v.id, v.session_id]))!;
   const emp = u.role === 'employer';
-  const [profile, stats, history, marks, reviews, settings] = await Promise.all([
+  const [profile, stats, history, marks, reviews, settings, identities] = await Promise.all([
     loadProfile(u.id, u.role),
     one<{ done: number; rating: number | null; reviews: number; jobs: number; no_shows: number; inn: string | null }>(
       `SELECT ${emp ? "(SELECT count(*) FROM jobs j WHERE j.employer_id = u.id AND j.status = 'accepted')::int" : doneSql('u.id')} AS done,
@@ -57,7 +58,8 @@ export async function getProfile(viewer: U | null) {
       `SELECT r.rating, r.text, r.created_at, a.name AS author, j.title
          FROM reviews r JOIN users a ON a.id = r.author_id JOIN jobs j ON j.id = r.job_id
         WHERE r.target_id = $1 ORDER BY r.created_at DESC LIMIT 10`, [u.id]),
-    getSettings(u)
+    getSettings(u),
+    identitiesOf(u.id)
   ]);
   // Незакрытые споры по расчёту видны в профиле обеих сторон (как в прототипе).
   const disputes = await query<{ num: number; reason: string; job_num: string; created_at: Date }>(
@@ -86,7 +88,9 @@ export async function getProfile(viewer: U | null) {
         new Date(m.until ?? m.created_at.getTime() + 90 * 86400000).toLocaleDateString('ru-RU')
     }))],
     reviews: reviews.rows.map(r => ({ rating: r.rating, text: r.text, at: r.created_at.toISOString(), author: shortName(r.author), title: r.title })),
-    settings
+    settings,
+    // Вход через Яндекс ID / VK ID: какие сервисы подключены на сайте и какие привязаны к аккаунту.
+    oauth: { providers: enabledProviders(), linked: identities }
   };
 }
 

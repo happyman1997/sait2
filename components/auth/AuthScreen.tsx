@@ -53,7 +53,32 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
 
 const fmtNum = (v: number) => String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 
-export function AuthScreen({ initialMode, initialRole, stats, pending }: { initialMode: AuthMode; initialRole: Role; stats: Stats; pending?: { num: number; title: string } | null }) {
+type OAuthProvider = 'yandex' | 'vk';
+const OAUTH_LABEL: Record<OAuthProvider, string> = { yandex: 'Войти через Яндекс ID', vk: 'Войти через VK ID' };
+
+/** «Войти через Яндекс ID / VK ID» — переход к сервису; вернёт в аккаунт или в анкету с готовыми данными. */
+function OAuthButtons({ providers, apply, lead }: { providers: OAuthProvider[]; apply?: number; lead: string }) {
+  if (!providers.length) return null;
+  return (
+    <div style={css('margin: 4px 0 18px')}>
+      <div style={css(HINT + '; margin-bottom: 8px')}>{lead}</div>
+      <div style={css('display: grid; gap: 8px')}>
+        {providers.map(p => (
+          <a key={p} href={'/api/auth/oauth/' + p + '/start' + (apply ? '?apply=' + apply : '')} className="btn btn-secondary btn-block"
+            style={css('height: 44px; display: grid; place-items: center; font-size: 14px; text-decoration: none')}>{OAUTH_LABEL[p]}</a>
+        ))}
+      </div>
+      <div style={css(HINT + '; margin-top: 12px; text-align: center')}>или по номеру телефона</div>
+    </div>
+  );
+}
+
+type OAuthTicketInfo = { provider: OAuthProvider; providerName: string; name: string; email: string; phone: string; phoneVerified: boolean };
+
+export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProviders = [], oauthTicket, oauthError }: {
+  initialMode: AuthMode; initialRole: Role; stats: Stats; pending?: { num: number; title: string } | null;
+  oauthProviders?: OAuthProvider[]; oauthTicket?: string | null; oauthError?: string | null;
+}) {
   const router = useRouter();
   const flash = useFlash();
   const narrow = useNarrow();
@@ -113,8 +138,12 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
   const [recoverPass2, setRecoverPass2] = useState('');
   const [recoverSent, setRecoverSent] = useState(false);
 
+  // Регистрация после «Войти через…»: билет и что сервис уже подтвердил.
+  const [oauth, setOauth] = useState<{ ticket: string; providerName: string; phoneVerified: boolean } | null>(null);
+  const skipCode = !!oauth?.phoneVerified;
+
   // Ошибки
-  const [stepError, setStepError] = useState('');
+  const [stepError, setStepError] = useState(oauthError || '');
   const [errTick, setErrTick] = useState(0);
   const [missFields, setMissFields] = useState<string[]>([]);
   const missTimer = useRef<number | undefined>(undefined);
@@ -145,6 +174,26 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
   };
 
   const showError = useCallback((msg: string) => { setStepError(msg); setErrTick(t => t + 1); }, []);
+
+  // Возврат от Яндекс ID / VK ID: ошибка — показать; билет — заполнить анкету данными сервиса и убрать его из адреса.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    // Текст ошибки уже в stepError (начальное значение) — здесь только чистим адрес.
+    url.searchParams.delete('oauth_error');
+    url.searchParams.delete('oauth');
+    window.history.replaceState(null, '', url);
+    if (!oauthTicket) return;
+    api<OAuthTicketInfo>('/api/auth/oauth/ticket?t=' + encodeURIComponent(oauthTicket))
+      .then(t => {
+        setOauth({ ticket: oauthTicket, providerName: t.providerName, phoneVerified: t.phoneVerified });
+        if (t.name) setName(t.name);
+        if (t.email) setEmail(t.email);
+        if (t.phone) setPhone(t.phone);
+        setMode('signup');
+        setStep(1);
+      })
+      .catch(e => showError(e instanceof ApiError ? e.message : 'Вход через сервис не удался — попробуйте ещё раз.'));
+  }, [oauthTicket, showError]);
 
   const flashFields = useCallback((fields: string[], message: string) => {
     clearTimeout(missTimer.current);
@@ -186,7 +235,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
   };
 
   const signupPayload = () => ({
-    role, name, phone, login, password: pass, email, city,
+    role, name, phone, login, password: oauth ? '' : pass, email, city, oauthTicket: oauth?.ticket,
     freelancer: role === 'freelancer' ? { skills, customSkills, gear, customGear, ownCar, workCities } : undefined,
     employer: role === 'employer' ? { orgType, orgName, objectKind, objectOther, access, tools, meetName, meetPhone, passMode, passWhom, safetyReq } : undefined
   });
@@ -205,7 +254,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
     if (busy) return;
     if (step === 1) { setStep(2); setStepError(''); return; }
     if (step === 2) {
-      const miss = contactsMissing({ name, phone, login, password: pass, email, city });
+      const miss = contactsMissing({ name, phone, login, password: pass, email, city }, { requirePassword: !oauth });
       if (miss.length) {
         flashFields(miss.map(m => (m === 'password' ? 'pass' : m)), contactsMessage(miss[0], email, { login, phone, password: pass }));
         return;
@@ -224,6 +273,8 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
     if (step === 3) {
       const err = validateProfile(role, { freelancer: { skills, customSkills, workCities }, employer: { access, tools } });
       if (err) { flashFields([err.field], err.message); return; }
+      // Телефон уже подтверждён сервисом — без кода, сразу к согласию.
+      if (skipCode) { setStep(4); setStepError(''); return; }
       setBusy(true);
       try {
         const c = await api<CodeSent>('/api/auth/signup/start', signupPayload());
@@ -240,6 +291,19 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
     if (!offerAccepted || !pdConsent) {
       setOfferError(!offerAccepted ? 'Без принятия оферты аккаунт создать нельзя — отметьте галочку.' : 'Без согласия на обработку персональных данных аккаунт создать нельзя — отметьте галочку.');
       setErrTick(t => t + 1);
+      return;
+    }
+    if (skipCode) {
+      setBusy(true);
+      try {
+        await api('/api/auth/oauth/signup', { ...signupPayload(), offerAccepted, pdConsent });
+        flash('Аккаунт создан');
+        done(role);
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 410) { setOauth(null); setStep(1); showError(e.message); }
+        else if (e instanceof ApiError && ['name', 'phone', 'login', 'email', 'city'].includes(e.field || '') && !e.body.moderation) { setStep(2); handleApiError(e); }
+        else handleApiError(e);
+      } finally { setBusy(false); }
       return;
     }
     if (attemptsLeft <= 0) { setCodeError('Попытки исчерпаны — запросите новый код'); return; }
@@ -388,7 +452,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
   // ─── Разметка ───
 
   const statDate = new Date(stats.day + 'T00:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
-  const nextLabel = step === 1 ? 'Далее — контакты' : step === 2 ? 'Далее — профиль' : step === 3 ? 'Далее — код' : (isEmp ? 'Создать аккаунт работодателя' : 'Создать аккаунт исполнителя');
+  const nextLabel = step === 1 ? 'Далее — контакты' : step === 2 ? 'Далее — профиль' : step === 3 ? (skipCode ? 'Далее — согласие' : 'Далее — код') : (isEmp ? 'Создать аккаунт работодателя' : 'Создать аккаунт исполнителя');
   const isPrivateOrg = orgType === 'частное лицо';
   const codeChannel = challenge?.channel ?? 'sms';
   const phoneShown = challenge?.sentTo || phone || '+7 916 ··· 00 00';
@@ -453,7 +517,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
             {mode === 'signup' && (
               <div>
                 <div className={sty.c471c66a}>
-                  {['Роль', 'Контакты', 'Профиль', 'Код'].map((label, i) => (
+                  {['Роль', 'Контакты', 'Профиль', skipCode ? 'Согласие' : 'Код'].map((label, i) => (
                     <div key={label} aria-current={step === i + 1 ? 'step' : undefined} style={css('flex: 1; min-width: 0; padding: 8px 9px; border: 1px solid ' + (step === i + 1 ? 'var(--color-accent)' : 'var(--color-divider)') +
                       '; background: ' + (step > i + 1 ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : step === i + 1 ? 'color-mix(in srgb, var(--color-accent) 18%, transparent)' : 'transparent') +
                       '; color: ' + (step >= i + 1 ? 'var(--color-accent-900)' : 'color-mix(in srgb, var(--color-text) 64%, transparent)'))}>
@@ -463,8 +527,15 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
                   ))}
                 </div>
 
+                {oauth && (
+                  <div style={css(NOTE + '; margin: 0 0 14px; padding: 9px 11px; border: 1px solid var(--color-accent); background: color-mix(in srgb, var(--color-accent) 8%, transparent)')}>
+                    Данные получены из {oauth.providerName}: имя, почта{oauth.phoneVerified ? ' и телефон' : ''}. Выберите роль и заполните профиль{oauth.phoneVerified ? ' — код подтверждения не понадобится.' : '; телефон подтвердим звонком.'}
+                  </div>
+                )}
+
                 {step === 1 && (
                   <div>
+                    {!oauth && <OAuthButtons providers={oauthProviders} apply={pending?.num} lead="Быстрая регистрация — данные заполнятся сами:" />}
                     <h3 className={sty.c93ff964}>Кто вы</h3>
                     <div className={sty.c543bc33}>Роль определяет профиль и права на карте</div>
                     <div className={sty.c07c5a89}>
@@ -490,18 +561,20 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
                       </div>
                       <div className="field">
                         <label htmlFor="su-phone">Телефон <span style={css(REQ)}>обязательно</span></label>
-                        <input id="su-phone" className="input" type="tel" value={phone} onChange={e => { setPhone(e.target.value); setStepError(''); }} placeholder="+7 916 000 00 00" autoComplete="tel" style={css(missStyle('phone', true))} />
-                        <span style={css(HINT)}>Единственная проверка — вам позвонят, код — последние 4 цифры номера. Номер подходит и для входа.</span>
+                        <input id="su-phone" className="input" type="tel" value={phone} readOnly={skipCode} onChange={e => { setPhone(e.target.value); setStepError(''); }} placeholder="+7 916 000 00 00" autoComplete="tel" style={css(missStyle('phone', true))} />
+                        <span style={css(HINT)}>{skipCode ? 'Номер подтверждён в ' + oauth?.providerName + '. Подходит и для входа.' : 'Единственная проверка — вам позвонят, код — последние 4 цифры номера. Номер подходит и для входа.'}</span>
                       </div>
                       <div className="field">
                         <label htmlFor="su-login">Логин <span style={css(REQ)}>обязательно</span></label>
                         <input id="su-login" className="input" value={login} onChange={e => { setLogin(e.target.value.replace(/[^a-zA-Z0-9._]/g, '').slice(0, 20)); setStepError(''); }} placeholder="daniyar_s" autoComplete="username" style={css(missStyle('login', true))} />
                         <span style={css(HINT)}>Латиница, цифры, точка и подчёркивание, 3–20 символов. Виден в профиле и откликах.</span>
                       </div>
-                      <div className="field">
-                        <label htmlFor="su-pass">Пароль <span style={css(REQ)}>обязательно</span></label>
-                        <input id="su-pass" className="input" type="password" value={pass} onChange={e => { setPass(e.target.value); setStepError(''); }} placeholder="не короче 8 символов" autoComplete="new-password" style={css(missStyle('pass', true))} />
-                      </div>
+                      {!oauth && (
+                        <div className="field">
+                          <label htmlFor="su-pass">Пароль <span style={css(REQ)}>обязательно</span></label>
+                          <input id="su-pass" className="input" type="password" value={pass} onChange={e => { setPass(e.target.value); setStepError(''); }} placeholder="не короче 8 символов" autoComplete="new-password" style={css(missStyle('pass', true))} />
+                        </div>
+                      )}
                       <div className="field">
                         <label htmlFor="su-email">E-mail <span style={css(REQ)}>обязательно</span></label>
                         <input id="su-email" className="input" type="email" value={email} onChange={e => { setEmail(e.target.value); setStepError(''); }} placeholder="name@mail.ru" autoComplete="email" style={css(missStyle('email', false))} />
@@ -640,7 +713,10 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
 
                 {step === 4 && (
                   <div>
-                    <h3 className={sty.c93ff964}>Подтверждение</h3>
+                    <h3 className={sty.c93ff964}>{skipCode ? 'Последний шаг' : 'Подтверждение'}</h3>
+                    {skipCode ? (
+                      <div className={sty.cd2d7539}>Телефон и почта подтверждены в {oauth?.providerName}. Осталось принять оферту и дать согласие на обработку данных — и аккаунт готов. Входить потом — той же кнопкой «{oauth?.providerName}».</div>
+                    ) : (<>
                     <div className={sty.cd2d7539}>
                       {codeChannel === 'call'
                         ? <>Сейчас на {phoneShown} позвонят. <b>Отвечать не нужно</b> — введите последние 4 цифры номера, с которого звонят. Например, +7 495 123-<b>45-67</b> → код 4567.</>
@@ -674,6 +750,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
                       </button>
                     </div>
                     {challenge?.devCode && <div className={sty.cf8e1b45}>Режим разработки: код {challenge.devCode} (звонок и SMS не отправляются)</div>}
+                    </>)}
                     <label className={sty.c2ff6e93}>
                       <input type="checkbox" checked={offerAccepted} onChange={e => { setOfferAccepted(e.target.checked); if (e.target.checked && pdConsent) setOfferError(''); }} className={sty.cdf98b21} />
                       <span>Мне есть 18 лет, принимаю <Link href="/legal/offer" target="_blank">оферту</Link> и <Link href="/legal/rules" target="_blank">правила площадки</Link>. Площадка — посредник: договор о работах стороны заключают между собой.</span>
@@ -697,6 +774,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending }: { initi
               </div>
             )}
 
+            {mode === 'login' && <OAuthButtons providers={oauthProviders} apply={pending?.num} lead="Без пароля — через ваш аккаунт:" />}
             {mode === 'login' && (
               <form onSubmit={e => { e.preventDefault(); doLogin(); }}>
                 <div className={sty.c82a9418}>

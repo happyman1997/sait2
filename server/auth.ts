@@ -1,5 +1,6 @@
 // Авторизация: регистрация (4 шага, код по SMS/звонку), вход по логину или телефону, восстановление пароля.
 // Все правила из README проверяются здесь — клиентские проверки только для удобства.
+import crypto from 'node:crypto';
 import { findBadField } from '@/lib/moderation';
 import { cityPoint } from '@/lib/catalog';
 import {
@@ -15,6 +16,7 @@ import { hit, limitOrThrow, refund, used } from './rate-limit';
 import { createSession, deleteUserSessions, type Ctx } from './session';
 import { codeMatches, codeSender, hashCode, type Channel } from './sms';
 import { spendSmsForCode } from './sms-budget';
+import { consumeTicket, loadTicket, type Ticket } from './oauth';
 import { sendEmailVerification } from './verify';
 
 export const CODE_TTL_MIN = 5;
@@ -78,7 +80,7 @@ type ChallengeRow = {
   consumed_at: Date | null;
 };
 
-type StoredSignup = Omit<SignupInput, 'password'> & { passwordHash: string };
+type StoredSignup = Omit<SignupInput, 'password'> & { passwordHash: string; oauthFlow?: string };
 
 export type CodeSent = {
   challengeId: string;
@@ -113,7 +115,7 @@ async function assertUnique(pk: string | null, login: string, db: Db) {
 
 /** Шаг 2 «Контакты»: обязательные поля, модерация и уникальность телефона/логина в любой роли. */
 export async function checkContacts(raw: unknown, db: Db = pool()) {
-  const s = sanitizeSignup(raw);
+  const s = sanitizeSignup(withOAuthPassword(raw));
   const err = validateContacts(s);
   if (err) throw new AppError(422, err.message, err.field);
   moderate(signupTextFields({ ...s, freelancer: undefined, employer: undefined }));
@@ -122,8 +124,11 @@ export async function checkContacts(raw: unknown, db: Db = pool()) {
 }
 
 /** Шаги 2–3 целиком → отправка кода (шаг 4). Пользователь создаётся только после кода. */
-export async function startSignup(raw: unknown, ctx: Ctx, db: Db = pool()): Promise<CodeSent> {
-  const s = sanitizeSignup(raw);
+export async function startSignup(raw: unknown, ctx: Ctx, db: Db = pool(), nonce?: string): Promise<CodeSent> {
+  // После «Войти через…» без телефона у сервиса: анкета заполнена из него, номер подтверждается кодом как обычно.
+  const ticketRaw = (raw as Record<string, unknown> | null)?.oauthTicket;
+  const ticket = typeof ticketRaw === 'string' && ticketRaw ? await loadTicket(ticketRaw, nonce, db) : null;
+  const s = sanitizeSignup(withOAuthPassword(raw));
   const err = validateContacts(s) || validateProfile(s.role, s);
   if (err) throw new AppError(422, err.message, err.field);
   moderate(signupTextFields(s));
@@ -136,7 +141,7 @@ export async function startSignup(raw: unknown, ctx: Ctx, db: Db = pool()): Prom
 
   const { password, ...rest } = s;
   const first = config.codeChannel();
-  const payload: StoredSignup = { ...rest, phone, passwordHash: await hashPassword(password) };
+  const payload: StoredSignup = { ...rest, phone, passwordHash: await hashPassword(password), ...(ticket ? { oauthFlow: ticket.id } : {}) };
   const row = await one<{ id: string }>(
     `INSERT INTO auth_challenges (purpose, phone, phone_key, payload, channel, expires_at, ip)
      VALUES ('signup', $1, $2, $3, $6, now() + make_interval(mins => $4), $5) RETURNING id`,
@@ -227,59 +232,119 @@ export function publicUser(u: {
   };
 }
 
-/** Шаг 4: код + две отдельные галочки (оферта; согласие на обработку ПДн) → аккаунт и сессия. */
-export async function verifySignup(challengeId: unknown, code: unknown, accepted: { offer?: unknown; pd?: unknown }, ctx: Ctx) {
+function assertAccepted(accepted: { offer?: unknown; pd?: unknown }) {
   if (accepted.offer !== true) throw new AppError(422, 'Без принятия оферты аккаунт создать нельзя — отметьте галочку.', 'offer');
   if (accepted.pd !== true) throw new AppError(422, 'Без согласия на обработку персональных данных аккаунт создать нельзя — отметьте галочку.', 'pdConsent');
+}
+
+/** Аккаунт, профиль, настройки уведомлений — в транзакции регистрации (телефон уже подтверждён). */
+async function createAccount(p: StoredSignup, phone: string, pk: string, db: Db) {
+  await assertUnique(pk, p.login, db);
+  const pt = cityPoint(p.city);
+  let user;
+  try {
+    user = await one<Parameters<typeof publicUser>[0]>(
+      `INSERT INTO users (role, login, phone, phone_key, email, password_hash, name, city, base_lat, base_lng, offer_accepted_at, offer_version, pd_consent_at, pd_consent_version)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), $11, now(), $12)
+       RETURNING id, role, login, phone, email, name, city, base_lat, base_lng, avatar_url, created_at`,
+      [p.role, p.login, phone, pk, p.email, p.passwordHash, p.name, p.city, pt?.[0] ?? null, pt?.[1] ?? null, config.offerVersion, config.pdConsentVersion],
+      db
+    );
+  } catch (e) {
+    if ((e as { code?: string }).code === '23505') {
+      const by = String((e as { constraint?: string }).constraint).includes('phone') ? 'phone' : 'login';
+      throw new AppError(409, takenMessage(by, p.role), by);
+    }
+    throw e;
+  }
+  const uid = user!.id;
+  if (p.role === 'freelancer') {
+    const f = p.freelancer!;
+    await query(
+      `INSERT INTO freelancer_profiles (user_id, skills, custom_skills, gear, custom_gear, own_car, work_cities)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [uid, f.skills, f.customSkills, f.gear, f.customGear, f.ownCar, f.workCities],
+      db
+    );
+  } else {
+    const e = p.employer!;
+    await query(
+      `INSERT INTO employer_profiles (user_id, org_type, org_name, object_kind, object_other, access, tools, meet_name, meet_phone, pass_mode, pass_whom, safety_req)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+      [uid, e.orgType, e.orgName || null, e.objectKind, e.objectOther || null, e.access, e.tools, e.meetName || null, e.meetPhone || null, e.passMode || null, e.passWhom || null, e.safetyReq],
+      db
+    );
+  }
+  await query('INSERT INTO notification_settings (user_id) VALUES ($1)', [uid], db);
+  await query(`INSERT INTO events (user_id, kind, text) VALUES ($1, 'account', 'Аккаунт создан')`, [uid], db);
+  return user!;
+}
+
+/**
+ * После создания: вход через Яндекс ID / VK ID привязывается (почта от него, если та же, — уже подтверждена);
+ * иначе — письмо для подтверждения почты сразу: уведомления на почту бесплатны, а SMS по умолчанию выключены.
+ */
+async function afterAccount(uid: string, p: StoredSignup, ticket: Ticket | null, db: Db) {
+  const verified = ticket ? await consumeTicket(ticket, uid, p.email, db) : false;
+  if (!verified) await sendEmailVerification({ id: uid, role: p.role }, db);
+}
+
+/** Шаг 4: код + две отдельные галочки (оферта; согласие на обработку ПДн) → аккаунт и сессия. */
+export async function verifySignup(challengeId: unknown, code: unknown, accepted: { offer?: unknown; pd?: unknown }, ctx: Ctx) {
+  assertAccepted(accepted);
   const pre = await loadChallenge(challengeId, 'signup', pool());
   await checkCode(pre, code, pool());
 
   return tx(async (db) => {
     const ch = await loadChallenge(challengeId, 'signup', db, true);
     const p = ch.payload!;
-    await assertUnique(ch.phone_key, p.login, db);
-    const pt = cityPoint(p.city);
-    let user;
-    try {
-      user = await one<Parameters<typeof publicUser>[0]>(
-        `INSERT INTO users (role, login, phone, phone_key, email, password_hash, name, city, base_lat, base_lng, offer_accepted_at, offer_version, pd_consent_at, pd_consent_version)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), $11, now(), $12)
-         RETURNING id, role, login, phone, email, name, city, base_lat, base_lng, avatar_url, created_at`,
-        [p.role, p.login, ch.phone, ch.phone_key, p.email, p.passwordHash, p.name, p.city, pt?.[0] ?? null, pt?.[1] ?? null, config.offerVersion, config.pdConsentVersion],
-        db
-      );
-    } catch (e) {
-      if ((e as { code?: string }).code === '23505') {
-        const by = String((e as { constraint?: string }).constraint).includes('phone') ? 'phone' : 'login';
-        throw new AppError(409, takenMessage(by, p.role), by);
-      }
-      throw e;
-    }
-    const uid = user!.id;
-    if (p.role === 'freelancer') {
-      const f = p.freelancer!;
-      await query(
-        `INSERT INTO freelancer_profiles (user_id, skills, custom_skills, gear, custom_gear, own_car, work_cities)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [uid, f.skills, f.customSkills, f.gear, f.customGear, f.ownCar, f.workCities],
-        db
-      );
-    } else {
-      const e = p.employer!;
-      await query(
-        `INSERT INTO employer_profiles (user_id, org_type, org_name, object_kind, object_other, access, tools, meet_name, meet_phone, pass_mode, pass_whom, safety_req)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-        [uid, e.orgType, e.orgName || null, e.objectKind, e.objectOther || null, e.access, e.tools, e.meetName || null, e.meetPhone || null, e.passMode || null, e.passWhom || null, e.safetyReq],
-        db
-      );
-    }
-    await query('INSERT INTO notification_settings (user_id) VALUES ($1)', [uid], db);
-    await query(`INSERT INTO events (user_id, kind, text) VALUES ($1, 'account', 'Аккаунт создан')`, [uid], db);
-    // Письмо для подтверждения почты — сразу: уведомления на почту бесплатны, а SMS по умолчанию выключены.
-    await sendEmailVerification({ id: uid, role: p.role }, db);
+    // Регистрация после «Войти через…» без телефона у сервиса: билет проверен при отправке кода, здесь — ещё жив?
+    const ticket = p.oauthFlow ? await ticketById(p.oauthFlow, db) : null;
+    const user = await createAccount(p, ch.phone, ch.phone_key, db);
+    await afterAccount(user.id, p, ticket, db);
     await query('UPDATE auth_challenges SET consumed_at = now(), verified_at = now(), payload = NULL WHERE id = $1', [ch.id], db);
-    const session = await createSession(uid, ctx, db);
-    return { user: publicUser(user!), session };
+    const session = await createSession(user.id, ctx, db);
+    return { user: publicUser(user), session };
+  });
+}
+
+/** Билет «Войти через…» по id записи (сохранён в анкете при отправке кода): не использован и не истёк. */
+async function ticketById(id: string, db: Db): Promise<Ticket> {
+  const t = await one<Ticket>(
+    'SELECT id, profile FROM oauth_flows WHERE id = $1 AND used_at IS NULL AND expires_at > now() AND profile IS NOT NULL FOR UPDATE', [id], db);
+  if (!t) throw new AppError(410, 'Вход через сервис устарел — нажмите кнопку входа ещё раз.');
+  return t;
+}
+
+/** Пароль при регистрации через Яндекс ID / VK ID необязателен: входят через сервис, а пароль можно задать восстановлением. */
+function withOAuthPassword(raw: unknown): unknown {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  if (typeof r.oauthTicket !== 'string' || !r.oauthTicket || (typeof r.password === 'string' && r.password)) return raw;
+  return { ...r, password: crypto.randomBytes(18).toString('base64url') + '-Aa1' };
+}
+
+/**
+ * Регистрация после «Войти через…», когда сервис подтвердил телефон: без кода. Телефон — от сервиса (не из формы),
+ * имя и почту человек мог поправить. Билет — одноразовый и только в браузере, начавшем вход.
+ */
+export async function oauthSignup(raw: unknown, accepted: { offer?: unknown; pd?: unknown }, nonce: string | undefined, ctx: Ctx) {
+  assertAccepted(accepted);
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const pre = await loadTicket(r.oauthTicket, nonce);
+  if (!pre.profile.phone) throw new AppError(409, 'Сервис не передал телефон — подтвердите номер кодом.', 'phone');
+  const s = sanitizeSignup(withOAuthPassword({ ...r, phone: pre.profile.phone }));
+  const err = validateContacts(s) || validateProfile(s.role, s);
+  if (err) throw new AppError(422, err.message, err.field);
+  moderate(signupTextFields(s));
+  if (ctx.ip) await limitOrThrow(`oauthsignup:ip:${ctx.ip}`, 20, 3600, 'Слишком много регистраций — попробуйте позже.');
+  const { password, ...rest } = s;
+  const p: StoredSignup = { ...rest, phone: pre.profile.phone, passwordHash: await hashPassword(password) };
+  return tx(async (db) => {
+    const ticket = await loadTicket(r.oauthTicket, nonce, db, true);
+    const user = await createAccount(p, pre.profile.phone!, phoneKey(pre.profile.phone!)!, db);
+    await afterAccount(user.id, p, ticket, db);
+    const session = await createSession(user.id, ctx, db);
+    return { user: publicUser(user), session };
   });
 }
 

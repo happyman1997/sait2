@@ -31,6 +31,7 @@ export async function runDueTasks(): Promise<{ skipped: boolean; autoAccepted: n
         // Журнал хранится полгода — дольше не нужен ни пользователю, ни для разборов.
         `DELETE FROM events WHERE created_at < now() - interval '180 days'`,
         `DELETE FROM email_verifications WHERE expires_at < now() - interval '7 days'`,
+        `DELETE FROM oauth_flows WHERE expires_at < now() - interval '1 day'`,
         // Срок хранения из политики ПДн: переписка, фото, споры и жалобы — 3 года после смены (общий срок исковой давности).
         // Файлы фото уходят следом, в sweepFiles. Бессрочная серия без конца — только когда закрыта.
         ...['messages', 'photos', 'disputes', 'complaints'].map(t =>

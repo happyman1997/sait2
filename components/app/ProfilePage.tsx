@@ -31,7 +31,10 @@ type Profile = {
   history: { num: number; title: string; address: string; date: string; pay: number; unit: string; settle: string; auto: boolean }[];
   marks: { label: string; value: string }[];
   reviews: { rating: number; text: string; at: string; author: string; title: string }[];
+  oauth?: { providers: Provider[]; linked: Provider[] };
 };
+type Provider = 'yandex' | 'vk';
+const PROVIDER_NAME: Record<Provider, string> = { yandex: 'Яндекс ID', vk: 'VK ID' };
 
 const SEC_HEAD = 'font-family: var(--font-heading); font-size: 12.5px; letter-spacing: .2em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 64%, transparent)';
 const SEC_NOTE = 'font-size: 13px; line-height: 1.45; margin-top: 6px; color: color-mix(in srgb, var(--color-text) 68%, transparent); text-wrap: pretty';
@@ -74,6 +77,16 @@ export function ProfilePage() {
     if (!r) return;
     flash(r === 'ok' ? 'E-mail подтверждён — уведомления на почту включены' : 'Ссылка устарела или адрес уже сменили — отправьте письмо ещё раз');
     url.searchParams.delete('email');
+    window.history.replaceState(null, '', url);
+  }, [flash]);
+  // Возврат после «Привязать Яндекс ID / VK ID»: /profile?linked=yandex или ?oauth_error=…
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const linked = url.searchParams.get('linked') as Provider | null;
+    const bad = url.searchParams.get('oauth_error');
+    if (!linked && !bad) return;
+    flash(bad ? bad.slice(0, 300) : (PROVIDER_NAME[linked!] || 'Сервис') + ' привязан — теперь можно входить через него');
+    url.searchParams.delete('linked'); url.searchParams.delete('oauth_error');
     window.history.replaceState(null, '', url);
   }, [flash]);
 
@@ -124,6 +137,7 @@ export function ProfilePage() {
 
           <div className={sty.ce5a6d3c}>
             <Contacts p={p} patch={patch} busy={busy} fieldErr={fieldErr} onPhone={load} />
+            {p.oauth && (p.oauth.providers.length > 0 || p.oauth.linked.length > 0) && <Services oauth={p.oauth} onChange={load} />}
 
             {isEmp ? <Organization p={p} patch={patch} busy={busy} fieldErr={fieldErr} /> : (
               <>
@@ -398,6 +412,46 @@ function Contacts({ p, patch, busy, fieldErr, onPhone }: {
   );
 }
 
+/** Яндекс ID / VK ID: привязать к аккаунту или отвязать. Вход по телефону и паролю остаётся всегда. */
+function Services({ oauth, onChange }: { oauth: { providers: Provider[]; linked: Provider[] }; onChange: () => void }) {
+  const flash = useFlash();
+  const [busy, setBusy] = useState('');
+  const all = (['yandex', 'vk'] as Provider[]).filter(x => oauth.providers.includes(x) || oauth.linked.includes(x));
+  const unlink = async (x: Provider) => {
+    if (!window.confirm('Отвязать ' + PROVIDER_NAME[x] + '? Входить можно будет по телефону и паролю.')) return;
+    setBusy(x);
+    try { await api('/api/me/identities', { provider: x }, 'DELETE'); flash(PROVIDER_NAME[x] + ' отвязан'); onChange(); }
+    catch (e) { flash(e instanceof ApiError ? e.message : 'Не удалось отвязать'); } finally { setBusy(''); }
+  };
+  return (
+    <Section title="Вход через сервисы" note="Привяжите Яндекс ID или VK ID — и входите в один клик, без пароля и кода.">
+      <div style={{ display: 'grid', gap: 10 }}>
+        {all.map(x => {
+          const on = oauth.linked.includes(x);
+          return (
+            <div key={x} style={css('display: flex; gap: 12px; align-items: center; flex-wrap: wrap')}>
+              <span className="fh" style={css('min-width: 110px; font-size: 15px')}>{PROVIDER_NAME[x]}</span>
+              <span style={css('flex: 1 1 auto; font-size: 13px; ' + MUTED)}>{on ? 'привязан' : 'не привязан'}</span>
+              {on
+                ? <button className="btn btn-ghost" style={css(BTN)} disabled={busy === x} onClick={() => unlink(x)}>Отвязать</button>
+                : oauth.providers.includes(x) && <a className="btn btn-secondary" style={css(BTN + '; display: inline-flex; align-items: center')} href={'/api/auth/oauth/' + x + '/start?intent=link'}>Привязать</a>}
+            </div>
+          );
+        })}
+      </div>
+    </Section>
+  );
+}
+
+/** Для тех, кто пароль не помнит или не задавал (вход через Яндекс ID / VK ID): новый пароль — по коду на телефон. */
+function NoPassword() {
+  return (
+    <div style={css('font-size: 12.5px; ' + MUTED)}>
+      Не помните пароль или входили через Яндекс ID / VK ID? <a href="/auth?mode=recover">Задайте пароль по коду на телефон</a>.
+    </div>
+  );
+}
+
 function PhoneChange({ onDone }: { onDone: () => void }) {
   const flash = useFlash();
   const [phone, setPhone] = useState('');
@@ -455,6 +509,7 @@ function PhoneChange({ onDone }: { onDone: () => void }) {
               {err?.field === 'password' && <div role="alert" style={css(FIELD_ERR)}>{err.message}</div>}
             </div>
           </div>
+          <NoPassword />
           {err && !['phone', 'password'].includes(err.field) && <div role="alert" style={css(FIELD_ERR)}>{err.message}</div>}
           <div><button className={'btn btn-primary ' + sty.cf8f6389} onClick={start} disabled={busy}>Прислать код</button></div>
         </>
@@ -513,6 +568,7 @@ function PasswordChange({ onDone }: { onDone: () => void }) {
         <button className={'btn btn-ghost ' + sty.c1d41128} onClick={onDone}>Отменить</button>
       </div>
       <div style={css('font-size: 12.5px; ' + MUTED)}>После смены остальные входы (другие телефоны и браузеры) завершатся.</div>
+      <NoPassword />
     </div>
   );
 }
@@ -543,7 +599,7 @@ function DeleteAccount({ isEmp }: { isEmp: boolean }) {
   return (
     <div style={css('display: grid; gap: 10px; max-width: 560px')}>
       <div style={css(note)}>
-        Сразу стираются: имя, телефон, почта, пароль, город и база, фото профиля, {isEmp ? 'организация и ИНН, объекты' : 'навыки, инвентарь, ИНН'}, журнал уведомлений, подписки.
+        Сразу стираются: имя, телефон, почта, пароль, город и база, фото профиля, {isEmp ? 'организация и ИНН, объекты' : 'навыки, инвентарь, ИНН'}, привязки Яндекс ID и VK ID, журнал уведомлений, подписки.
         {isEmp ? ' Открытые заказы без нанятых снимаются.' : ' Ждущие отклики отзываются.'}{' '}
         Остаются у второй стороны — без вашего имени, как «Удалённый пользователь»: заказы и смены, переписка, отзывы, споры, фото смен.
         Пока идёт смена, не принята работа или открыт спор, удалить аккаунт нельзя.
@@ -552,6 +608,7 @@ function DeleteAccount({ isEmp }: { isEmp: boolean }) {
         <label htmlFor="del-pass">Пароль</label>
         <input id="del-pass" className="input" type="password" autoComplete="current-password" value={f.password} onChange={e => setF({ ...f, password: e.target.value })} />
         {err?.field === 'password' && <div role="alert" style={css(FIELD_ERR)}>{err.message}</div>}
+        <NoPassword />
       </div>
       <div className="field">
         <label htmlFor="del-confirm">Впишите слово УДАЛИТЬ</label>

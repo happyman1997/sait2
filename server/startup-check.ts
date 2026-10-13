@@ -25,6 +25,10 @@ export function productionProblems(env: Record<string, string | undefined> = pro
   if (val('AUTH_CODE_SECRET').length < 32) out.push('AUTH_CODE_SECRET — случайная строка не короче 32 символов (openssl rand -hex 32)');
   if (val('SMS_PROVIDER') === 'smsru') need('SMSRU_API_ID', 'ключ из личного кабинета SMS.ru');
   if (val('EMAIL_PROVIDER') === 'smtp') need('SMTP_URL', 'адрес почтового сервера с логином и паролем');
+  // Вход через Яндекс ID без секрета не заработает — кнопка просто не появится, лучше сказать сразу.
+  if (val('YANDEX_CLIENT_ID')) need('YANDEX_CLIENT_SECRET', 'Client secret приложения на oauth.yandex.ru (или уберите YANDEX_CLIENT_ID)');
+  if (val('YANDEX_CLIENT_SECRET') && !val('YANDEX_CLIENT_ID')) out.push('YANDEX_CLIENT_ID — ClientID приложения на oauth.yandex.ru (секрет указан, а ClientID нет)');
+  if (val('VK_CLIENT_ID') && !/^\d+$/.test(val('VK_CLIENT_ID'))) out.push('VK_CLIENT_ID — ID приложения VK ID, только цифры');
   return out;
 }
 

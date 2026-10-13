@@ -27,4 +27,11 @@ describe('проверка настроек перед запуском', () => 
     expect(productionProblems({ ...full, SMSRU_API_ID: '' })[0]).toMatch(/^SMSRU_API_ID/);
     expect(productionProblems({ ...full, SMS_PROVIDER: 'console', SMSRU_API_ID: '' })).toEqual([]);
   });
+
+  it('вход через Яндекс ID — нужна пара ClientID + секрет; VK ID — только цифры', () => {
+    expect(productionProblems({ ...full, YANDEX_CLIENT_ID: 'abc', YANDEX_CLIENT_SECRET: 'def', VK_CLIENT_ID: '51234567' })).toEqual([]);
+    expect(productionProblems({ ...full, YANDEX_CLIENT_ID: 'abc' })[0]).toMatch(/^YANDEX_CLIENT_SECRET/);
+    expect(productionProblems({ ...full, YANDEX_CLIENT_SECRET: 'def' })[0]).toMatch(/^YANDEX_CLIENT_ID/);
+    expect(productionProblems({ ...full, VK_CLIENT_ID: 'app-1' })[0]).toMatch(/^VK_CLIENT_ID/);
+  });
 });
