@@ -18,7 +18,7 @@ export function productionProblems(env: Record<string, string | undefined> = pro
   need('PROCESSOR_HOSTING', 'хостинг-провайдер и его ИНН (кто хранит данные по вашему поручению)');
   need('PROCESSOR_SMS', 'SMS-провайдер и его ИНН');
   need('PROCESSOR_MAIL', 'почтовый сервис и его ИНН');
-  if (val('S3_BUCKET')) need('PROCESSOR_STORAGE', 'хранилище фото и его ИНН (задан S3_BUCKET)');
+  if (val('S3_BUCKET') || val('BACKUP_S3_BUCKET')) need('PROCESSOR_STORAGE', 'облачное хранилище и его ИНН (фото или резервные копии хранятся в нём)');
 
   need('PUBLIC_URL', 'адрес сайта, например https://arenarabot.ru');
   if (val('PUBLIC_URL') && !val('PUBLIC_URL').startsWith('https://')) out.push('PUBLIC_URL — должен начинаться с https://');

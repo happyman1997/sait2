@@ -18,9 +18,10 @@ describe('проверка настроек перед запуском', () => 
     expect(p.map(x => x.split(' — ')[0])).toEqual(['OPERATOR_NAME', 'OPERATOR_INN', 'PROCESSOR_SMS']);
   });
 
-  it('хранилище фото обязательно только при S3; адрес — https; ключи провайдеров — по выбору', () => {
+  it('облачное хранилище обязательно, только если в нём фото или копии; адрес — https; ключи провайдеров — по выбору', () => {
     expect(productionProblems(full).some(x => x.startsWith('PROCESSOR_STORAGE'))).toBe(false);
     expect(productionProblems({ ...full, S3_BUCKET: 'arena' })[0]).toMatch(/^PROCESSOR_STORAGE/);
+    expect(productionProblems({ ...full, BACKUP_S3_BUCKET: 'arena-backups' })[0]).toMatch(/^PROCESSOR_STORAGE/);
     expect(productionProblems({ ...full, PUBLIC_URL: 'http://arenarabot.ru' })[0]).toMatch(/https/);
     expect(productionProblems({ ...full, AUTH_CODE_SECRET: 'short' })[0]).toMatch(/32 символов/);
     expect(productionProblems({ ...full, SMSRU_API_ID: '' })[0]).toMatch(/^SMSRU_API_ID/);

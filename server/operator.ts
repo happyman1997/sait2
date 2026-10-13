@@ -16,17 +16,19 @@ export function operator() {
     hosting: v('PROCESSOR_HOSTING', 'хостинг-провайдер, ИНН'),
     sms: v('PROCESSOR_SMS', 'SMS-провайдер, ИНН'),
     mail: v('PROCESSOR_MAIL', 'почтовый сервис, ИНН'),
-    // Без S3 фото лежат у хостинга — отдельного обработчика нет.
-    storage: config.s3Bucket() ? v('PROCESSOR_STORAGE', 'хранилище файлов, ИНН') : process.env.PROCESSOR_STORAGE?.trim() || '',
+    // Облачное хранилище — обработчик, если в нём фото (S3_BUCKET) или резервные копии (BACKUP_S3_BUCKET); иначе всё у хостинга.
+    storage: usesCloudStorage() ? v('PROCESSOR_STORAGE', 'облачное хранилище, ИНН') : process.env.PROCESSOR_STORAGE?.trim() || '',
     site: config.publicUrl().replace(/^https?:\/\//, '').replace(/\/$/, ''),
     edition: config.offerVersion
   };
 }
 
-/** Обработчики по поручению оператора (хостинг, SMS, почта, хранилище фото) — [название, кто] без пустых. */
+export const usesCloudStorage = () => !!(config.s3Bucket() || process.env.BACKUP_S3_BUCKET?.trim());
+
+/** Обработчики по поручению оператора (хостинг, SMS, почта, облачное хранилище) — [название, кто] без пустых. */
 export function processors(): [string, string][] {
   const o = operator();
-  return ([['хостинг', o.hosting], ['SMS', o.sms], ['почта', o.mail], ['хранилище фото', o.storage]] as [string, string][]).filter(p => p[1]);
+  return ([['хостинг', o.hosting], ['SMS', o.sms], ['почта', o.mail], ['облачное хранилище фото и резервных копий', o.storage]] as [string, string][]).filter(p => p[1]);
 }
 
 /** «ИП Иванов Иван Иванович, ОГРНИП …, ИНН …» */
