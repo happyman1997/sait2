@@ -20,10 +20,21 @@ server {
 
 server {
   listen 80;
-  server_name ${SERVER_NAME};
+  server_name ${SERVER_NAME} www.${SERVER_NAME};
   # Продление сертификата Let's Encrypt (certbot renew --webroot).
   location /.well-known/acme-challenge/ { root /var/www/certbot; }
-  location / { return 301 https://$host$request_uri; }
+  location / { return 301 https://${SERVER_NAME}$request_uri; }
+}
+
+# www → адрес без www. Сертификат включает www, если www-запись указывает на сервер (deploy/launch.sh);
+# иначе сюда никто и не приходит.
+server {
+  listen 443 ssl;
+  http2 on;
+  server_name www.${SERVER_NAME};
+  ssl_certificate     /etc/letsencrypt/live/${SERVER_NAME}/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/${SERVER_NAME}/privkey.pem;
+  return 301 https://${SERVER_NAME}$request_uri;
 }
 
 server {
