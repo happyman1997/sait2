@@ -2,43 +2,46 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL || 'postgres://arena:arena@localhost:5432/arena_test';
-process.env.SMS_DEV_FIXED_CODE = '';
+process.env.DEV_FIXED_CODE = '';
 
 const { pool, query, one } = await import('@/server/db');
 const { migrate } = await import('@/server/migrate');
-const { setCodeSender } = await import('@/server/sms');
+const { setMailer } = await import('@/server/mail');
 const auth = await import('@/server/auth');
 const { sessionUser } = await import('@/server/session');
 const { AppError } = await import('@/server/errors');
 
-const sent: { phone: string; code: string; channel: string }[] = [];
-let nextCode = '4821';
-setCodeSender({
-  async send(phone, channel) {
-    sent.push({ phone, code: nextCode, channel });
-    return { code: nextCode };
-  },
-  async sendText() {}
+// Письма с кодом: код — последние 6 цифр темы.
+const mails: { to: string; subject: string; text: string; code: string }[] = [];
+let mailDown = false;
+setMailer({
+  async send(to, subject, text) {
+    if (mailDown) throw new Error('smtp down');
+    mails.push({ to, subject, text, code: subject.match(/(\d{6})$/)?.[1] ?? '' });
+  }
 });
+const lastCode = () => mails.at(-1)!.code;
+/** Заведомо неверный код. */
+const wrong = (code = lastCode()) => (code === '000000' ? '111111' : '000000');
 
 const ctx = { ip: '10.0.0.1', userAgent: 'vitest' };
 
-// «Прошло 2 минуты»: пауза между кодами снята и у подтверждения, и у номера.
+// «Прошла минута»: пауза между письмами снята и у подтверждения, и у адреса.
 const afterPause = async () => {
-  await query(`UPDATE auth_challenges SET last_sent_at = now() - interval '3 minutes'`);
-  await query(`UPDATE rate_limits SET window_start = now() - interval '3 minutes' WHERE key LIKE 'sms:gap:%'`);
+  await query(`UPDATE auth_challenges SET last_sent_at = now() - interval '2 minutes'`);
+  await query(`UPDATE rate_limits SET window_start = now() - interval '2 minutes' WHERE key LIKE 'code:gap:%'`);
 };
 
 const freelancer = (over: Record<string, unknown> = {}) => ({
-  role: 'freelancer', name: 'Данияр Сапаров', phone: '+7 916 000 00 00', login: 'daniyar_s', password: 'secret1!',
+  role: 'freelancer', name: 'Данияр Сапаров', login: 'daniyar_s', password: 'secret1!',
   email: 'd@mail.ru', city: 'Москва',
   freelancer: { skills: ['snow', 'bogus'], customSkills: ['вывоз снега'], gear: ['Триммер'], customGear: [], ownCar: true, workCities: ['Москва', 'Химки'] },
   ...over
 });
 
 const employer = (over: Record<string, unknown> = {}) => ({
-  role: 'employer', name: 'Айгуль Тлеубаева', phone: '8 (916) 111-11-11', login: 'aigul_t', password: 'secret2!',
-  email: 'a@mail.ru', city: 'Москва',
+  role: 'employer', name: 'Айгуль Тлеубаева', login: 'aigul_t', password: 'secret2!',
+  email: 'A@Mail.ru', city: 'Москва',
   employer: { orgType: 'УК / ТСЖ', orgName: 'УК «Тверская»', access: ['домофон'], tools: 'нужен свой инвентарь' },
   ...over
 });
@@ -57,7 +60,7 @@ async function expectErr(p: Promise<unknown>, field: string | undefined, text?: 
 
 async function register(input: Record<string, unknown>) {
   const s = await auth.startSignup(input, ctx);
-  return auth.verifySignup(s.challengeId, nextCode, { offer: true, pd: true }, ctx);
+  return auth.verifySignup(s.challengeId, lastCode(), { offer: true, pd: true }, ctx);
 }
 
 beforeAll(async () => {
@@ -66,9 +69,9 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  await query('TRUNCATE users, auth_challenges, rate_limits, daily_stats CASCADE');
-  sent.length = 0;
-  nextCode = '4821';
+  await query('TRUNCATE users, auth_challenges, rate_limits, daily_stats, notification_outbox CASCADE');
+  mails.length = 0;
+  mailDown = false;
 });
 
 afterAll(async () => {
@@ -76,44 +79,46 @@ afterAll(async () => {
 });
 
 describe('регистрация', () => {
-  it('полный цикл исполнителя: код → аккаунт, профиль, сессия', async () => {
+  it('полный цикл исполнителя: код в письме → аккаунт с подтверждённой почтой, профиль, сессия', async () => {
     const s = await auth.startSignup(freelancer(), ctx);
-    expect(s.sentTo).toBe('+7 916 000-00-00');
-    // Первый способ — звонок (код — последние 4 цифры номера); SMS — запасной.
-    expect(s.channel).toBe('call');
-    expect(sent).toEqual([expect.objectContaining({ channel: 'call' })]);
+    expect(s.sentTo).toBe('d@mail.ru');
+    expect(mails).toEqual([expect.objectContaining({ to: 'd@mail.ru', subject: expect.stringMatching(/код подтверждения \d{6}$/) })]);
+    expect(mails[0].text).toContain('Код: ' + lastCode());
     expect(await one('SELECT 1 FROM users')).toBeNull(); // до кода аккаунта нет
 
-    const { user, session } = await auth.verifySignup(s.challengeId, '4821', { offer: true, pd: true }, ctx);
-    expect(user).toMatchObject({ role: 'freelancer', login: 'daniyar_s', phone: '+79160000000', city: 'Москва' });
+    const { user, session } = await auth.verifySignup(s.challengeId, lastCode(), { offer: true, pd: true }, ctx);
+    expect(user).toMatchObject({ role: 'freelancer', login: 'daniyar_s', email: 'd@mail.ru', city: 'Москва' });
+    expect(user).not.toHaveProperty('phone');
     expect(user.baseLat).toBeCloseTo(55.75, 1);
+    const row = await one<{ phone: string | null; verified: boolean }>('SELECT phone, email_verified_at IS NOT NULL AS verified FROM users WHERE id = $1', [user.id]);
+    expect(row).toEqual({ phone: null, verified: true });
 
     const me = await sessionUser(session.token);
     expect(me?.id).toBe(user.id);
 
     const profile = await auth.loadProfile(user.id, 'freelancer');
     expect(profile).toMatchObject({ skills: ['snow'], customSkills: ['вывоз снега'], ownCar: true, workCities: ['Москва', 'Химки'] });
-    // Сразу после регистрации — письмо для подтверждения почты (уведомления по почте бесплатны, SMS выключены).
-    const mail = await one<{ to_addr: string; subject: string }>(`SELECT to_addr, subject FROM notification_outbox WHERE user_id = $1`, [user.id]);
-    expect(mail).toMatchObject({ to_addr: 'd@mail.ru', subject: expect.stringMatching(/подтвердите e-mail/) });
-    expect(await one(`SELECT 1 FROM notification_settings WHERE user_id = $1 AND NOT sms AND email`, [user.id])).not.toBeNull();
+    // Почта подтверждена кодом — отдельное письмо со ссылкой не нужно.
+    expect(await one(`SELECT 1 FROM notification_outbox WHERE user_id = $1`, [user.id])).toBeNull();
+    expect(await one(`SELECT 1 FROM notification_settings WHERE user_id = $1 AND email`, [user.id])).not.toBeNull();
   });
 
-  it('работодатель: телефон с 8 нормализуется, профиль сохраняется', async () => {
+  it('работодатель: профиль сохраняется, почта — как ввели', async () => {
     const { user } = await register(employer());
-    expect(user.phone).toBe('+79161111111');
+    expect(user.email).toBe('A@Mail.ru');
     expect(await auth.loadProfile(user.id, 'employer')).toMatchObject({ orgType: 'УК / ТСЖ', access: ['домофон'], tools: 'нужен свой инвентарь' });
   });
 
   it('обязательные поля — ошибка у первого поля с текстом прототипа', async () => {
     await expectErr(auth.checkContacts(freelancer({ name: 'Д' })), 'name', /имя и фамилию/);
-    await expectErr(auth.checkContacts(freelancer({ phone: '12345' })), 'phone', /минимум 10 цифр/);
+    await expectErr(auth.checkContacts(freelancer({ email: '' })), 'email', /Укажите e-mail/);
+    await expectErr(auth.checkContacts(freelancer({ email: 'a@b' })), 'email', /опечатка/);
     await expectErr(auth.checkContacts(freelancer({ login: 'да' })), 'login', /3–20 символов/);
     await expectErr(auth.checkContacts(freelancer({ password: '123' })), 'password', /не короче 8/);
     await expectErr(auth.checkContacts(freelancer({ password: '12345678' })), 'password', /самых частых/);
     await expectErr(auth.checkContacts(freelancer({ password: 'QWERTYUI' })), 'password', /самых частых/);
-    await expectErr(auth.checkContacts(freelancer({ login: 'daniyar_s', password: 'Daniyar_S' })), 'password', /Логин или номер/);
-    await expectErr(auth.checkContacts(freelancer({ email: 'a@b' })), 'email', /опечатка/);
+    await expectErr(auth.checkContacts(freelancer({ login: 'daniyar_s', password: 'Daniyar_S' })), 'password', /Логин или почту/);
+    await expectErr(auth.checkContacts(freelancer({ email: 'daniyar.sap@mail.ru', password: 'daniyar.sap' })), 'password', /Логин или почту/);
     await expectErr(auth.checkContacts(freelancer({ city: ' ' })), 'city', /город/);
   });
 
@@ -124,19 +129,21 @@ describe('регистрация', () => {
     await expectErr(auth.startSignup(employer({ employer: { access: ['домофон'] } }), ctx), 'tools');
   });
 
-  it('один аккаунт — одна роль: занятый телефон или логин в любой роли', async () => {
+  it('один аккаунт — одна роль: занятая почта (без учёта регистра) или логин в любой роли', async () => {
     await register(freelancer());
-    const e1 = await expectErr(auth.checkContacts(employer({ phone: '8 916 000-00-00' })), 'phone');
-    expect(e1.message).toBe('Этот номер уже зарегистрирован — как исполнитель. Один аккаунт — одна роль: войдите или укажите другой номер.');
+    const e1 = await expectErr(auth.checkContacts(employer({ email: 'D@MAIL.RU' })), 'email');
+    expect(e1.message).toBe('Эта почта уже зарегистрирована — как исполнитель. Один аккаунт — одна роль: войдите или укажите другую почту.');
     await expectErr(auth.checkContacts(employer({ login: 'DANIYAR_S' })), 'login', /Этот логин уже зарегистрирован — как исполнитель/);
   });
 
-  it('гонка: два незавершённых кода на один номер — второй аккаунт не создаётся', async () => {
+  it('гонка: два незавершённых кода на одну почту — второй аккаунт не создаётся', async () => {
     const a = await auth.startSignup(freelancer(), ctx);
+    const codeA = lastCode();
     await afterPause();
-    const b = await auth.startSignup(employer({ phone: '+7 916 000 00 00' }), ctx);
-    await auth.verifySignup(a.challengeId, '4821', { offer: true, pd: true }, ctx);
-    await expectErr(auth.verifySignup(b.challengeId, '4821', { offer: true, pd: true }, ctx), 'phone', /как исполнитель/);
+    const b = await auth.startSignup(employer({ email: 'd@mail.ru' }), ctx);
+    const codeB = lastCode();
+    await auth.verifySignup(a.challengeId, codeA, { offer: true, pd: true }, ctx);
+    await expectErr(auth.verifySignup(b.challengeId, codeB, { offer: true, pd: true }, ctx), 'email', /как исполнитель/);
   });
 
   it('модерация на сервере: ник, имя, свои навыки', async () => {
@@ -148,86 +155,84 @@ describe('регистрация', () => {
 
   it('код: 3 попытки, затем только новый код; оферта и согласие на ПДн — обе галочки обязательны', async () => {
     const s = await auth.startSignup(freelancer(), ctx);
-    await expectErr(auth.verifySignup(s.challengeId, '4821', { offer: false, pd: true }, ctx), 'offer', /оферты/);
-    await expectErr(auth.verifySignup(s.challengeId, '4821', { offer: true }, ctx), 'pdConsent', /персональных данных/);
-    await expectErr(auth.verifySignup(s.challengeId, '12', { offer: true, pd: true }, ctx), 'code', /четыре цифры/);
-    await expectErr(auth.verifySignup(s.challengeId, '0000', { offer: true, pd: true }, ctx), 'code', /осталось попыток: 2/);
-    await expectErr(auth.verifySignup(s.challengeId, '0000', { offer: true, pd: true }, ctx), 'code', /осталось попыток: 1/);
-    await expectErr(auth.verifySignup(s.challengeId, '0000', { offer: true, pd: true }, ctx), 'code', /Попытки исчерпаны/);
-    await expectErr(auth.verifySignup(s.challengeId, '4821', { offer: true, pd: true }, ctx), 'code', /Попытки исчерпаны/);
+    const code = lastCode();
+    await expectErr(auth.verifySignup(s.challengeId, code, { offer: false, pd: true }, ctx), 'offer', /оферты/);
+    await expectErr(auth.verifySignup(s.challengeId, code, { offer: true }, ctx), 'pdConsent', /персональных данных/);
+    await expectErr(auth.verifySignup(s.challengeId, '12', { offer: true, pd: true }, ctx), 'code', /шесть цифр/);
+    await expectErr(auth.verifySignup(s.challengeId, wrong(), { offer: true, pd: true }, ctx), 'code', /осталось попыток: 2/);
+    await expectErr(auth.verifySignup(s.challengeId, wrong(), { offer: true, pd: true }, ctx), 'code', /осталось попыток: 1/);
+    await expectErr(auth.verifySignup(s.challengeId, wrong(), { offer: true, pd: true }, ctx), 'code', /Попытки исчерпаны/);
+    await expectErr(auth.verifySignup(s.challengeId, code, { offer: true, pd: true }, ctx), 'code', /Попытки исчерпаны/);
 
-    // после исчерпания попыток — новый код, но не раньше паузы в 2 минуты (и звонок тоже)
-    nextCode = '7777';
-    await expectErr(auth.resendCode(s.challengeId, 'call', 'signup', ctx), 'code', /через 2 мин/);
+    // после исчерпания попыток — новый код, но не раньше паузы в минуту
+    await expectErr(auth.resendCode(s.challengeId, 'signup', ctx), 'code', /через (1 мин|\d+ с)/);
     await afterPause();
-    const r = await auth.resendCode(s.challengeId, 'call', 'signup', ctx);
-    expect(r.channel).toBe('call');
-    expect(sent.at(-1)).toMatchObject({ channel: 'call' });
-    const { user } = await auth.verifySignup(s.challengeId, '7777', { offer: true, pd: true }, ctx);
+    await auth.resendCode(s.challengeId, 'signup', ctx);
+    expect(mails).toHaveLength(2);
+    // Старый код после перевыпуска не подходит.
+    if (lastCode() !== code) await expectErr(auth.verifySignup(s.challengeId, code, { offer: true, pd: true }, ctx), 'code', /не совпал/);
+    const { user } = await auth.verifySignup(s.challengeId, lastCode(), { offer: true, pd: true }, ctx);
     expect(user.login).toBe('daniyar_s');
     // использованный код второй раз не срабатывает
-    await expectErr(auth.verifySignup(s.challengeId, '7777', { offer: true, pd: true }, ctx), undefined, /устарела/);
+    await expectErr(auth.verifySignup(s.challengeId, lastCode(), { offer: true, pd: true }, ctx), undefined, /устарела/);
   });
 
   it('параллельные попытки не обходят лимит в 3 кода', async () => {
     const s = await auth.startSignup(freelancer(), ctx);
-    const wrong = ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009', '0010'];
-    const res = await Promise.allSettled(wrong.map(c => auth.verifySignup(s.challengeId, c, { offer: true, pd: true }, ctx)));
+    const real = lastCode();
+    const tries = Array.from({ length: 10 }, (_, i) => String(i + 1).padStart(6, '0')).filter(c => c !== real);
+    const res = await Promise.allSettled(tries.map(c => auth.verifySignup(s.challengeId, c, { offer: true, pd: true }, ctx)));
     expect(res.every(r => r.status === 'rejected')).toBe(true);
     const row = await one<{ attempts: number }>('SELECT attempts FROM auth_challenges WHERE id = $1', [s.challengeId]);
     expect(row!.attempts).toBe(3);
-    await expectErr(auth.verifySignup(s.challengeId, '4821', { offer: true, pd: true }, ctx), 'code', /Попытки исчерпаны/);
+    await expectErr(auth.verifySignup(s.challengeId, real, { offer: true, pd: true }, ctx), 'code', /Попытки исчерпаны/);
   });
 
   it('мусорный id подтверждения — 400, а не ошибка базы', async () => {
-    await expectErr(auth.verifySignup('-'.repeat(36), '4821', { offer: true, pd: true }, ctx), undefined, /не найдена/);
+    await expectErr(auth.verifySignup('-'.repeat(36), '482100', { offer: true, pd: true }, ctx), undefined, /не найдена/);
   });
 
-  it('один код на номер — не чаще раза в 2 минуты, и новая регистрация паузу не обходит', async () => {
+  it('письмо с кодом на адрес — не чаще раза в минуту, и новая регистрация паузу не обходит', async () => {
     const s = await auth.startSignup(freelancer(), ctx);
-    expect(s.resendIn).toBe(120);
-    await expectErr(auth.resendCode(s.challengeId, 'sms', 'signup', ctx), 'code', /через (2 мин|1 мин \d+ с)/);
-    await expectErr(auth.startSignup(freelancer({ login: 'daniyar_2' }), ctx), undefined, /Код уже отправлен/);
-    await query(`UPDATE auth_challenges SET last_sent_at = now() - interval '61 seconds'`);
-    await expectErr(auth.resendCode(s.challengeId, 'sms', 'signup', ctx), 'code', /через \d+ с/);
+    expect(s.resendIn).toBe(60);
+    await expectErr(auth.resendCode(s.challengeId, 'signup', ctx), 'code', /через (1 мин|\d+ с)/);
+    await expectErr(auth.startSignup(freelancer({ login: 'daniyar_2' }), ctx), undefined, /уже отправлено/);
     await afterPause();
-    // Без явного способа — тем же, что и в прошлый раз (звонок); «прислать SMS» — явно.
-    expect((await auth.resendCode(s.challengeId, undefined, 'signup', ctx)).channel).toBe('call');
-    await afterPause();
-    expect((await auth.resendCode(s.challengeId, 'sms', 'signup', ctx)).channel).toBe('sms');
-    expect(sent.map(x => x.channel)).toEqual(['call', 'call', 'sms']);
+    await auth.resendCode(s.challengeId, 'signup', ctx);
+    expect(mails.map(m => m.to)).toEqual(['d@mail.ru', 'd@mail.ru']);
   });
 
-  it('подбор кода: не больше 10 неверных кодов на номер в сутки — по всем запросам кода сразу', async () => {
+  it('письмо не ушло — понятная ошибка, и сразу можно попробовать ещё раз', async () => {
+    mailDown = true;
+    const e = await expectErr(auth.startSignup(freelancer(), ctx), undefined, /Письмо не отправилось/);
+    expect(e.status).toBe(502);
+    mailDown = false;
+    await auth.startSignup(freelancer(), ctx);
+    expect(mails).toHaveLength(1);
+  });
+
+  it('подбор кода: не больше 10 неверных кодов на адрес в сутки — по всем запросам кода сразу', async () => {
     const s = await auth.startSignup(freelancer(), ctx);
     let fails = 0;
     for (let send = 0; send < 4 && fails < 10; send++) {
-      if (send) { await afterPause(); await auth.resendCode(s.challengeId, 'sms', 'signup', ctx); }
-      for (let k = 0; k < 3 && fails < 10; k++, fails++) await expectErr(auth.verifySignup(s.challengeId, '0000', { offer: true, pd: true }, ctx), 'code', /не совпал|исчерпаны/);
+      if (send) { await afterPause(); await auth.resendCode(s.challengeId, 'signup', ctx); }
+      for (let k = 0; k < 3 && fails < 10; k++, fails++) await expectErr(auth.verifySignup(s.challengeId, wrong(), { offer: true, pd: true }, ctx), 'code', /не совпал|исчерпаны/);
     }
-    // Даже верный код больше не принимается: номер закрыт до завтра.
+    // Даже верный код больше не принимается: адрес закрыт до завтра.
     await afterPause();
-    await auth.resendCode(s.challengeId, 'sms', 'signup', ctx);
-    await expectErr(auth.verifySignup(s.challengeId, '4821', { offer: true, pd: true }, ctx), 'code', /попробуйте завтра/);
+    await auth.resendCode(s.challengeId, 'signup', ctx);
+    await expectErr(auth.verifySignup(s.challengeId, lastCode(), { offer: true, pd: true }, ctx), 'code', /попробуйте завтра/);
   });
 
-  it('SMS на один номер — не больше 10 в сутки', async () => {
-    await query(`INSERT INTO rate_limits (key, window_start, count) VALUES ('sms:day:79160000000', now(), 10)`);
-    await expectErr(auth.startSignup(freelancer(), ctx), undefined, /уже отправлено много кодов/);
-  });
-
-  it('общий суточный бюджет SMS исчерпан — код не отправляется, поддержке одно письмо', async () => {
-    await query(`INSERT INTO rate_limits (key, window_start, count) VALUES ('sms:all', now(), 300)`);
-    await expectErr(auth.startSignup(freelancer(), ctx), undefined, /не получается отправить код/);
-    await expectErr(auth.startSignup(freelancer({ phone: '+7 916 000-00-01', login: 'other_one' }), ctx), undefined, /не получается отправить код/);
-    const mails = await query<{ n: number }>(`SELECT count(*)::int AS n FROM notification_outbox WHERE subject = 'Исчерпан суточный лимит SMS' AND created_at > now() - interval '1 minute'`);
-    expect(mails.rows[0].n).toBe(1);
+  it('писем с кодом на один адрес — не больше 10 в сутки', async () => {
+    await query(`INSERT INTO rate_limits (key, window_start, count) VALUES ('code:day:e:d@mail.ru', now(), 10)`);
+    await expectErr(auth.startSignup(freelancer({ email: 'D@mail.ru' }), ctx), undefined, /уже отправлено много писем/);
   });
 
   it('просроченный код не принимается', async () => {
     const s = await auth.startSignup(freelancer(), ctx);
     await query(`UPDATE auth_challenges SET expires_at = now() - interval '1 second'`);
-    await expectErr(auth.verifySignup(s.challengeId, '4821', { offer: true, pd: true }, ctx), 'code', /устарел/);
+    await expectErr(auth.verifySignup(s.challengeId, lastCode(), { offer: true, pd: true }, ctx), 'code', /устарел/);
   });
 });
 
@@ -237,26 +242,28 @@ describe('вход', () => {
     await register(employer());
   });
 
-  it('по логину (регистр не важен) и по телефону (последние 10 цифр); роль — из аккаунта', async () => {
+  it('по логину и по почте (регистр не важен); роль — из аккаунта', async () => {
     expect((await auth.login('Daniyar_S', 'secret1!', ctx)).user.role).toBe('freelancer');
-    expect((await auth.login('8 916 111 11 11', 'secret2!', ctx)).user.role).toBe('employer');
-    expect((await auth.login('+7 (916) 000-00-00', 'secret1!', ctx)).user.login).toBe('daniyar_s');
+    expect((await auth.login('a@mail.RU', 'secret2!', ctx)).user.role).toBe('employer');
+    expect((await auth.login(' D@Mail.ru ', 'secret1!', ctx)).user.login).toBe('daniyar_s');
   });
 
   it('ошибки входа', async () => {
-    await expectErr(auth.login('', 'secret1!', ctx), 'identifier', /Введите логин/);
-    await expectErr(auth.login('+7 916', 'secret1!', ctx), 'identifier', /минимум 10/);
-    await expectErr(auth.login('д@', 'secret1!', ctx), 'identifier', /Логин — 3–20/);
+    await expectErr(auth.login('', 'secret1!', ctx), 'identifier', /Введите почту или логин/);
+    await expectErr(auth.login('d@mail', 'secret1!', ctx), 'identifier', /опечатка/);
+    await expectErr(auth.login('+7 916 000 00 00', 'secret1!', ctx), 'identifier', /Логин — 3–20/);
     await expectErr(auth.login('daniyar_s', '123', ctx), 'password', /не короче 6/);
     await expectErr(auth.login('nobody_here', 'secret1!', ctx), 'identifier', /с таким логином не найден/);
-    await expectErr(auth.login('+7 999 000 00 00', 'secret1!', ctx), 'identifier', /с таким номером не найден/);
+    await expectErr(auth.login('nobody@mail.ru', 'secret1!', ctx), 'identifier', /с такой почтой не найден/);
     await expectErr(auth.login('daniyar_s', 'wrong-pass', ctx), 'password', /Неверный пароль/);
   });
 
-  it('ограничение частоты попыток входа', async () => {
+  it('ограничение частоты попыток входа — по логину и по почте', async () => {
     for (let i = 0; i < 10; i++) await expectErr(auth.login('daniyar_s', 'wrong-pass', ctx), 'password');
     const e = await expectErr(auth.login('daniyar_s', 'secret1!', ctx), undefined, /Слишком много попыток/);
     expect(e.status).toBe(429);
+    for (let i = 0; i < 10; i++) await expectErr(auth.login('d@mail.ru', 'wrong-pass', ctx), 'password');
+    await expectErr(auth.login('D@MAIL.RU', 'secret1!', ctx), undefined, /Слишком много попыток/);
   });
 
   it('параллельная пачка неверных паролей не обходит лимит', async () => {
@@ -293,16 +300,15 @@ describe('вход', () => {
 });
 
 describe('восстановление пароля', () => {
-  it('логин → код → новый пароль → вход; старые сессии и пароль больше не работают', async () => {
+  it('почта или логин → код в письме → новый пароль → вход; старые сессии и пароль больше не работают', async () => {
     const { session: old } = await register(freelancer());
     await afterPause();
-    nextCode = '5150';
     const s = await auth.startRecover('daniyar_s', ctx);
-    expect(sent.at(-1)).toMatchObject({ phone: '+79160000000', code: '5150' });
+    expect(mails.at(-1)).toMatchObject({ to: 'd@mail.ru', subject: expect.stringMatching(/восстановления пароля \d{6}$/) });
 
     await expectErr(auth.completeRecover(s.challengeId, 'newpass1', 'newpass1', ctx), undefined, /устарело/); // без кода нельзя
-    await expectErr(auth.verifyRecover(s.challengeId, '0000'), 'code', /не совпал/);
-    await auth.verifyRecover(s.challengeId, '5150');
+    await expectErr(auth.verifyRecover(s.challengeId, wrong()), 'code', /не совпал/);
+    await auth.verifyRecover(s.challengeId, lastCode());
     await expectErr(auth.completeRecover(s.challengeId, 'short', 'short', ctx), 'password', /не короче 8/);
     await expectErr(auth.completeRecover(s.challengeId, 'newpass1', 'newpass2', ctx), 'password2', /не совпали/);
     const { user } = await auth.completeRecover(s.challengeId, 'newpass1', 'newpass1', ctx);
@@ -310,20 +316,51 @@ describe('восстановление пароля', () => {
 
     expect(await sessionUser(old.token)).toBeNull();
     await expectErr(auth.login('daniyar_s', 'secret1!', ctx), 'password');
-    expect((await auth.login('daniyar_s', 'newpass1', ctx)).user.login).toBe('daniyar_s');
+    expect((await auth.login('d@mail.ru', 'newpass1', ctx)).user.login).toBe('daniyar_s');
+
+    // По почте — так же.
+    await afterPause();
+    await auth.startRecover('D@mail.ru', ctx);
+    expect(mails.at(-1)!.to).toBe('d@mail.ru');
   });
 
   it('не раскрывает, существует ли аккаунт', async () => {
     const s = await auth.startRecover('ghost_user', ctx);
     expect(s.challengeId).toMatch(/[0-9a-f-]{36}/);
-    expect(sent).toHaveLength(0);
-    await expectErr(auth.verifyRecover(s.challengeId, '4821'), 'code', /не совпал/);
-    // Пауза в 2 минуты одинакова для чужого логина и настоящего аккаунта — по ответу их не различить.
-    await expectErr(auth.startRecover('ghost_user', ctx), undefined, /Код уже отправлен/);
+    expect(mails).toHaveLength(0);
+    await expectErr(auth.verifyRecover(s.challengeId, '482100'), 'code', /не совпал/);
+    // Пауза одинакова для чужого логина или адреса и настоящего аккаунта — по ответу их не различить.
+    await expectErr(auth.startRecover('ghost_user', ctx), undefined, /уже отправлено/);
+    await auth.startRecover('ghost@mail.ru', ctx);
+    await expectErr(auth.startRecover('ghost@mail.ru', ctx), undefined, /уже отправлено/);
+    expect(mails).toHaveLength(0);
     await register(freelancer());
     await afterPause();
     await auth.startRecover('daniyar_s', ctx);
-    await expectErr(auth.startRecover('daniyar_s', ctx), undefined, /Код уже отправлен/);
+    await expectErr(auth.startRecover('daniyar_s', ctx), undefined, /уже отправлено/);
+  });
+});
+
+describe('смена почты', () => {
+  it('нужен пароль и код на новый адрес; прежний адрес получает предупреждение; вход — по новому', async () => {
+    const { user } = await register(freelancer());
+    await register(employer());
+    await expectErr(auth.startEmailChange(user.id, { email: 'new@mail.ru', password: 'wrong-pass' }, ctx), 'password', /Неверный пароль/);
+    await expectErr(auth.startEmailChange(user.id, { email: 'D@mail.ru', password: 'secret1!' }, ctx), 'email', /текущий адрес/);
+    await expectErr(auth.startEmailChange(user.id, { email: 'a@mail.ru', password: 'secret1!' }, ctx), 'email', /уже зарегистрирована/);
+    await expectErr(auth.startEmailChange(user.id, { email: 'nope', password: 'secret1!' }, ctx), 'email', /опечатка/);
+
+    const s = await auth.startEmailChange(user.id, { email: 'new@mail.ru', password: 'secret1!' }, ctx);
+    expect(mails.at(-1)).toMatchObject({ to: 'new@mail.ru', subject: expect.stringMatching(/смены почты \d{6}$/) });
+    const other = await one<{ id: string }>(`SELECT id FROM users WHERE login = 'aigul_t'`);
+    await expectErr(auth.verifyEmailChange(other!.id, s.challengeId, lastCode()), undefined, /другому аккаунту/);
+    await expectErr(auth.verifyEmailChange(user.id, s.challengeId, wrong()), 'code', /не совпал/);
+    expect(await auth.verifyEmailChange(user.id, s.challengeId, lastCode())).toEqual({ email: 'new@mail.ru' });
+
+    const warn = await one<{ to_addr: string; body: string }>(`SELECT to_addr, body FROM notification_outbox WHERE user_id = $1 AND channel = 'email'`, [user.id]);
+    expect(warn).toMatchObject({ to_addr: 'd@mail.ru', body: expect.stringContaining('new@mail.ru') });
+    expect((await auth.login('new@mail.ru', 'secret1!', ctx)).user.id).toBe(user.id);
+    await expectErr(auth.login('d@mail.ru', 'secret1!', ctx), 'identifier', /не найден/);
   });
 });
 

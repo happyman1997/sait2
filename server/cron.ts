@@ -61,7 +61,7 @@ export function startScheduler(everyMs = 10 * 60_000) {
   setTimeout(tick, 15_000);
   timer = setInterval(tick, everyMs);
   timer.unref?.();
-  // Очередь SMS/e-mail — чаще: SKIP LOCKED делает параллельные инстансы безопасными.
+  // Очередь писем и пушей — чаще: SKIP LOCKED делает параллельные инстансы безопасными.
   outboxTimer = setInterval(() => processOutbox().catch(e => console.error('[outbox]', (e as Error).message)), 30_000);
   outboxTimer.unref?.();
 }

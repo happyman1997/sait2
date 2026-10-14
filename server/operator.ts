@@ -14,7 +14,6 @@ export function operator() {
     // Номер присваивают после уведомления — до этого строки о нём в политике нет.
     rknNumber: process.env.OPERATOR_RKN_NUMBER?.trim() || '',
     hosting: v('PROCESSOR_HOSTING', 'хостинг-провайдер, ИНН'),
-    sms: v('PROCESSOR_SMS', 'SMS-провайдер, ИНН'),
     mail: v('PROCESSOR_MAIL', 'почтовый сервис, ИНН'),
     // Облачное хранилище — обработчик, если в нём фото (S3_BUCKET) или резервные копии (BACKUP_S3_BUCKET); иначе всё у хостинга.
     storage: usesCloudStorage() ? v('PROCESSOR_STORAGE', 'облачное хранилище, ИНН') : process.env.PROCESSOR_STORAGE?.trim() || '',
@@ -25,10 +24,10 @@ export function operator() {
 
 export const usesCloudStorage = () => !!(config.s3Bucket() || process.env.BACKUP_S3_BUCKET?.trim());
 
-/** Обработчики по поручению оператора (хостинг, SMS, почта, облачное хранилище) — [название, кто] без пустых. */
+/** Обработчики по поручению оператора (хостинг, почта, облачное хранилище) — [название, кто] без пустых. */
 export function processors(): [string, string][] {
   const o = operator();
-  return ([['хостинг', o.hosting], ['SMS', o.sms], ['почта', o.mail], ['облачное хранилище фото и резервных копий', o.storage]] as [string, string][]).filter(p => p[1]);
+  return ([['хостинг', o.hosting], ['почта', o.mail], ['облачное хранилище фото и резервных копий', o.storage]] as [string, string][]).filter(p => p[1]);
 }
 
 /** «ИП Иванов Иван Иванович, ОГРНИП …, ИНН …» */

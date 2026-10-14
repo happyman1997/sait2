@@ -18,7 +18,6 @@ export type SessionUser = {
   id: string;
   role: 'freelancer' | 'employer';
   login: string;
-  phone: string;
   email: string;
   name: string;
   city: string;
@@ -49,7 +48,7 @@ export async function createSession(userId: string, ctx: Ctx, db: Db = pool()): 
 export async function sessionUser(token: string | undefined | null, db: Db = pool()): Promise<SessionUser | null> {
   if (!token || token.length > 100) return null;
   const row = await one<SessionUser & { last_seen_at: Date; session_created_at: Date }>(
-    `SELECT u.id, u.role, u.login, u.phone, u.email, u.name, u.city, u.base_lat, u.base_lng, u.base_label, u.avatar_url, u.status, u.is_staff, u.created_at,
+    `SELECT u.id, u.role, u.login, u.email, u.name, u.city, u.base_lat, u.base_lng, u.base_label, u.avatar_url, u.status, u.is_staff, u.created_at,
             s.id AS session_id, s.last_seen_at, s.created_at AS session_created_at
        FROM sessions s JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = $1 AND s.expires_at > now() AND s.created_at > now() - make_interval(days => $2)`,
@@ -58,7 +57,7 @@ export async function sessionUser(token: string | undefined | null, db: Db = poo
   );
   // Заблокированный или удалённый аккаунт — входа нет.
   if (!row || row.status !== 'active') return null;
-  // Поддержка видит телефоны и переписку: её вход живёт не больше 7 дней и гаснет после 12 часов без действий.
+  // Поддержка видит почту пользователей и переписку: её вход живёт не больше 7 дней и гаснет после 12 часов без действий.
   if (row.is_staff && (Date.now() - row.last_seen_at.getTime() > STAFF_IDLE_MS || Date.now() - row.session_created_at.getTime() > STAFF_MAX_MS)) {
     await query('DELETE FROM sessions WHERE id = $1', [row.session_id], db);
     return null;

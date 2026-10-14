@@ -12,8 +12,8 @@ async function main() {
   const hash = await hashPassword('demo123');
   await tx(async (db) => {
     const f = await db.query(
-      `INSERT INTO users (role, login, phone, phone_key, email, password_hash, name, city, base_lat, base_lng, offer_accepted_at, offer_version)
-       VALUES ('freelancer', 'daniyar_s', '+79160000000', '9160000000', 'daniyar@example.ru', $1, 'Данияр Сапаров', 'Москва', 55.7558, 37.6173, now(), 'seed')
+      `INSERT INTO users (role, login, email, email_verified_at, password_hash, name, city, base_lat, base_lng, offer_accepted_at, offer_version)
+       VALUES ('freelancer', 'daniyar_s', 'daniyar@example.ru', now(), $1, 'Данияр Сапаров', 'Москва', 55.7558, 37.6173, now(), 'seed')
        ON CONFLICT DO NOTHING RETURNING id`, [hash]);
     if (f.rows[0]) {
       await db.query(`INSERT INTO freelancer_profiles (user_id, skills, gear, own_car, work_cities) VALUES ($1, '{snow,ice,grass}', '{"Лопата и скребок","Снегоуборщик"}', true, '{Москва,Химки}')`, [f.rows[0].id]);
@@ -21,16 +21,16 @@ async function main() {
     }
     // Второй исполнитель — для проверки замен в серии и нескольких откликов.
     const o = await db.query(
-      `INSERT INTO users (role, login, phone, phone_key, email, password_hash, name, city, base_lat, base_lng, offer_accepted_at, offer_version)
-       VALUES ('freelancer', 'olga_k', '+79163333333', '9163333333', 'olga@example.ru', $1, 'Ольга Кузнецова', 'Москва', 55.7512, 37.6184, now(), 'seed')
+      `INSERT INTO users (role, login, email, email_verified_at, password_hash, name, city, base_lat, base_lng, offer_accepted_at, offer_version)
+       VALUES ('freelancer', 'olga_k', 'olga@example.ru', now(), $1, 'Ольга Кузнецова', 'Москва', 55.7512, 37.6184, now(), 'seed')
        ON CONFLICT DO NOTHING RETURNING id`, [hash]);
     if (o.rows[0]) {
       await db.query(`INSERT INTO freelancer_profiles (user_id, skills, gear, work_cities) VALUES ($1, '{snow,street}', '{"Лопата и скребок"}', '{Москва}')`, [o.rows[0].id]);
       await db.query('INSERT INTO notification_settings (user_id) VALUES ($1)', [o.rows[0].id]);
     }
     const e = await db.query(
-      `INSERT INTO users (role, login, phone, phone_key, email, password_hash, name, city, base_lat, base_lng, offer_accepted_at, offer_version)
-       VALUES ('employer', 'aigul_t', '+79161111111', '9161111111', 'aigul@example.ru', $1, 'Айгуль Тлеубаева', 'Москва', 55.7558, 37.6173, now(), 'seed')
+      `INSERT INTO users (role, login, email, email_verified_at, password_hash, name, city, base_lat, base_lng, offer_accepted_at, offer_version)
+       VALUES ('employer', 'aigul_t', 'aigul@example.ru', now(), $1, 'Айгуль Тлеубаева', 'Москва', 55.7558, 37.6173, now(), 'seed')
        ON CONFLICT DO NOTHING RETURNING id`, [hash]);
     if (e.rows[0]) {
       await db.query(`INSERT INTO employer_profiles (user_id, org_type, org_name, access, tools) VALUES ($1, 'частное лицо', 'Айгуль Тлеубаева', '{домофон,"встречу лично"}', 'инвентарь есть на объекте')`, [e.rows[0].id]);

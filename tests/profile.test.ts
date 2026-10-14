@@ -1,4 +1,4 @@
-// Этап 4: профиль, база, настройки уведомлений, журнал, доставка (тихие часы, лимит, очередь), фото смены, телефон и пароль.
+// Этап 4: профиль, база, настройки уведомлений, журнал, доставка (тихие часы, лимит, очередь), фото смены, пароль.
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -6,7 +6,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL || 'postgres://arena:arena@localhost:5432/arena_test';
 process.env.UPLOAD_DIR = await fs.mkdtemp(path.join(os.tmpdir(), 'arena-up-'));
-process.env.SMS_DEV_FIXED_CODE = '1234';
 
 const { pool, query, one } = await import('@/server/db');
 const { migrate } = await import('@/server/migrate');
@@ -17,7 +16,6 @@ const files = await import('@/server/files');
 const auth = await import('@/server/auth');
 const ev = await import('@/server/events');
 const { setMailer } = await import('@/server/mail');
-const { setCodeSender } = await import('@/server/sms');
 const { sessionUser, createSession } = await import('@/server/session');
 const { AppError } = await import('@/server/errors');
 const { localISO } = await import('@/lib/jobs');
@@ -30,22 +28,16 @@ const today = localISO();
 const plusDays = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return localISO(d); };
 const MOSCOW = { lat: 55.7558, lng: 37.6173 };
 
-const sms: { to: string; text: string }[] = [];
 const mails: { to: string; subject: string; text: string }[] = [];
-let smsFail = false;
+let mailFail = false;
+setMailer({ async send(to, subject, text) { if (mailFail) throw new Error('почтовый сервер недоступен'); mails.push({ to, subject, text }); } });
 
-setCodeSender({
-  async send() { return { code: '1234' }; },
-  async sendText(to, text) { if (smsFail) throw new Error('шлюз недоступен'); sms.push({ to, text }); }
-});
-setMailer({ async send(to, subject, text) { mails.push({ to, subject, text }); } });
-
-async function mkUser(role: 'freelancer' | 'employer', login: string, phoneKey: string, name: string, at = MOSCOW): Promise<SU> {
+async function mkUser(role: 'freelancer' | 'employer', login: string, name: string, at = MOSCOW): Promise<SU> {
   const { hashPassword } = await import('@/server/password');
   const u = await one<{ id: string }>(
-    `INSERT INTO users (role, login, phone, phone_key, email, password_hash, name, city, base_lat, base_lng, offer_accepted_at, offer_version)
-     VALUES ($1, $2, '+7' || $3, $3, $2 || '@x.ru', $4, $5, 'Москва', $6, $7, now(), 't') RETURNING id`,
-    [role, login, phoneKey, await hashPassword('secret1!'), name, at.lat, at.lng]);
+    `INSERT INTO users (role, login, email, email_verified_at, password_hash, name, city, base_lat, base_lng, offer_accepted_at, offer_version)
+     VALUES ($1, $2, $2 || '@x.ru', now(), $3, $4, 'Москва', $5, $6, now(), 't') RETURNING id`,
+    [role, login, await hashPassword('secret1!'), name, at.lat, at.lng]);
   await query('INSERT INTO notification_settings (user_id) VALUES ($1)', [u!.id]);
   if (role === 'freelancer') await query(`INSERT INTO freelancer_profiles (user_id, skills, work_cities) VALUES ($1, '{snow}', '{Москва}')`, [u!.id]);
   else await query(`INSERT INTO employer_profiles (user_id, org_type) VALUES ($1, 'УК / ТСЖ')`, [u!.id]);
@@ -69,8 +61,7 @@ async function expectErr(p: Promise<unknown>, text?: RegExp, field?: string) {
 }
 
 /** Настройки без тихих часов — чтобы доставка не зависела от времени запуска тестов. */
-// SMS у новых пользователей выключены по умолчанию — для проверок доставки включаем явно.
-const loud = (u: SU, over: Record<string, unknown> = {}) => prof.saveSettings(u, { quietOn: false, sms: true, ...over });
+const loud = (u: SU, over: Record<string, unknown> = {}) => prof.saveSettings(u, { quietOn: false, ...over });
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, 0x49, 0x48, 0x44, 0x52]);
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46]);
@@ -85,10 +76,10 @@ beforeAll(async () => {
 beforeEach(async () => {
   await query('TRUNCATE jobs, rate_limits, notification_outbox, files CASCADE');
   await query('DELETE FROM users');
-  sms.length = 0; mails.length = 0; smsFail = false;
-  emp = await mkUser('employer', 'aigul_t', '9161111111', 'Айгуль Тлеубаева');
-  fl = await mkUser('freelancer', 'daniyar_s', '9160000000', 'Данияр Сапаров');
-  fl2 = await mkUser('freelancer', 'olga_k', '9163333333', 'Ольга Кузнецова', { lat: 59.93, lng: 30.33 }); // Петербург
+  mails.length = 0; mailFail = false;
+  emp = await mkUser('employer', 'aigul_t', 'Айгуль Тлеубаева');
+  fl = await mkUser('freelancer', 'daniyar_s', 'Данияр Сапаров');
+  fl2 = await mkUser('freelancer', 'olga_k', 'Ольга Кузнецова', { lat: 59.93, lng: 30.33 }); // Петербург
 });
 
 afterAll(async () => {
@@ -144,10 +135,13 @@ describe('база и настройки', () => {
   });
 
   it('настройки: допустимые значения сохраняются, мусор — нет', async () => {
-    // По умолчанию: SMS выключены, письма включены (уходят только на подтверждённый адрес).
-    expect(await prof.getSettings(fl)).toMatchObject({ sms: false, email: true, push: true });
+    // По умолчанию: письма (уходят только на подтверждённый адрес) и пуш включены; SMS нет совсем.
+    const d = await prof.getSettings(fl);
+    expect(d).toMatchObject({ email: true, push: true });
+    expect(d).not.toHaveProperty('sms');
     const s = await prof.saveSettings(fl, { radiusKm: 100, dailyCap: 30, quietFrom: 23, quietTo: 6, sms: true, email: 'да' });
-    expect(s).toMatchObject({ radiusKm: 100, dailyCap: 30, quietFrom: 23, quietTo: 6, sms: true, email: true });
+    expect(s).toMatchObject({ radiusKm: 100, dailyCap: 30, quietFrom: 23, quietTo: 6, email: true });
+    expect(s).not.toHaveProperty('sms');
     const s2 = await prof.saveSettings(fl, { radiusKm: 77, dailyCap: 1000, quietFrom: 25 });
     expect(s2).toMatchObject({ radiusKm: 100, dailyCap: 30, quietFrom: 23 });
   });
@@ -160,14 +154,15 @@ describe('журнал и доставка', () => {
     const near = await query<{ user_id: string }>(`SELECT user_id FROM events WHERE kind = 'nearby' AND job_id = (SELECT id FROM jobs WHERE num = $1)`, [j.num]);
     expect(near.rows.map(r => r.user_id)).toEqual([fl.id]);
     expect((await ev.processOutbox()).sent).toBe(1);
-    expect(sms[0].to).toBe(fl.phone);
-    expect(sms[0].text).toMatch(/^Арена Работы: /);
+    expect(mails[0].to).toBe(fl.email);
+    expect(mails[0].subject).toMatch(/^Арена Работы: /);
+    expect(await one(`SELECT 1 FROM notification_outbox WHERE channel = 'sms'`)).toBeNull();
     // Свои действия работодателя — в журнале, но прочитаны и без доставки.
     const mine = await prof.listEvents(emp);
     expect(mine.unread).toBe(0);
   });
 
-  it('выключенные оповещения: журнал ведётся, SMS не уходят', async () => {
+  it('выключенные оповещения: журнал ведётся, письма не уходят', async () => {
     await loud(fl, { enabled: false });
     await jobs.createJob(form(), emp, today);
     const l = await prof.listEvents(fl);
@@ -184,39 +179,36 @@ describe('журнал и доставка', () => {
     expect((await ev.processOutbox()).sent).toBe(3);
   });
 
-  it('общий суточный бюджет SMS: уведомлениям — до 80%, дальше SMS не уходят', async () => {
+  it('неподтверждённая почта — письма не уходят', async () => {
     await loud(fl);
-    await query(`INSERT INTO rate_limits (key, window_start, count) VALUES ('sms:all', now(), 240)`);
+    await query('UPDATE users SET email_verified_at = NULL WHERE id = $1', [fl.id]);
     await jobs.createJob(form(), emp, today);
-    expect(await ev.processOutbox()).toEqual({ sent: 0, failed: 1 });
-    expect(sms).toHaveLength(0);
-    expect((await one<{ error: string }>(`SELECT error FROM notification_outbox WHERE channel = 'sms'`))!.error).toMatch(/лимит SMS/);
+    expect((await ev.processOutbox()).sent).toBe(0);
+    expect(mails).toHaveLength(0);
   });
 
   it('тихие часы откладывают отправку; срочное проходит, если разрешено', async () => {
     const { hour } = ev.localClock();
     // Тихие часы — ровно текущий час.
-    await prof.saveSettings(fl, { sms: true, quietOn: true, quietFrom: hour, quietTo: (hour + 1) % 24, urgentBypass: true });
+    await prof.saveSettings(fl, { quietOn: true, quietFrom: hour, quietTo: (hour + 1) % 24, urgentBypass: true });
     await jobs.createJob(form(), emp, today);
     expect((await ev.processOutbox()).sent).toBe(0);
     await jobs.createJob(form({ urgent: true, dateISO: today }), emp, today);
     expect((await ev.processOutbox()).sent).toBe(1);
   });
 
-  it('e-mail и повтор при сбое шлюза', async () => {
-    await loud(fl, { email: true });
-    await query('UPDATE users SET email_verified_at = now() WHERE id = $1', [fl.id]);
-    smsFail = true;
+  it('повтор при сбое почтового сервера; в письме — ссылка на заказ', async () => {
+    await loud(fl);
+    mailFail = true;
     await jobs.createJob(form(), emp, today);
-    const r = await ev.processOutbox();
-    expect(r).toEqual({ sent: 1, failed: 1 });
-    expect(mails[0].to).toBe(fl.email);
-    expect(mails[0].text).toMatch(/\/\?job=\d+/);
-    const o = await one<{ status: string; attempts: number }>(`SELECT status, attempts FROM notification_outbox WHERE channel = 'sms'`);
+    expect(await ev.processOutbox()).toEqual({ sent: 0, failed: 1 });
+    const o = await one<{ status: string; attempts: number }>(`SELECT status, attempts FROM notification_outbox WHERE channel = 'email'`);
     expect(o).toMatchObject({ status: 'pending', attempts: 1 });
-    smsFail = false;
+    mailFail = false;
     await query(`UPDATE notification_outbox SET next_try_at = now() WHERE status = 'pending'`);
     expect((await ev.processOutbox()).sent).toBe(1);
+    expect(mails[0].to).toBe(fl.email);
+    expect(mails[0].text).toMatch(/\/\?job=\d+/);
   });
 
   it('пачка событий одному человеку: лимит считается внутри пачки', async () => {
@@ -336,17 +328,7 @@ describe('файлы и уборка', () => {
   });
 });
 
-describe('телефон и пароль', () => {
-  it('смена телефона: нужен пароль, код на новый номер', async () => {
-    await expectErr(auth.startPhoneChange(fl.id, { phone: '+7 916 555 44 33', password: 'wrong' }, {}), /пароль/i, 'password');
-    await expectErr(auth.startPhoneChange(fl.id, { phone: '+7 916 111 11 11', password: 'secret1!' }, {}), /занят|зарегистр/i, 'phone');
-    const s = await auth.startPhoneChange(fl.id, { phone: '+7 916 555 44 33', password: 'secret1!' }, {});
-    await expectErr(auth.verifyPhoneChange(emp.id, s.challengeId, '1234'), /другому аккаунту/);
-    await auth.verifyPhoneChange(fl.id, s.challengeId, '1234');
-    const u = await one<{ phone_key: string }>('SELECT phone_key FROM users WHERE id = $1', [fl.id]);
-    expect(u!.phone_key).toBe('9165554433');
-  });
-
+describe('пароль', () => {
   it('смена пароля завершает другие входы, текущий остаётся', async () => {
     const other = await createSession(fl.id, {});
     await expectErr(auth.changePassword(fl.id, { current: 'nope', password: 'newpass1', password2: 'newpass1' }, fl.session_id), /Текущий/, 'current');

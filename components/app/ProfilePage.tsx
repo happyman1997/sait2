@@ -11,7 +11,6 @@ import { css } from '@/lib/css';
 import { uploadForm } from '@/lib/image';
 import { disablePush } from '@/lib/push-client';
 import { dateLabel, money, plural } from '@/lib/jobs';
-import { formatPhone } from '@/lib/validation';
 import { useFlash } from '@/components/Toast';
 import { SELF_HOSTED_MAP } from '@/components/map/style';
 import { AdSlot } from './AdSlot';
@@ -20,7 +19,7 @@ import { Chip, Corners, FIELD_ERR, LABEL, MUTED, initialsOf } from './ui';
 import sty from './ProfilePage.module.css';
 
 type Profile = {
-  user: { id: string; role: 'freelancer' | 'employer'; login: string; phone: string; email: string; name: string; city: string; avatarUrl: string | null; baseLabel: string; emailVerified: boolean };
+  user: { id: string; role: 'freelancer' | 'employer'; login: string; email: string; name: string; city: string; avatarUrl: string | null; baseLabel: string; emailVerified: boolean };
   profile: {
     skills?: string[]; customSkills?: string[]; gear?: string[]; customGear?: string[]; ownCar?: boolean; workCities?: string[];
     orgType?: string; orgName?: string; objectKind?: string; objectOther?: string; access?: string[]; tools?: string;
@@ -136,7 +135,7 @@ export function ProfilePage() {
           <HeaderCard p={p} setP={setP} patch={patch} busy={busy} err={err} />
 
           <div className={sty.ce5a6d3c}>
-            <Contacts p={p} patch={patch} busy={busy} fieldErr={fieldErr} onPhone={load} />
+            <Contacts p={p} patch={patch} busy={busy} fieldErr={fieldErr} onEmail={load} />
             {p.oauth && (p.oauth.providers.length > 0 || p.oauth.linked.length > 0) && <Services oauth={p.oauth} onChange={load} />}
 
             {isEmp ? <Organization p={p} patch={patch} busy={busy} fieldErr={fieldErr} /> : (
@@ -357,18 +356,17 @@ function HeaderCard({ p, setP, patch, busy, err }: {
 
 // ───────────────────────── Вход и контакты ─────────────────────────
 
-function Contacts({ p, patch, busy, fieldErr, onPhone }: {
-  p: Profile; patch: (b: Record<string, unknown>, ok?: string, key?: string) => Promise<boolean>; busy: string; fieldErr: (f: string) => ReactNode; onPhone: () => void;
+function Contacts({ p, patch, busy, fieldErr, onEmail }: {
+  p: Profile; patch: (b: Record<string, unknown>, ok?: string, key?: string) => Promise<boolean>; busy: string; fieldErr: (f: string) => ReactNode; onEmail: () => void;
 }) {
   const { setRail } = useLive();
   const [login, setLogin] = useState(p.user.login);
-  const [email, setEmail] = useState(p.user.email);
-  const [phoneOpen, setPhoneOpen] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
-  const dirty = login.trim() !== p.user.login || email.trim() !== p.user.email;
+  const dirty = login.trim() !== p.user.login;
 
   return (
-    <Section title="Вход и контакты" note="Войти можно по логину или телефону.">
+    <Section title="Вход и контакты" note="Войти можно по почте или логину.">
       <div className={sty.ca630824}>
         <div className="field">
           <label htmlFor="pf-login">Логин</label>
@@ -376,17 +374,12 @@ function Contacts({ p, patch, busy, fieldErr, onPhone }: {
           {fieldErr('login')}
         </div>
         <div className="field">
-          <label>Телефон</label>
+          <label>E-mail</label>
           <div className={sty.c1120df7}>
-            {formatPhone(p.user.phone)}
-            <button className={'btn btn-ghost ' + sty.c28cbbc4} onClick={() => setPhoneOpen(o => !o)}>{phoneOpen ? 'Отменить' : 'Сменить'}</button>
+            <span style={{ overflowWrap: 'anywhere' }}>{p.user.email}</span>
+            <button className={'btn btn-ghost ' + sty.c28cbbc4} onClick={() => setEmailOpen(o => !o)}>{emailOpen ? 'Отменить' : 'Сменить'}</button>
           </div>
-        </div>
-        <div className="field">
-          <label htmlFor="pf-email">E-mail</label>
-          <input id="pf-email" className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="для чеков и уведомлений" autoComplete="email" maxLength={200} />
-          {fieldErr('email')}
-          {email.trim() === p.user.email && <EmailStatus verified={p.user.emailVerified} />}
+          <EmailStatus verified={p.user.emailVerified} />
         </div>
         <div className="field">
           <label>Город базы</label>
@@ -398,11 +391,11 @@ function Contacts({ p, patch, busy, fieldErr, onPhone }: {
       </div>
       {dirty && (
         <div className={sty.c5c223c4}>
-          <button className={'btn btn-primary ' + sty.cf8f6389} disabled={busy === 'contacts'} onClick={() => patch({ login: login.trim(), email: email.trim() }, 'Контакты сохранены', 'contacts')}>Сохранить</button>
-          <button className={'btn btn-ghost ' + sty.c1d41128} onClick={() => { setLogin(p.user.login); setEmail(p.user.email); }}>Отменить</button>
+          <button className={'btn btn-primary ' + sty.cf8f6389} disabled={busy === 'contacts'} onClick={() => patch({ login: login.trim() }, 'Логин сохранён', 'contacts')}>Сохранить</button>
+          <button className={'btn btn-ghost ' + sty.c1d41128} onClick={() => setLogin(p.user.login)}>Отменить</button>
         </div>
       )}
-      {phoneOpen && <PhoneChange onDone={() => { setPhoneOpen(false); onPhone(); }} />}
+      {emailOpen && <EmailChange current={p.user.email} onDone={() => { setEmailOpen(false); onEmail(); }} />}
       <div className={sty.cdffc4db}>
         {!pwOpen
           ? <button className={'btn btn-ghost ' + sty.c1aa09b8} onClick={() => setPwOpen(true)}>Сменить пароль</button>
@@ -412,13 +405,13 @@ function Contacts({ p, patch, busy, fieldErr, onPhone }: {
   );
 }
 
-/** Яндекс ID / VK ID: привязать к аккаунту или отвязать. Вход по телефону и паролю остаётся всегда. */
+/** Яндекс ID / VK ID: привязать к аккаунту или отвязать. Вход по почте и паролю остаётся всегда. */
 function Services({ oauth, onChange }: { oauth: { providers: Provider[]; linked: Provider[] }; onChange: () => void }) {
   const flash = useFlash();
   const [busy, setBusy] = useState('');
   const all = (['yandex', 'vk'] as Provider[]).filter(x => oauth.providers.includes(x) || oauth.linked.includes(x));
   const unlink = async (x: Provider) => {
-    if (!window.confirm('Отвязать ' + PROVIDER_NAME[x] + '? Входить можно будет по телефону и паролю.')) return;
+    if (!window.confirm('Отвязать ' + PROVIDER_NAME[x] + '? Входить можно будет по почте и паролю.')) return;
     setBusy(x);
     try { await api('/api/me/identities', { provider: x }, 'DELETE'); flash(PROVIDER_NAME[x] + ' отвязан'); onChange(); }
     catch (e) { flash(e instanceof ApiError ? e.message : 'Не удалось отвязать'); } finally { setBusy(''); }
@@ -443,21 +436,21 @@ function Services({ oauth, onChange }: { oauth: { providers: Provider[]; linked:
   );
 }
 
-/** Для тех, кто пароль не помнит или не задавал (вход через Яндекс ID / VK ID): новый пароль — по коду на телефон. */
+/** Для тех, кто пароль не помнит или не задавал (вход через Яндекс ID / VK ID): новый пароль — по коду из письма. */
 function NoPassword() {
   return (
     <div style={css('font-size: 12.5px; ' + MUTED)}>
-      Не помните пароль или входили через Яндекс ID / VK ID? <a href="/auth?mode=recover">Задайте пароль по коду на телефон</a>.
+      Не помните пароль или входили через Яндекс ID / VK ID? <a href="/auth?mode=recover">Задайте пароль по коду из письма</a>.
     </div>
   );
 }
 
-function PhoneChange({ onDone }: { onDone: () => void }) {
+function EmailChange({ current, onDone }: { current: string; onDone: () => void }) {
   const flash = useFlash();
-  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
-  const [sent, setSent] = useState<{ challengeId: string; channel: 'sms' | 'call'; sentTo: string; resendIn: number; devCode?: string } | null>(null);
+  const [sent, setSent] = useState<{ challengeId: string; sentTo: string; resendIn: number; devCode?: string } | null>(null);
   const [wait, setWait] = useState(0);
   const [err, setErr] = useState<{ field: string; message: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -471,61 +464,61 @@ function PhoneChange({ onDone }: { onDone: () => void }) {
   const start = async () => {
     setBusy(true); setErr(null);
     try {
-      const r = await api<{ challengeId: string; channel: 'sms' | 'call'; sentTo: string; resendIn: number; devCode?: string }>('/api/me/phone/start', { phone, password });
+      const r = await api<{ challengeId: string; sentTo: string; resendIn: number; devCode?: string }>('/api/me/email/change', { email, password });
       setSent(r); setWait(r.resendIn); setPassword('');
     } catch (e) { setErr(errOf(e, 'Не удалось отправить код')); } finally { setBusy(false); }
   };
-  const resend = async (channel?: 'sms' | 'call') => {
+  const resend = async () => {
     if (!sent) return;
     try {
-      const r = await api<{ channel: 'sms' | 'call'; resendIn: number; devCode?: string }>('/api/me/phone/resend', { challengeId: sent.challengeId, channel });
-      setSent({ ...sent, channel: r.channel, devCode: r.devCode }); setWait(r.resendIn);
+      const r = await api<{ resendIn: number; devCode?: string }>('/api/me/email/change/resend', { challengeId: sent.challengeId });
+      setSent({ ...sent, devCode: r.devCode }); setWait(r.resendIn);
     } catch (e) { setErr(errOf(e, 'Не удалось отправить код')); }
   };
   const verify = async () => {
     if (!sent) return;
     setBusy(true); setErr(null);
     try {
-      await api('/api/me/phone/verify', { challengeId: sent.challengeId, code });
-      flash('Телефон изменён — входите по новому номеру');
+      await api('/api/me/email/change/verify', { challengeId: sent.challengeId, code });
+      flash('Почта изменена — входите по новому адресу');
       onDone();
     } catch (e) { setErr(errOf(e, 'Не удалось проверить код')); } finally { setBusy(false); }
   };
 
   return (
     <div className={sty.ce97d98d}>
-      <div style={css(LABEL)}>Новый телефон</div>
+      <div style={css(LABEL)}>Новая почта</div>
       {!sent ? (
         <>
           <div className={sty.c846dd40}>
             <div className="field">
-              <label htmlFor="ph-new">Номер</label>
-              <input id="ph-new" className="input" type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+7 916 000 00 00" autoComplete="tel" />
-              {err?.field === 'phone' && <div role="alert" style={css(FIELD_ERR)}>{err.message}</div>}
+              <label htmlFor="em-new">Адрес</label>
+              <input id="em-new" className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="name@mail.ru" autoComplete="email" />
+              {err?.field === 'email' && <div role="alert" style={css(FIELD_ERR)}>{err.message}</div>}
             </div>
             <div className="field">
-              <label htmlFor="ph-pass">Текущий пароль</label>
-              <input id="ph-pass" className="input" type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" />
+              <label htmlFor="em-pass">Текущий пароль</label>
+              <input id="em-pass" className="input" type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" />
               {err?.field === 'password' && <div role="alert" style={css(FIELD_ERR)}>{err.message}</div>}
             </div>
           </div>
           <NoPassword />
-          {err && !['phone', 'password'].includes(err.field) && <div role="alert" style={css(FIELD_ERR)}>{err.message}</div>}
+          {err && !['email', 'password'].includes(err.field) && <div role="alert" style={css(FIELD_ERR)}>{err.message}</div>}
           <div><button className={'btn btn-primary ' + sty.cf8f6389} onClick={start} disabled={busy}>Прислать код</button></div>
         </>
       ) : (
         <>
-          <div className={sty.c30c0749}>{sent.channel === 'call'
-            ? 'На ' + sent.sentTo + ' позвонят. Отвечать не нужно — введите последние 4 цифры номера, с которого звонят.'
-            : 'Код отправлен в SMS на ' + sent.sentTo + '.'}{sent.devCode && <span style={css(MUTED)}>{' Код для разработки: ' + sent.devCode}</span>}</div>
+          <div className={sty.c30c0749}>
+            {'Код из шести цифр отправлен на ' + sent.sentTo + '. Письма нет — проверьте «Спам». После смены на ' + current + ' придёт уведомление.'}
+            {sent.devCode && <span style={css(MUTED)}>{' Код для разработки: ' + sent.devCode}</span>}
+          </div>
           <div className={sty.ca80eb44}>
             <div className={'field ' + sty.c0a9e77d}>
-              <label htmlFor="ph-code">{sent.channel === 'call' ? 'Последние 4 цифры номера' : 'Код из SMS'}</label>
-              <input id="ph-code" className="input" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 4))} />
+              <label htmlFor="em-code">Код из письма</label>
+              <input id="em-code" className="input" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} />
             </div>
-            <button className={'btn btn-primary ' + sty.cad84e51} onClick={verify} disabled={busy || code.length < 4}>Подтвердить</button>
-            <button className={'btn btn-ghost ' + sty.c8dc805f} onClick={() => resend()} disabled={wait > 0}>{(sent.channel === 'call' ? 'Позвонить снова' : 'Прислать ещё раз') + (wait > 0 ? ' через ' + wait + ' с' : '')}</button>
-            {sent.channel === 'call' && <button className={'btn btn-ghost ' + sty.c8dc805f} onClick={() => resend('sms')} disabled={wait > 0}>Звонок не пришёл — SMS</button>}
+            <button className={'btn btn-primary ' + sty.cad84e51} onClick={verify} disabled={busy || code.length < 6}>Подтвердить</button>
+            <button className={'btn btn-ghost ' + sty.c8dc805f} onClick={resend} disabled={wait > 0}>{'Прислать ещё раз' + (wait > 0 ? ' через ' + wait + ' с' : '')}</button>
           </div>
           {err && <div role="alert" style={css(FIELD_ERR)}>{err.message}</div>}
         </>
@@ -592,14 +585,14 @@ function DeleteAccount({ isEmp }: { isEmp: boolean }) {
     return (
       <div style={css('display: flex; gap: 12px; align-items: center; flex-wrap: wrap')}>
         <button className="btn btn-ghost" onClick={() => setOpen(true)} style={css(BTN)}>Удалить аккаунт…</button>
-        <span style={css('flex: 1 1 260px; ' + note)}>Стираются имя, телефон, почта, пароль, фото профиля и {isEmp ? 'данные организации, объекты' : 'навыки, ИНН'}; войти больше нельзя.</span>
+        <span style={css('flex: 1 1 260px; ' + note)}>Стираются имя, почта, пароль, фото профиля и {isEmp ? 'данные организации, объекты' : 'навыки, ИНН'}; войти больше нельзя.</span>
       </div>
     );
   }
   return (
     <div style={css('display: grid; gap: 10px; max-width: 560px')}>
       <div style={css(note)}>
-        Сразу стираются: имя, телефон, почта, пароль, город и база, фото профиля, {isEmp ? 'организация и ИНН, объекты' : 'навыки, инвентарь, ИНН'}, привязки Яндекс ID и VK ID, журнал уведомлений, подписки.
+        Сразу стираются: имя, почта, пароль, город и база, фото профиля, {isEmp ? 'организация и ИНН, объекты' : 'навыки, инвентарь, ИНН'}, привязки Яндекс ID и VK ID, журнал уведомлений, подписки.
         {isEmp ? ' Открытые заказы без нанятых снимаются.' : ' Ждущие отклики отзываются.'}{' '}
         Остаются у второй стороны — без вашего имени, как «Удалённый пользователь»: заказы и смены, переписка, отзывы, споры, фото смен.
         Пока идёт смена, не принята работа или открыт спор, удалить аккаунт нельзя.

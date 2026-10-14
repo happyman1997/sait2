@@ -6,7 +6,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { css } from '@/lib/css';
 import { jobNum, localISO } from '@/lib/jobs';
-import { formatPhone } from '@/lib/validation';
 import { useFlash } from '@/components/Toast';
 import { Chip, Corners, FIELD_ERR, LABEL, MUTED } from './ui';
 import sty from './SupportPage.module.css';
@@ -18,7 +17,7 @@ type Complaint = {
   assignee: { id: string; name: string } | null; deadline: string; overdue: boolean;
 };
 type UserRow = {
-  id: string; login: string; name: string; phone: string; email: string; role: string; status: string; isStaff: boolean; createdAt: string;
+  id: string; login: string; name: string; email: string; role: string; status: string; isStaff: boolean; createdAt: string;
   jobs: number; done: number; noShows: number; complaints: number; marks: number; actions: { action: string; note: string; at: string }[];
   markList: { id: string; kind: string; reason: string; at: string }[];
   reviewList: { id: string; rating: number; text: string; author: string; at: string }[];
@@ -171,7 +170,7 @@ function Users() {
   return (
     <>
       <form onSubmit={e => { e.preventDefault(); search(); }} className={sty.c6708c96}>
-        <input className={'input ' + sty.c8b4ab7f} value={q} onChange={e => setQ(e.target.value)} aria-label="Поиск пользователя" placeholder="логин, имя, e-mail или телефон" />
+        <input className={'input ' + sty.c8b4ab7f} value={q} onChange={e => setQ(e.target.value)} aria-label="Поиск пользователя" placeholder="логин, имя или e-mail" />
         <button className={'btn btn-primary ' + sty.cc505aaf} type="submit">Найти</button>
       </form>
       {list?.length === 0 && q.trim().length >= 2 && <div style={css('margin-top: 12px; ' + MUTED)}>Никого не нашли.</div>}
@@ -180,7 +179,7 @@ function Users() {
           <div key={u.id} style={css('border: 1px solid ' + (u.status === 'blocked' ? 'var(--color-accent-700)' : 'var(--color-divider)') + '; padding: 12px 14px')}>
             <div className={sty.ca7d1012}>
               <span className={'fh ' + sty.cec41197}>{u.name}</span>
-              <span style={css('font-size: 13px; ' + MUTED)}>{u.login + ' · ' + ROLE[u.role] + ' · ' + formatPhone(u.phone) + ' · ' + u.email}</span>
+              <span style={css('font-size: 13px; ' + MUTED)}>{u.login + ' · ' + ROLE[u.role] + ' · ' + u.email}</span>
               {u.status === 'blocked' && <span className="tag tag-accent">заблокирован</span>}
               {u.isStaff && <span className="tag tag-outline">поддержка</span>}
             </div>

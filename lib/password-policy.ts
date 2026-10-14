@@ -1,5 +1,5 @@
 // Требования к новому паролю — общие для сервера и форм. Вход старым паролем проверяет только сервер, по хэшу.
-// Самые частые пароли подбирают первыми — их не принимаем, как и логин или номер телефона вместо пароля.
+// Самые частые пароли подбирают первыми — их не принимаем, как и логин или почту вместо пароля.
 export const PASSWORD_MIN = 8;
 
 const COMMON = new Set([
@@ -11,16 +11,16 @@ const COMMON = new Set([
 ]);
 
 /** Текст ошибки или null, если пароль подходит. */
-export function passwordProblem(pw: string, ctx: { login?: string; phone?: string } = {}): string | null {
+export function passwordProblem(pw: string, ctx: { login?: string; email?: string } = {}): string | null {
   if (pw.length < PASSWORD_MIN) return 'Пароль — не короче ' + PASSWORD_MIN + ' символов.';
   if (pw.length > 128) return 'Пароль длиннее 128 символов — сократите.';
   const low = pw.toLowerCase();
   if (COMMON.has(low) || /^(.)\1+$/.test(pw) || '01234567890123456789'.includes(pw) || '98765432109876543210'.includes(pw)) {
     return 'Этот пароль в списке самых частых — его подбирают первым. Придумайте другой.';
   }
-  const digits = (ctx.phone || '').replace(/\D/g, '');
-  if ((ctx.login && low === ctx.login.toLowerCase()) || (digits.length >= 10 && pw.replace(/\D/g, '').endsWith(digits.slice(-10)) && /^\+?\d+$/.test(pw))) {
-    return 'Логин или номер телефона вместо пароля угадают сразу — придумайте другой.';
+  const email = (ctx.email || '').trim().toLowerCase();
+  if ((ctx.login && low === ctx.login.toLowerCase()) || (email && (low === email || low === email.split('@')[0]))) {
+    return 'Логин или почту вместо пароля угадают сразу — придумайте другой.';
   }
   return null;
 }

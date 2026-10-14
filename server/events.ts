@@ -1,12 +1,10 @@
-// Журнал событий пользователя, мгновенное уведомление (live) и доставка во внешние каналы (SMS, e-mail).
+// Журнал событий пользователя, мгновенное уведомление (live) и доставка во внешние каналы (e-mail, пуш в браузер).
 import crypto from 'node:crypto';
 import { config } from './config';
 import { pool, query, type Db } from './db';
 import { publishMany } from './live';
 import { getMailer } from './mail';
 import { deliverPush } from './push';
-import { codeSender } from './sms';
-import { spendSmsForNotice } from './sms-budget';
 
 export type EventRow = {
   userId: string | null | undefined;
@@ -16,7 +14,7 @@ export type EventRow = {
   num?: number | null;
   /** Не показывать живым уведомлением (событие от своего же действия — тост уже показан). */
   silent?: boolean;
-  /** Доставить по SMS/e-mail по настройкам пользователя. */
+  /** Доставить на почту и пушем по настройкам пользователя. */
   deliver?: boolean;
   /** Срочное — проходит тихие часы, если пользователь разрешил. */
   urgent?: boolean;
@@ -49,7 +47,7 @@ async function enqueue(rows: { id: string; userId: string; text: string; num: nu
        SELECT x.*, coalesce(x.path, '/?job=' || x.num) AS link
          FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::bigint[], $5::bool[], $9::text[]) WITH ORDINALITY AS x(id, user_id, text, num, urgent, path, ord)
      ), s0 AS (
-       SELECT ev.*, ns.sms, ns.email AND u.email_verified_at IS NOT NULL AS email, ns.daily_cap, u.phone, u.email AS addr,
+       SELECT ev.*, ns.email AND u.email_verified_at IS NOT NULL AS email, ns.daily_cap, u.email AS addr,
               ns.push AND EXISTS (SELECT 1 FROM push_subscriptions p WHERE p.user_id = ev.user_id) AS webpush,
               ns.quiet_on AND NOT (ev.urgent AND ns.urgent_bypass) AND CASE
                 WHEN ns.quiet_from = ns.quiet_to THEN false
@@ -62,7 +60,7 @@ async function enqueue(rows: { id: string; userId: string; text: string; num: nu
          FROM ev JOIN users u ON u.id = ev.user_id JOIN notification_settings ns ON ns.user_id = ev.user_id
         WHERE ns.enabled
      ), s AS (
-       SELECT * FROM s0 WHERE sms OR email OR webpush
+       SELECT * FROM s0 WHERE email OR webpush
      ), muted AS (
        UPDATE events SET muted = true WHERE id IN (SELECT id FROM s WHERE nth > daily_cap) RETURNING id
      ), ok AS (
@@ -70,8 +68,6 @@ async function enqueue(rows: { id: string; userId: string; text: string; num: nu
          FROM s WHERE nth <= daily_cap
      )
      INSERT INTO notification_outbox (user_id, event_id, channel, to_addr, subject, body, next_try_at)
-     SELECT user_id, id, 'sms', phone, NULL, left('Арена Работы: ' || text, 300), at FROM ok WHERE sms
-     UNION ALL
      SELECT user_id, id, 'email', addr, 'Арена Работы: ' || left(text, 80),
             text || CASE WHEN link IS NULL THEN '' ELSE E'\n' || $8 || link END || E'\n\nНастроить уведомления: ' || $8 || '/profile', at
        FROM ok WHERE email AND addr <> ''
@@ -101,25 +97,19 @@ export async function mailSupport(subject: string, body: string, db: Db = pool()
 
 /**
  * Отправка очереди. Записи сначала «арендуются» (next_try_at сдвигается на 10 минут) коротким запросом с SKIP LOCKED —
- * несколько инстансов не шлют одно и то же, а медленный SMS-шлюз не держит транзакцию открытой.
+ * несколько инстансов не шлют одно и то же, а медленный почтовый сервер не держит транзакцию открытой.
  * Если процесс упадёт посреди отправки, аренда истечёт и запись уйдёт повторно.
  */
 export async function processOutbox(limit = 50): Promise<{ sent: number; failed: number }> {
-  const due = await query<{ id: string; user_id: string | null; channel: 'sms' | 'email' | 'push'; to_addr: string; subject: string | null; body: string; attempts: number }>(
+  const due = await query<{ id: string; user_id: string | null; channel: 'email' | 'push'; to_addr: string; subject: string | null; body: string; attempts: number }>(
     `UPDATE notification_outbox o SET next_try_at = now() + interval '10 minutes'
       WHERE o.id IN (SELECT id FROM notification_outbox WHERE status = 'pending' AND next_try_at <= now()
                       ORDER BY next_try_at LIMIT $1 FOR UPDATE SKIP LOCKED)
       RETURNING o.id, o.user_id, o.channel, o.to_addr, o.subject, o.body, o.attempts`, [limit]);
   let sent = 0, failed = 0;
   for (const m of due.rows) {
-    if (m.channel === 'sms' && !(await spendSmsForNotice())) {
-      await query(`UPDATE notification_outbox SET status = 'failed', error = 'суточный лимит SMS (SMS_DAILY_LIMIT)' WHERE id = $1`, [m.id]);
-      failed++;
-      continue;
-    }
     try {
-      if (m.channel === 'sms') await codeSender().sendText(m.to_addr, m.body);
-      else if (m.channel === 'push') await deliverPush(m.user_id!, { title: 'Арена Работы', body: m.body, url: m.subject || '/' });
+      if (m.channel === 'push') await deliverPush(m.user_id!, { title: 'Арена Работы', body: m.body, url: m.subject || '/' });
       else await getMailer().send(m.to_addr, m.subject || 'Арена Работы', m.body);
       await query(`UPDATE notification_outbox SET status = 'sent', sent_at = now(), attempts = attempts + 1, error = NULL WHERE id = $1`, [m.id]);
       sent++;

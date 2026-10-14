@@ -8,7 +8,7 @@ import { ApiError, api } from '@/lib/api';
 import { ACCESS, GEAR, JOB_TYPES, OBJECT_KINDS, ORG_TYPES, PASS_MODES, SAFETY_REQ, TOOLS } from '@/lib/catalog';
 import { css } from '@/lib/css';
 import { passwordProblem } from '@/lib/password-policy';
-import { contactsMessage, contactsMissing, validateProfile, type Role } from '@/lib/validation';
+import { contactsMessage, contactsMissing, EMAIL_RE, LOGIN_RE, validateProfile, type Role } from '@/lib/validation';
 import { showModeration } from '@/components/ModerationGuard';
 import { useFlash } from '@/components/Toast';
 import { useNarrow } from '@/components/useNarrow';
@@ -16,7 +16,8 @@ import sty from './AuthScreen.module.css';
 
 export type AuthMode = 'signup' | 'login' | 'recover';
 type Stats = { freelancers: number; employers: number; day: string };
-type CodeSent = { challengeId: string; channel: 'sms' | 'call'; sentTo: string; resendIn: number; devCode?: string };
+type CodeSent = { challengeId: string; sentTo: string; resendIn: number; devCode?: string };
+const CODE_LEN = 6;
 
 const LABEL = 'font-family: var(--font-heading); font-size: 12.5px; letter-spacing: .2em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 64%, transparent)';
 const REQ = 'font-family: var(--font-heading); font-size: 11.5px; letter-spacing: .18em; text-transform: uppercase; color: var(--color-accent-700)';
@@ -68,12 +69,12 @@ function OAuthButtons({ providers, apply, lead }: { providers: OAuthProvider[]; 
             style={css('height: 44px; display: grid; place-items: center; font-size: 14px; text-decoration: none')}>{OAUTH_LABEL[p]}</a>
         ))}
       </div>
-      <div style={css(HINT + '; margin-top: 12px; text-align: center')}>или по номеру телефона</div>
+      <div style={css(HINT + '; margin-top: 12px; text-align: center')}>или по почте</div>
     </div>
   );
 }
 
-type OAuthTicketInfo = { provider: OAuthProvider; providerName: string; name: string; email: string; phone: string; phoneVerified: boolean };
+type OAuthTicketInfo = { provider: OAuthProvider; providerName: string; name: string; email: string };
 
 export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProviders = [], oauthTicket, oauthError }: {
   initialMode: AuthMode; initialRole: Role; stats: Stats; pending?: { num: number; title: string } | null;
@@ -90,7 +91,6 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
 
   // Контакты
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
   const [login, setLogin] = useState('');
   const [pass, setPass] = useState('');
   const [email, setEmail] = useState('');
@@ -138,9 +138,9 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
   const [recoverPass2, setRecoverPass2] = useState('');
   const [recoverSent, setRecoverSent] = useState(false);
 
-  // Регистрация после «Войти через…»: билет и что сервис уже подтвердил.
-  const [oauth, setOauth] = useState<{ ticket: string; providerName: string; phoneVerified: boolean } | null>(null);
-  const skipCode = !!oauth?.phoneVerified;
+  // Регистрация после «Войти через…»: билет и почта, которую сервис уже подтвердил (с ней код не нужен).
+  const [oauth, setOauth] = useState<{ ticket: string; providerName: string; email: string } | null>(null);
+  const skipCode = !!oauth?.email && oauth.email.toLowerCase() === email.trim().toLowerCase();
 
   // Ошибки
   const [stepError, setStepError] = useState(oauthError || '');
@@ -185,10 +185,9 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
     if (!oauthTicket) return;
     api<OAuthTicketInfo>('/api/auth/oauth/ticket?t=' + encodeURIComponent(oauthTicket))
       .then(t => {
-        setOauth({ ticket: oauthTicket, providerName: t.providerName, phoneVerified: t.phoneVerified });
+        setOauth({ ticket: oauthTicket, providerName: t.providerName, email: t.email });
         if (t.name) setName(t.name);
         if (t.email) setEmail(t.email);
-        if (t.phone) setPhone(t.phone);
         setMode('signup');
         setStep(1);
       })
@@ -235,7 +234,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
   };
 
   const signupPayload = () => ({
-    role, name, phone, login, password: oauth ? '' : pass, email, city, oauthTicket: oauth?.ticket,
+    role, name, login, password: oauth ? '' : pass, email, city, oauthTicket: oauth?.ticket,
     freelancer: role === 'freelancer' ? { skills, customSkills, gear, customGear, ownCar, workCities } : undefined,
     employer: role === 'employer' ? { orgType, orgName, objectKind, objectOther, access, tools, meetName, meetPhone, passMode, passWhom, safetyReq } : undefined
   });
@@ -254,9 +253,9 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
     if (busy) return;
     if (step === 1) { setStep(2); setStepError(''); return; }
     if (step === 2) {
-      const miss = contactsMissing({ name, phone, login, password: pass, email, city }, { requirePassword: !oauth });
+      const miss = contactsMissing({ name, login, password: pass, email, city }, { requirePassword: !oauth });
       if (miss.length) {
-        flashFields(miss.map(m => (m === 'password' ? 'pass' : m)), contactsMessage(miss[0], email, { login, phone, password: pass }));
+        flashFields(miss.map(m => (m === 'password' ? 'pass' : m)), contactsMessage(miss[0], email, { login, email, password: pass }));
         return;
       }
       setBusy(true);
@@ -273,7 +272,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
     if (step === 3) {
       const err = validateProfile(role, { freelancer: { skills, customSkills, workCities }, employer: { access, tools } });
       if (err) { flashFields([err.field], err.message); return; }
-      // Телефон уже подтверждён сервисом — без кода, сразу к согласию.
+      // Почту уже подтвердил сервис — без кода, сразу к согласию.
       if (skipCode) { setStep(4); setStepError(''); return; }
       setBusy(true);
       try {
@@ -282,7 +281,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
         setStep(4);
         setStepError('');
       } catch (e) {
-        if (e instanceof ApiError && ['name', 'phone', 'login', 'email', 'city', 'password'].includes(e.field || '') && !e.body.moderation) setStep(2);
+        if (e instanceof ApiError && ['name', 'login', 'email', 'city', 'password'].includes(e.field || '') && !e.body.moderation) setStep(2);
         handleApiError(e, { password: 'pass' });
       } finally { setBusy(false); }
       return;
@@ -301,13 +300,13 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
         done(role);
       } catch (e) {
         if (e instanceof ApiError && e.status === 410) { setOauth(null); setStep(1); showError(e.message); }
-        else if (e instanceof ApiError && ['name', 'phone', 'login', 'email', 'city'].includes(e.field || '') && !e.body.moderation) { setStep(2); handleApiError(e); }
+        else if (e instanceof ApiError && ['name', 'login', 'email', 'city'].includes(e.field || '') && !e.body.moderation) { setStep(2); handleApiError(e); }
         else handleApiError(e);
       } finally { setBusy(false); }
       return;
     }
     if (attemptsLeft <= 0) { setCodeError('Попытки исчерпаны — запросите новый код'); return; }
-    if (code.length < 4) { setCodeError('Введите все четыре цифры'); return; }
+    if (code.length < CODE_LEN) { setCodeError('Введите все шесть цифр из письма'); return; }
     setBusy(true);
     try {
       await api('/api/auth/signup/verify', { challengeId: challenge?.challengeId, code, offerAccepted, pdConsent });
@@ -318,7 +317,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
         setCode('');
         setCodeError(e.message);
         if (typeof e.body.attemptsLeft === 'number') setAttemptsLeft(e.body.attemptsLeft);
-      } else if (e instanceof ApiError && (e.field === 'phone' || e.field === 'login')) {
+      } else if (e instanceof ApiError && (e.field === 'email' || e.field === 'login')) {
         setStep(2);
         handleApiError(e);
       } else if (e instanceof ApiError && e.status === 410) {
@@ -328,13 +327,13 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
     } finally { setBusy(false); }
   };
 
-  const resend = async (channel: 'sms' | 'call') => {
+  const resend = async () => {
     if (!challenge || busy) return;
     setBusy(true);
     try {
-      const c = await api<CodeSent>('/api/auth/signup/resend', { challengeId: challenge.challengeId, channel });
+      const c = await api<CodeSent>('/api/auth/signup/resend', { challengeId: challenge.challengeId });
       startCodeTimer(c);
-      flash(channel === 'call' ? 'Звоним на номер — введите последние 4 цифры' : 'Код отправлен повторно');
+      flash('Новый код отправлен на почту');
     } catch (e) {
       if (e instanceof ApiError) setCodeError(e.message); else setCodeError('Не получилось отправить код — попробуйте ещё раз.');
     } finally { setBusy(false); }
@@ -342,7 +341,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
 
   const typeCode = (k: string) => {
     if (attemptsLeft <= 0) return;
-    setCode(c => (k === '←' ? c.slice(0, -1) : c.length < 4 ? c + k : c));
+    setCode(c => (k === '←' ? c.slice(0, -1) : c.length < CODE_LEN ? c + k : c));
     setCodeError('');
   };
 
@@ -381,10 +380,11 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
   const doLogin = async () => {
     if (busy) return;
     const contact = identifier.trim();
-    if (!contact) { showError('Введите логин или номер телефона.'); return; }
-    const looksPhone = /^[+\d\s()\-]+$/.test(contact);
-    if (looksPhone && contact.replace(/\D/g, '').length < 10) { showError('В номере телефона не хватает цифр — нужно минимум 10.'); return; }
-    if (!looksPhone && !/^[a-zA-Z0-9._]{3,20}$/.test(contact)) { showError('Логин — 3–20 символов: латиница, цифры, точка или подчёркивание.'); return; }
+    if (!contact) { showError('Введите почту или логин.'); return; }
+    if (contact.includes('@') ? !EMAIL_RE.test(contact) : !LOGIN_RE.test(contact)) {
+      showError(contact.includes('@') ? 'Проверьте почту — похоже, в адресе опечатка.' : 'Логин — 3–20 символов: латиница, цифры, точка или подчёркивание.');
+      return;
+    }
     if (pass.length < 6) { showError('Пароль — не короче 6 символов.'); return; }
     setBusy(true);
     try {
@@ -399,20 +399,20 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
 
   // ─── Восстановление ───
 
-  const recoverSend = async (channel?: 'sms' | 'call') => {
+  const recoverSend = async () => {
     const v = identifier.trim();
-    if (!v) { setRecoverSent(false); showError('Укажите логин или телефон аккаунта — код придёт на привязанный номер.'); return; }
+    if (!v) { setRecoverSent(false); showError('Укажите почту или логин аккаунта — код придёт на почту аккаунта.'); return; }
     setBusy(true);
     try {
       const c = challenge && recoverStep === 2
-        ? await api<CodeSent>('/api/auth/recover/resend', { challengeId: challenge.challengeId, channel })
+        ? await api<CodeSent>('/api/auth/recover/resend', { challengeId: challenge.challengeId })
         : await api<CodeSent>('/api/auth/recover/start', { identifier: v });
       setChallenge(c);
       setStepError('');
       setRecoverSent(true);
       setRecoverStep(2);
       setRecoverCode('');
-      flash(c.channel === 'call' ? 'Звоним на номер аккаунта — введите последние 4 цифры' : 'Код восстановления отправлен в SMS');
+      flash('Код восстановления отправлен на почту аккаунта');
     } catch (e) {
       showError(e instanceof ApiError ? e.message : 'Не получилось отправить код — попробуйте ещё раз.');
     } finally { setBusy(false); }
@@ -454,8 +454,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
   const statDate = new Date(stats.day + 'T00:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
   const nextLabel = step === 1 ? 'Далее — контакты' : step === 2 ? 'Далее — профиль' : step === 3 ? (skipCode ? 'Далее — согласие' : 'Далее — код') : (isEmp ? 'Создать аккаунт работодателя' : 'Создать аккаунт исполнителя');
   const isPrivateOrg = orgType === 'частное лицо';
-  const codeChannel = challenge?.channel ?? 'sms';
-  const phoneShown = challenge?.sentTo || phone || '+7 916 ··· 00 00';
+  const sentTo = challenge?.sentTo || email;
 
   return (
     <div className={sty.c66e751c}>
@@ -529,7 +528,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
 
                 {oauth && (
                   <div style={css(NOTE + '; margin: 0 0 14px; padding: 9px 11px; border: 1px solid var(--color-accent); background: color-mix(in srgb, var(--color-accent) 8%, transparent)')}>
-                    Данные получены из {oauth.providerName}: имя, почта{oauth.phoneVerified ? ' и телефон' : ''}. Выберите роль и заполните профиль{oauth.phoneVerified ? ' — код подтверждения не понадобится.' : '; телефон подтвердим звонком.'}
+                    Данные получены из {oauth.providerName}: имя{oauth.email ? ' и почта' : ''}. Выберите роль и заполните профиль{skipCode ? ' — код подтверждения не понадобится.' : '; почту подтвердим кодом из письма.'}
                   </div>
                 )}
 
@@ -560,9 +559,11 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                         <input id="su-name" className="input" value={name} onChange={e => { setName(e.target.value); setStepError(''); }} placeholder={isEmp ? 'Айгуль Тлеубаева' : 'Данияр Сапаров'} autoComplete="name" style={css(missStyle('name', true))} />
                       </div>
                       <div className="field">
-                        <label htmlFor="su-phone">Телефон <span style={css(REQ)}>обязательно</span></label>
-                        <input id="su-phone" className="input" type="tel" value={phone} readOnly={skipCode} onChange={e => { setPhone(e.target.value); setStepError(''); }} placeholder="+7 916 000 00 00" autoComplete="tel" style={css(missStyle('phone', true))} />
-                        <span style={css(HINT)}>{skipCode ? 'Номер подтверждён в ' + oauth?.providerName + '. Подходит и для входа.' : 'Единственная проверка — вам позвонят, код — последние 4 цифры номера. Номер подходит и для входа.'}</span>
+                        <label htmlFor="su-email">E-mail <span style={css(REQ)}>обязательно</span></label>
+                        <input id="su-email" className="input" type="email" value={email} onChange={e => { setEmail(e.target.value); setStepError(''); }} placeholder="name@mail.ru" autoComplete="email" style={css(missStyle('email', true))} />
+                        <span style={css(HINT)}>{skipCode
+                          ? 'Почта подтверждена в ' + oauth?.providerName + ' — код не понадобится.'
+                          : 'Придёт письмо с кодом из шести цифр. По почте или логину — вход.'}</span>
                       </div>
                       <div className="field">
                         <label htmlFor="su-login">Логин <span style={css(REQ)}>обязательно</span></label>
@@ -575,10 +576,6 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                           <input id="su-pass" className="input" type="password" value={pass} onChange={e => { setPass(e.target.value); setStepError(''); }} placeholder="не короче 8 символов" autoComplete="new-password" style={css(missStyle('pass', true))} />
                         </div>
                       )}
-                      <div className="field">
-                        <label htmlFor="su-email">E-mail <span style={css(REQ)}>обязательно</span></label>
-                        <input id="su-email" className="input" type="email" value={email} onChange={e => { setEmail(e.target.value); setStepError(''); }} placeholder="name@mail.ru" autoComplete="email" style={css(missStyle('email', false))} />
-                      </div>
                       <div className="field">
                         <label htmlFor="su-city">Город <span style={css(REQ)}>обязательно</span></label>
                         <input id="su-city" className="input" value={city} onChange={e => { setCity(e.target.value); setStepError(''); }} placeholder="Москва" autoComplete="address-level2" style={css(missStyle('city', true))} />
@@ -715,22 +712,20 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                   <div>
                     <h3 className={sty.c93ff964}>{skipCode ? 'Последний шаг' : 'Подтверждение'}</h3>
                     {skipCode ? (
-                      <div className={sty.cd2d7539}>Телефон и почта подтверждены в {oauth?.providerName}. Осталось принять оферту и дать согласие на обработку данных — и аккаунт готов. Входить потом — той же кнопкой «{oauth?.providerName}».</div>
+                      <div className={sty.cd2d7539}>Почта подтверждена в {oauth?.providerName}. Осталось принять оферту и дать согласие на обработку данных — и аккаунт готов. Входить потом — той же кнопкой «{oauth?.providerName}».</div>
                     ) : (<>
                     <div className={sty.cd2d7539}>
-                      {codeChannel === 'call'
-                        ? <>Сейчас на {phoneShown} позвонят. <b>Отвечать не нужно</b> — введите последние 4 цифры номера, с которого звонят. Например, +7 495 123-<b>45-67</b> → код 4567.</>
-                        : 'Код отправлен по SMS на ' + phoneShown + ' · действует 5 минут'}
+                      Код из шести цифр отправлен на <b>{sentTo}</b> · действует 10 минут. Письма нет — проверьте папку «Спам».
                     </div>
                     <div className={sty.c318e55a}>
                       <div className={sty.cb9b7b53}>
-                        {[0, 1, 2, 3].map(i => (
-                          <div key={i} style={css('width: 46px; height: 52px; display: grid; place-items: center; font-family: var(--font-heading); font-size: 24px; border: 1px solid ' +
+                        {Array.from({ length: CODE_LEN }, (_, i) => i).map(i => (
+                          <div key={i} style={css('width: 42px; height: 52px; display: grid; place-items: center; font-family: var(--font-heading); font-size: 24px; border: 1px solid ' +
                             (code.length === i ? 'var(--color-accent)' : 'var(--color-divider)') + '; color: ' + (code[i] ? 'var(--color-text)' : 'color-mix(in srgb, var(--color-text) 35%, transparent)'))}>{code[i] || '·'}</div>
                         ))}
                       </div>
-                      <input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={4} value={code} aria-label="Код подтверждения" autoFocus
-                        onChange={e => { if (attemptsLeft > 0) { setCode(e.target.value.replace(/\D/g, '').slice(0, 4)); setCodeError(''); } }}
+                      <input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={CODE_LEN} value={code} aria-label="Код подтверждения" autoFocus
+                        onChange={e => { if (attemptsLeft > 0) { setCode(e.target.value.replace(/\D/g, '').slice(0, CODE_LEN)); setCodeError(''); } }}
                         // eslint-disable-next-line react-hooks/refs -- onEnter возвращает обработчик события, ref читается только при нажатии
                         onKeyDown={onEnter(nextStep)}
                         className={sty.ccf7c69e} />
@@ -742,14 +737,11 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                       ))}
                     </div>
                     <div className={sty.cf4bc04d}>
-                      <button className={'btn btn-ghost ' + sty.c8dc805f} onClick={() => resend(codeChannel)} disabled={resendIn > 0 || busy}>
-                        {(codeChannel === 'call' ? 'Позвонить снова' : 'Отправить SMS снова') + (resendIn > 0 ? ' через ' + Math.floor(resendIn / 60) + ':' + String(resendIn % 60).padStart(2, '0') : '')}
-                      </button>
-                      <button className={'btn btn-ghost ' + sty.c8dc805f} onClick={() => resend(codeChannel === 'call' ? 'sms' : 'call')} disabled={resendIn > 0 || busy}>
-                        {codeChannel === 'call' ? 'Звонок не пришёл — прислать SMS' : 'Позвонить вместо SMS'}
+                      <button className={'btn btn-ghost ' + sty.c8dc805f} onClick={resend} disabled={resendIn > 0 || busy}>
+                        {'Прислать код ещё раз' + (resendIn > 0 ? ' через ' + Math.floor(resendIn / 60) + ':' + String(resendIn % 60).padStart(2, '0') : '')}
                       </button>
                     </div>
-                    {challenge?.devCode && <div className={sty.cf8e1b45}>Режим разработки: код {challenge.devCode} (звонок и SMS не отправляются)</div>}
+                    {challenge?.devCode && <div className={sty.cf8e1b45}>Режим разработки: код {challenge.devCode} (письма не отправляются, а пишутся в журнал)</div>}
                     </>)}
                     <label className={sty.c2ff6e93}>
                       <input type="checkbox" checked={offerAccepted} onChange={e => { setOfferAccepted(e.target.checked); if (e.target.checked && pdConsent) setOfferError(''); }} className={sty.cdf98b21} />
@@ -779,8 +771,8 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
               <form onSubmit={e => { e.preventDefault(); doLogin(); }}>
                 <div className={sty.c82a9418}>
                   <div className="field">
-                    <label htmlFor="li-id">Логин или телефон</label>
-                    <input id="li-id" className="input" value={identifier} onChange={e => { setIdentifier(e.target.value); setStepError(''); }} placeholder="daniyar_s или +7 916 000 00 00" autoComplete="username" />
+                    <label htmlFor="li-id">Почта или логин</label>
+                    <input id="li-id" className="input" value={identifier} onChange={e => { setIdentifier(e.target.value); setStepError(''); }} placeholder="name@mail.ru или daniyar_s" autoComplete="username" />
                   </div>
                   <div className="field">
                     <label htmlFor="li-pass">Пароль</label>
@@ -802,17 +794,15 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                 <h3 className={sty.c7aae9d4}>Восстановление аккаунта</h3>
                 <div className={sty.cb19513b}>
                   {recoverStep === 2
-                    ? (challenge?.channel === 'call'
-                      ? 'На номер, привязанный к ' + (identifier.trim() || 'аккаунту') + ', позвонят. Отвечать не нужно — код это последние 4 цифры номера, с которого звонят.'
-                      : 'Мы отправили четыре цифры в SMS на номер, привязанный к ' + (identifier.trim() || 'аккаунту') + '.')
+                    ? 'Мы отправили код из шести цифр на почту аккаунта «' + (identifier.trim() || 'аккаунт') + '». Письма нет — проверьте папку «Спам».'
                     : recoverStep === 3
                       ? 'Код принят. Задайте новый пароль — старый перестанет работать сразу после сохранения.'
-                      : 'Укажите логин или телефон аккаунта — на привязанный номер позвонят, код — последние 4 цифры номера.'}
+                      : 'Укажите почту или логин аккаунта — на почту аккаунта придёт код из шести цифр. Так же задают пароль те, кто входил через Яндекс ID или VK ID.'}
                 </div>
                 <div className={'field ' + sty.c6840f0a}>
-                  <label htmlFor="rc-field">{recoverStep === 2 ? (challenge?.channel === 'call' ? 'Последние 4 цифры номера' : 'Код из SMS') : recoverStep === 3 ? 'Новый пароль' : 'Логин или телефон'}</label>
-                  {recoverStep === 1 && <input id="rc-field" className="input" value={identifier} onChange={e => { setIdentifier(e.target.value); setStepError(''); }} onKeyDown={onEnter(recoverNext)} placeholder="daniyar_s или +7 916 000 00 00" autoComplete="username" />}
-                  {recoverStep === 2 && <input id="rc-field" className={'input ' + 'fh ' + sty.ca9baefc} value={recoverCode} onChange={e => { setRecoverCode(e.target.value.replace(/\D/g, '').slice(0, 4)); setStepError(''); }} onKeyDown={onEnter(recoverNext)} inputMode="numeric" autoComplete="one-time-code" maxLength={4} placeholder="0000" autoFocus />}
+                  <label htmlFor="rc-field">{recoverStep === 2 ? 'Код из письма' : recoverStep === 3 ? 'Новый пароль' : 'Почта или логин'}</label>
+                  {recoverStep === 1 && <input id="rc-field" className="input" value={identifier} onChange={e => { setIdentifier(e.target.value); setStepError(''); }} onKeyDown={onEnter(recoverNext)} placeholder="name@mail.ru или daniyar_s" autoComplete="username" />}
+                  {recoverStep === 2 && <input id="rc-field" className={'input ' + 'fh ' + sty.ca9baefc} value={recoverCode} onChange={e => { setRecoverCode(e.target.value.replace(/\D/g, '').slice(0, CODE_LEN)); setStepError(''); }} onKeyDown={onEnter(recoverNext)} inputMode="numeric" autoComplete="one-time-code" maxLength={CODE_LEN} placeholder="000000" autoFocus />}
                   {recoverStep === 3 && <input id="rc-field" className="input" type="password" value={recoverPass} onChange={e => { setRecoverPass(e.target.value); setStepError(''); }} placeholder="не короче 8 символов" autoComplete="new-password" autoFocus />}
                 </div>
                 {recoverStep === 3 && (
@@ -824,14 +814,13 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                 {stepError && <div role="alert" style={{ ...css(ALERT), animation: stepErrAnim }}>{stepError}</div>}
                 {recoverSent && recoverStep === 2 && (
                   <div className={sty.c48c42b0}>
-                    Если аккаунт «{identifier.trim()}» существует, {challenge?.channel === 'call' ? 'звонок поступит' : 'код придёт по SMS'} в течение минуты.{challenge?.devCode ? ' Режим разработки: код ' + challenge.devCode + '.' : ''}
+                    Если аккаунт «{identifier.trim()}» существует, письмо с кодом придёт в течение минуты.{challenge?.devCode ? ' Режим разработки: код ' + challenge.devCode + '.' : ''}
                   </div>
                 )}
                 <button className="btn btn-primary btn-block blueprint" onClick={recoverNext} disabled={busy} style={css('margin-top: 22px; ' + PRIMARY)}>
                   <Corners />{recoverStep === 2 ? 'Подтвердить код' : recoverStep === 3 ? 'Сохранить пароль и войти' : 'Прислать код восстановления'}
                 </button>
-                {recoverStep === 2 && <button onClick={() => recoverSend()} disabled={busy} style={css('margin-top: 12px; ' + UNDERLINE_BTN)}>{challenge?.channel === 'call' ? 'Позвонить снова' : 'Отправить SMS снова'}</button>}
-                {recoverStep === 2 && challenge?.channel === 'call' && <button onClick={() => recoverSend('sms')} disabled={busy} style={css('margin-top: 12px; margin-left: 18px; ' + UNDERLINE_BTN)}>Звонок не пришёл — прислать SMS</button>}
+                {recoverStep === 2 && <button onClick={() => recoverSend()} disabled={busy} style={css('margin-top: 12px; ' + UNDERLINE_BTN)}>Прислать код ещё раз</button>}
                 <div><button onClick={() => switchMode('login')} style={css(LINK_BTN)}>← Вернуться ко входу</button></div>
               </div>
             )}

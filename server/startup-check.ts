@@ -16,15 +16,15 @@ export function productionProblems(env: Record<string, string | undefined> = pro
   need('OPERATOR_ADDRESS', 'адрес для писем');
   need('OPERATOR_EMAIL', 'e-mail для обращений по персональным данным');
   need('PROCESSOR_HOSTING', 'хостинг-провайдер и его ИНН (кто хранит данные по вашему поручению)');
-  need('PROCESSOR_SMS', 'SMS-провайдер и его ИНН');
   need('PROCESSOR_MAIL', 'почтовый сервис и его ИНН');
   if (val('S3_BUCKET') || val('BACKUP_S3_BUCKET')) need('PROCESSOR_STORAGE', 'облачное хранилище и его ИНН (фото или резервные копии хранятся в нём)');
 
   need('PUBLIC_URL', 'адрес сайта, например https://arenarabot.ru');
   if (val('PUBLIC_URL') && !val('PUBLIC_URL').startsWith('https://')) out.push('PUBLIC_URL — должен начинаться с https://');
   if (val('AUTH_CODE_SECRET').length < 32) out.push('AUTH_CODE_SECRET — случайная строка не короче 32 символов (openssl rand -hex 32)');
-  if (val('SMS_PROVIDER') === 'smsru') need('SMSRU_API_ID', 'ключ из личного кабинета SMS.ru');
-  if (val('EMAIL_PROVIDER') === 'smtp') need('SMTP_URL', 'адрес почтового сервера с логином и паролем');
+  // Почта — единственный способ получить код при регистрации и восстановлении: без SMTP сайт не запускается.
+  if (val('EMAIL_PROVIDER') !== 'smtp') out.push('EMAIL_PROVIDER — должно быть smtp: коды подтверждения приходят письмом');
+  need('SMTP_URL', 'адрес почтового сервера с логином и паролем');
   // Вход через Яндекс ID без секрета не заработает — кнопка просто не появится, лучше сказать сразу.
   if (val('YANDEX_CLIENT_ID')) need('YANDEX_CLIENT_SECRET', 'Client secret приложения на oauth.yandex.ru (или уберите YANDEX_CLIENT_ID)');
   if (val('YANDEX_CLIENT_SECRET') && !val('YANDEX_CLIENT_ID')) out.push('YANDEX_CLIENT_ID — ClientID приложения на oauth.yandex.ru (секрет указан, а ClientID нет)');

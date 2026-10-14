@@ -14,7 +14,7 @@ import sty from './NotifyRail.module.css';
 
 type Ev = { id: string; kind: string; text: string; num: number | null; muted: boolean; read: boolean; at: string; href: string | null };
 export type Settings = {
-  enabled: boolean; push: boolean; sms: boolean; email: boolean; radiusKm: number;
+  enabled: boolean; push: boolean; email: boolean; radiusKm: number;
   quietOn: boolean; quietFrom: number; quietTo: number; urgentBypass: boolean; dailyCap: number;
 };
 
@@ -183,11 +183,11 @@ export function NotifyRail() {
                 {s && <Switch on={s.enabled} onClick={() => save({ enabled: !s.enabled })} title={s.enabled ? 'Выключить оповещения' : 'Включить оповещения'} />}
               </div>
               {!s && <div style={css(NOTE + '; margin-top: 9px')}>Загружаем…</div>}
-              {s && !s.enabled && <div className={sty.ceccbb76}>Доставка выключена — всплывающие, SMS и письма не приходят. Журнал продолжает вестись.</div>}
+              {s && !s.enabled && <div className={sty.ceccbb76}>Доставка выключена — всплывающие, пуши и письма не приходят. Журнал продолжает вестись.</div>}
               {s && s.enabled && (
                 <div>
                   <div className={sty.cc60885d}>
-                    {([['push', 'Пуш: в открытой вкладке и в браузере'], ['sms', 'SMS'], ['email', emailVerified ? 'E-mail' : 'E-mail (сначала подтвердите адрес в профиле)']] as const).map(([k, label]) => (
+                    {([['push', 'Пуш: в открытой вкладке и в браузере'], ['email', emailVerified ? 'E-mail' : 'E-mail (сначала подтвердите адрес в профиле)']] as const).map(([k, label]) => (
                       <label key={k} className={sty.c0a06f94}>
                         <input type="checkbox" checked={s[k]} onChange={e => save({ [k]: e.target.checked })} className={sty.c9002738} />
                         <span>{label}</span>
@@ -267,7 +267,7 @@ export function NotifyRail() {
                   </div>
                   <div style={css(NOTE + '; margin-top: 8px')}>
                     {(s.quietOn ? 'Тихие часы с ' + hh(s.quietFrom) + ' до ' + hh(s.quietTo) + (s.urgentBypass ? ', срочные проходят' : ', срочные тоже молчат') : 'Тихие часы выключены') +
-                      ' · не больше ' + s.dailyCap + ' SMS и писем в день, остальное копится в журнале.'}
+                      ' · не больше ' + s.dailyCap + ' писем и пушей в день, остальное копится в журнале.'}
                   </div>
                 </div>
               )}

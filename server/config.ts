@@ -13,15 +13,8 @@ export const config = {
   databaseUrl: () => env('DATABASE_URL', isProd ? undefined : 'postgres://arena:arena@localhost:5432/arena_dev'),
   // Ключ для HMAC кодов подтверждения. В продакшене обязателен.
   codeSecret: () => env('AUTH_CODE_SECRET', isProd ? undefined : 'dev-only-code-secret'),
-  smsProvider: () => env('SMS_PROVIDER', isProd ? undefined : 'console') as 'console' | 'smsru',
-  smsRuApiId: () => env('SMSRU_API_ID'),
-  // Потолок SMS в сутки на всю площадку (коды и уведомления) — защита от расходов на чужие рассылки (sms-budget.ts).
-  smsDailyLimit: () => Math.max(1, parseInt(env('SMS_DAILY_LIMIT', '300'), 10) || 300),
-  // Первый способ отправки кода: call — звонок-сброс (код — последние 4 цифры номера; дешевле SMS), sms — SMS.
-  // Второй способ остаётся кнопкой на экране кода.
-  codeChannel: (): 'call' | 'sms' => (env('CODE_CHANNEL', 'call') === 'sms' ? 'sms' : 'call'),
-  // Только для разработки: фиксированный код вместо случайного (как 1234 в прототипе).
-  devFixedCode: () => (isProd ? '' : env('SMS_DEV_FIXED_CODE', '')),
+  // Только для разработки: фиксированный код из письма вместо случайного (6 цифр, например 123456).
+  devFixedCode: () => (isProd ? '' : env('DEV_FIXED_CODE', '')),
   secureCookies: () => env('SECURE_COOKIES', isProd ? '1' : '0') === '1',
   // Nominatim-совместимый геокодер. Публичный nominatim.openstreetmap.org — только для разработки (лимит 1 запрос/с).
   geocoderUrl: () => env('GEOCODER_URL', 'https://nominatim.openstreetmap.org'),

@@ -518,9 +518,9 @@ export async function fileComplaint(num: number, raw: unknown, viewer: Viewer): 
       throw e;
     }
     // Жалобы уходят в поддержку по почте (через очередь доставки).
-    const author = await one<{ login: string; phone: string; role: string }>('SELECT login, phone, role FROM users WHERE id = $1', [u.id], db);
+    const author = await one<{ login: string; email: string; role: string }>('SELECT login, email, role FROM users WHERE id = $1', [u.id], db);
     await mailSupport('Жалоба · заказ № ' + jobNum(num) + ' · ' + reason,
-      'Заказ № ' + jobNum(num) + ' «' + j.title + '»\nАвтор: ' + author?.login + ' (' + author?.role + ', ' + author?.phone + ')\n' +
+      'Заказ № ' + jobNum(num) + ' «' + j.title + '»\nАвтор: ' + author?.login + ' (' + author?.role + ', ' + author?.email + ')\n' +
       (target ? 'На кого: ' + (await one<{ login: string }>('SELECT login FROM users WHERE id = $1', [target], db))?.login + '\n' : '') +
       'Тема: ' + reason + '\n\n' + text, db);
     await addEvents([{ userId: u.id, kind: 'complaint', text: 'Жалоба зарегистрирована · заказ № ' + jobNum(num) + ' — ответ за 3 рабочих дня', jobId: j.id, num, silent: true }], db);

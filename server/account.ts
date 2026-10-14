@@ -74,14 +74,12 @@ export async function deleteAccount(viewer: U | null, raw: unknown) {
     // Личные данные: имя, контакты, вход, база, профиль, фото профиля, журнал, подписки, настройки.
     if (u.avatar_url) files.push(...[u.avatar_url.match(/\/api\/files\/([0-9a-f-]{36})/)?.[1]].filter((x): x is string => !!x));
     const tag = viewer.id.replace(/-/g, '').slice(0, 12);
-    // phone_key — 10 цифр с ведущим 0: такого номера в РФ нет, уникальность — по хешу id.
-    const phoneKey = '0' + (BigInt('0x' + crypto.createHash('sha256').update(viewer.id).digest('hex').slice(0, 15)) % 1_000_000_000n).toString().padStart(9, '0');
     await query(
-      `UPDATE users SET name = 'Удалённый пользователь', login = $2, phone = '', phone_key = $3, email = '', password_hash = $4,
+      `UPDATE users SET name = 'Удалённый пользователь', login = $2, phone = NULL, phone_key = NULL, email = '', password_hash = $3,
               city = '', base_lat = NULL, base_lng = NULL, base_label = NULL, avatar_url = NULL, bio = NULL, email_verified_at = NULL,
               is_staff = false, status = 'deleted', deleted_at = now(), updated_at = now()
         WHERE id = $1`,
-      [viewer.id, 'del_' + tag, phoneKey, 'deleted:' + crypto.randomBytes(16).toString('hex')], db);
+      [viewer.id, 'del_' + tag, 'deleted:' + crypto.randomBytes(16).toString('hex')], db);
     for (const sql of [
       'DELETE FROM sessions WHERE user_id = $1',
       'DELETE FROM push_subscriptions WHERE user_id = $1',

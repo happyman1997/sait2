@@ -65,13 +65,13 @@ describe('удаление аккаунта', () => {
     await expectErr(deleteAccount(emp, ok), /нанятыми исполнителями/, 409);
   });
 
-  it('исполнитель: данные стёрты, вход закрыт, отклики отозваны, отзыв остаётся за «Удалённым пользователем», номер свободен', async () => {
+  it('исполнитель: данные стёрты, вход закрыт, отклики отозваны, отзыв остаётся за «Удалённым пользователем», почта и логин свободны', async () => {
     const j = await jobs.createJob(form(), emp, today);
     await jobs.applyToJob(j.num, { reqConfirmed: true }, fl, today);
     await query(`INSERT INTO reviews (job_id, author_id, target_id, rating, text, editable_until) SELECT id, $1, $2, 5, 'Хороший заказчик', now() FROM jobs`, [fl.id, emp.id]);
     await deleteAccount(fl, ok);
     const u = (await one<Record<string, unknown>>('SELECT * FROM users WHERE id = $1', [fl.id]))!;
-    expect(u).toMatchObject({ name: 'Удалённый пользователь', phone: '', email: '', city: '', status: 'deleted', base_lat: null, avatar_url: null });
+    expect(u).toMatchObject({ name: 'Удалённый пользователь', phone: null, email: '', city: '', status: 'deleted', base_lat: null, avatar_url: null });
     expect(u.login).toMatch(/^del_/);
     expect(u.deleted_at).not.toBeNull();
     expect(await sessionUser(fl.token)).toBeNull();
@@ -80,7 +80,7 @@ describe('удаление аккаунта', () => {
       expect((await one<{ n: number }>(`SELECT count(*)::int AS n FROM ${t} WHERE user_id = $1`, [fl.id]))!.n, t).toBe(0);
     }
     expect((await one<{ name: string }>('SELECT a.name FROM reviews r JOIN users a ON a.id = r.author_id'))!.name).toBe('Удалённый пользователь');
-    // Тот же номер и логин можно зарегистрировать заново.
+    // Ту же почту и логин можно зарегистрировать заново.
     await mkUser('freelancer', 'daniyar_s', '9160000000', 'Данияр Сапаров');
     await expectErr(deleteAccount(fl, ok), /не найден|войти/);
   });

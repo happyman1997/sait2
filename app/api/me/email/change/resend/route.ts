@@ -5,5 +5,5 @@ export const POST = route(async (req) => {
   await assertSameOrigin(req);
   await requireUser();
   const b = await readJson(req);
-  return resendCode(b.challengeId, b.channel, 'phone', await requestCtx());
+  return resendCode(b.challengeId, 'email', await requestCtx());
 });

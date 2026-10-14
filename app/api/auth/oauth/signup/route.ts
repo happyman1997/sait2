@@ -4,7 +4,7 @@ import { oauthSignup } from '@/server/auth';
 import { assertSameOrigin, readJson, requestCtx, route, setSessionCookie } from '@/server/http';
 import { NONCE_COOKIE } from '@/server/oauth';
 
-/** Регистрация после «Войти через…», когда сервис подтвердил телефон: без кода. */
+/** Регистрация после «Войти через…» с почтой, которую подтвердил сервис: без кода. */
 export const POST = route(async (req) => {
   await assertSameOrigin(req);
   const b = await readJson(req);

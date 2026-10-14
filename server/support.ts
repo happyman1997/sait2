@@ -186,7 +186,7 @@ export async function resolveComplaint(viewer: U, id: string, raw: unknown) {
 // ───────────────────────── Пользователи ─────────────────────────
 
 export type UserRow = {
-  id: string; login: string; name: string; phone: string; email: string; role: string; status: string; isStaff: boolean; createdAt: string;
+  id: string; login: string; name: string; email: string; role: string; status: string; isStaff: boolean; createdAt: string;
   jobs: number; done: number; noShows: number; complaints: number; marks: number;
   actions: { action: string; note: string; at: string }[];
   /** Действующие отметки и последние отзывы о пользователе — для обжалования (Правила площадки, п. 3–4). */
@@ -198,13 +198,12 @@ export async function findUsers(viewer: U, q: unknown): Promise<UserRow[]> {
   await needStaff(viewer);
   const s = typeof q === 'string' ? q.trim().slice(0, 80) : '';
   if (s.length < 2) return [];
-  const digits = s.replace(/\D/g, '');
   const like = '%' + s.toLowerCase().replace(/[\\%_]/g, m => '\\' + m) + '%';
   const r = await query<{
-    id: string; login: string; name: string; phone: string; email: string; role: string; status: string; is_staff: boolean; created_at: Date;
+    id: string; login: string; name: string; email: string; role: string; status: string; is_staff: boolean; created_at: Date;
     jobs: number; done: number; no_show_count: number; complaints: number; marks: number;
   }>(
-    `SELECT u.id, u.login, u.name, u.phone, u.email, u.role, u.status, u.is_staff, u.created_at, u.no_show_count,
+    `SELECT u.id, u.login, u.name, u.email, u.role, u.status, u.is_staff, u.created_at, u.no_show_count,
             CASE WHEN u.role = 'employer' THEN (SELECT count(*) FROM jobs WHERE employer_id = u.id)
                  ELSE (SELECT count(*) FROM applications WHERE freelancer_id = u.id) END::int AS jobs,
             CASE WHEN u.role = 'employer' THEN (SELECT count(*) FROM jobs WHERE employer_id = u.id AND status = 'accepted')
@@ -212,8 +211,8 @@ export async function findUsers(viewer: U, q: unknown): Promise<UserRow[]> {
             (SELECT count(*) FROM complaints c WHERE coalesce(c.target_id, (SELECT employer_id FROM jobs WHERE id = c.job_id)) = u.id)::int AS complaints,
             (SELECT count(*) FROM user_marks m WHERE m.user_id = u.id AND coalesce(m.until, m.created_at + interval '90 days') > now())::int AS marks
        FROM users u
-      WHERE lower(u.login) LIKE $1 OR lower(u.name) LIKE $1 OR lower(u.email) LIKE $1 OR ($2 <> '' AND length($2) >= 4 AND u.phone_key LIKE '%' || $2 || '%')
-      ORDER BY u.created_at DESC LIMIT 20`, [like, digits.slice(-10)]);
+      WHERE lower(u.login) LIKE $1 OR lower(u.name) LIKE $1 OR lower(u.email) LIKE $1
+      ORDER BY u.created_at DESC LIMIT 20`, [like]);
   const acts = await query<{ user_id: string; action: string; note: string; created_at: Date }>(
     `SELECT user_id, action, note, created_at FROM staff_actions WHERE user_id = ANY($1::uuid[]) ORDER BY created_at DESC`, [r.rows.map(u => u.id)]);
   const ids = r.rows.map(u => u.id);
@@ -228,7 +227,7 @@ export async function findUsers(viewer: U, q: unknown): Promise<UserRow[]> {
         WHERE v.target_id = ANY($1::uuid[]) ORDER BY v.created_at DESC`, [ids])
   ]);
   return r.rows.map(u => ({
-    id: u.id, login: u.login, name: u.name, phone: u.phone, email: u.email, role: u.role, status: u.status, isStaff: u.is_staff,
+    id: u.id, login: u.login, name: u.name, email: u.email, role: u.role, status: u.status, isStaff: u.is_staff,
     createdAt: u.created_at.toISOString(), jobs: u.jobs, done: u.done, noShows: u.no_show_count, complaints: u.complaints, marks: u.marks,
     actions: acts.rows.filter(a => a.user_id === u.id).slice(0, 5).map(a => ({ action: a.action, note: a.note, at: a.created_at.toISOString() })),
     markList: marks.rows.filter(m => m.user_id === u.id).map(m => ({ id: m.id, kind: m.kind, reason: m.reason || '', at: m.created_at.toISOString() })),

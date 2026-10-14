@@ -24,7 +24,7 @@ let emp: U, emp2: U, fl: U, fl2: U, fl3: U;
 async function mkUser(role: 'freelancer' | 'employer', login: string, phoneKey: string, name: string): Promise<U> {
   const u = await one<{ id: string }>(
     `INSERT INTO users (role, login, phone, phone_key, email, password_hash, name, city, base_lat, base_lng, offer_accepted_at, offer_version)
-     VALUES ($1, $2, '+7' || $3, $3, 'x@x.ru', 'x', $4, 'Москва', $5, $6, now(), 't') RETURNING id`,
+     VALUES ($1, $2, '+7' || $3, $3, $2 || '@x.ru', 'x', $4, 'Москва', $5, $6, now(), 't') RETURNING id`,
     [role, login, phoneKey, name, MOSCOW.lat, MOSCOW.lng]);
   return { id: u!.id, role, city: 'Москва', base_lat: MOSCOW.lat, base_lng: MOSCOW.lng };
 }

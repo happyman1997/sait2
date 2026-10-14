@@ -105,10 +105,11 @@ describe('жалобы', () => {
 });
 
 describe('пользователи и блокировка', () => {
-  it('поиск по логину, имени и телефону', async () => {
+  it('поиск по логину, имени и почте', async () => {
     expect((await sup.findUsers(staff, 'aigul')).map(u => u.login)).toEqual(['aigul_t']);
     expect((await sup.findUsers(staff, 'Сапаров')).map(u => u.login)).toEqual(['daniyar_s']);
-    expect((await sup.findUsers(staff, '+7 916 000-00-00')).map(u => u.login)).toEqual(['daniyar_s']);
+    expect((await sup.findUsers(staff, 'daniyar_s@x')).map(u => u.login)).toEqual(['daniyar_s']);
+    expect(await sup.findUsers(staff, '+7 916 000-00-00')).toEqual([]);
     expect(await sup.findUsers(staff, 'a')).toEqual([]);
   });
 

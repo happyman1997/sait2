@@ -13,7 +13,6 @@ const push = await import('@/server/push');
 const ev = await import('@/server/events');
 const prof = await import('@/server/profile');
 const { setMailer } = await import('@/server/mail');
-const { setCodeSender } = await import('@/server/sms');
 const { sessionUser, createSession } = await import('@/server/session');
 const { AppError } = await import('@/server/errors');
 const { localISO } = await import('@/lib/jobs');
@@ -25,7 +24,6 @@ const MOSCOW = { lat: 55.7558, lng: 37.6173 };
 
 const mails: { to: string; subject: string; text: string }[] = [];
 setMailer({ async send(to, subject, text) { mails.push({ to, subject, text }); } });
-setCodeSender({ async send() { return { code: '1234' }; }, async sendText() {} });
 
 async function mkUser(role: 'freelancer' | 'employer', login: string, phoneKey: string, name: string): Promise<SU> {
   const u = await one<{ id: string }>(
@@ -100,7 +98,7 @@ describe('подтверждение e-mail', () => {
   const tokenFromMail = () => mails.at(-1)!.text.match(/t=([A-Za-z0-9_-]+)/)![1];
 
   it('письмо со ссылкой; уведомления на почту — только после подтверждения', async () => {
-    await prof.saveSettings(fl, { email: true, sms: false });
+    await prof.saveSettings(fl, { email: true });
     await jobs.createJob(form(), emp, today);
     expect((await ev.processOutbox()).sent).toBe(0);        // адрес не подтверждён
     expect(await verify.sendEmailVerification(fl)).toEqual({ sent: true, verified: false });
@@ -122,17 +120,23 @@ describe('подтверждение e-mail', () => {
     expect(mails).toHaveLength(0);
   });
 
-  it('смена адреса сбрасывает подтверждение; старая ссылка не подтверждает новый адрес', async () => {
+  it('почта в профиле меняется только кодом; старая ссылка после смены не подтверждает новый адрес', async () => {
+    const auth = await import('@/server/auth');
+    const { hashPassword } = await import('@/server/password');
+    await query('UPDATE users SET password_hash = $2 WHERE id = $1', [fl.id, await hashPassword('secret1!')]);
     await verify.sendEmailVerification(fl);
     await ev.processOutbox();
     const oldToken = tokenFromMail();
+    // Правка профиля почту не трогает.
     await prof.updateProfile(fl, { email: 'new@x.ru' });
+    expect((await prof.getProfile(fl)).user.email).toBe(fl.email);
+
+    const s = await auth.startEmailChange(fl.id, { email: 'new@x.ru', password: 'secret1!' }, {});
+    const code = mails.at(-1)!.subject.match(/(\d{6})$/)![1];
+    await auth.verifyEmailChange(fl.id, s.challengeId, code);
     expect(await verify.confirmEmail(oldToken)).toBe(false);
-    await ev.processOutbox();
-    expect(mails.at(-1)!.to).toBe('new@x.ru');
-    expect(await verify.confirmEmail(tokenFromMail())).toBe(true);
-    await prof.updateProfile(fl, { email: 'other@x.ru' });
-    expect((await prof.getProfile(fl)).user.emailVerified).toBe(false);
+    const p = await prof.getProfile(fl);
+    expect(p.user).toMatchObject({ email: 'new@x.ru', emailVerified: true });
   });
 });
 
@@ -193,7 +197,7 @@ describe('веб-пуш', () => {
     }
     await push.subscribePush(fl, sub(1));
     await push.subscribePush(fl, sub(2));
-    await prof.saveSettings(fl, { sms: false });
+    await prof.saveSettings(fl, { email: false });
     const j = await jobs.createJob(form(), emp, today);
     expect((await ev.processOutbox()).sent).toBe(1);
     expect(got).toEqual([{ endpoint: sub(1).endpoint, body: expect.stringContaining('Новая смена'), url: '/?job=' + j.num }]);

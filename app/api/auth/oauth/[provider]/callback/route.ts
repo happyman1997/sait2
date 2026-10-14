@@ -21,7 +21,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ provider: strin
     const session = await createSession(r.userId, await requestCtx());
     return setSessionCookie(go(r.applyNum ? '/?job=' + r.applyNum : '/'), session.token, session.expiresAt);
   } catch (e) {
-    const msg = e instanceof AppError ? e.message : 'Не получилось войти через сервис — попробуйте ещё раз или войдите по телефону.';
+    const msg = e instanceof AppError ? e.message : 'Не получилось войти через сервис — попробуйте ещё раз или войдите по почте.';
     if (!(e instanceof AppError)) console.error('[oauth]', (e as Error).message);
     return go((viewer ? '/profile' : '/auth?mode=login') + (viewer ? '?' : '&') + 'oauth_error=' + encodeURIComponent(msg));
   }

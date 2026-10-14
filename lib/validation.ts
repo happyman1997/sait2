@@ -7,38 +7,14 @@ export type FieldError = { field: string; message: string };
 
 export const LOGIN_RE = /^[a-zA-Z0-9._]{3,20}$/;
 export const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-export const PHONE_LIKE_RE = /^[+\d\s()\-]+$/;
 
-export function digitsOf(v: string): string {
-  return String(v || '').replace(/\D/g, '');
-}
-
-/** Ключ телефона: последние 10 цифр (README: «сравнение по последним 10»). */
-export function phoneKey(v: string): string | null {
-  const d = digitsOf(v);
-  return d.length >= 10 ? d.slice(-10) : null;
-}
-
-/** Телефон для хранения и отображения: +7XXXXXXXXXX. */
-export function normalizePhone(v: string): string | null {
-  const k = phoneKey(v);
-  return k ? '+7' + k : null;
-}
-
-export function formatPhone(v: string): string {
-  const k = phoneKey(v);
-  if (!k) return v;
-  return `+7 ${k.slice(0, 3)} ${k.slice(3, 6)}-${k.slice(6, 8)}-${k.slice(8)}`;
-}
-
-/** Логин или телефон: строка из [+\d\s()-] — телефон, иначе логин. */
-export function parseIdentifier(raw: string): { kind: 'phone'; key: string } | { kind: 'login'; login: string } | { kind: 'invalid'; message: string } {
+/** Почта или логин: есть «@» — почта, иначе логин. */
+export function parseIdentifier(raw: string): { kind: 'email'; email: string } | { kind: 'login'; login: string } | { kind: 'invalid'; message: string } {
   const t = String(raw || '').trim();
-  if (!t) return { kind: 'invalid', message: 'Введите логин или номер телефона.' };
-  if (PHONE_LIKE_RE.test(t)) {
-    const key = phoneKey(t);
-    if (!key) return { kind: 'invalid', message: 'В номере телефона не хватает цифр — нужно минимум 10.' };
-    return { kind: 'phone', key };
+  if (!t) return { kind: 'invalid', message: 'Введите почту или логин.' };
+  if (t.includes('@')) {
+    if (!EMAIL_RE.test(t) || t.length > 200) return { kind: 'invalid', message: 'Проверьте почту — похоже, в адресе опечатка.' };
+    return { kind: 'email', email: t };
   }
   if (!LOGIN_RE.test(t)) return { kind: 'invalid', message: 'Логин — 3–20 символов: латиница, цифры, точка или подчёркивание.' };
   return { kind: 'login', login: t };
@@ -46,7 +22,6 @@ export function parseIdentifier(raw: string): { kind: 'phone'; key: string } | {
 
 export type Contacts = {
   name: string;
-  phone: string;
   login: string;
   password: string;
   email: string;
@@ -86,10 +61,9 @@ export type SignupInput = Contacts & {
 export function contactsMissing(c: Partial<Contacts>, opts: { requirePassword?: boolean } = {}): string[] {
   const miss: string[] = [];
   if ((c.name || '').trim().length < 2) miss.push('name');
-  if (digitsOf(c.phone || '').length < 10) miss.push('phone');
-  if (!LOGIN_RE.test((c.login || '').trim())) miss.push('login');
-  if (opts.requirePassword !== false && passwordProblem(c.password || '', { login: c.login, phone: c.phone })) miss.push('password');
   if (!EMAIL_RE.test((c.email || '').trim())) miss.push('email');
+  if (!LOGIN_RE.test((c.login || '').trim())) miss.push('login');
+  if (opts.requirePassword !== false && passwordProblem(c.password || '', { login: c.login, email: c.email })) miss.push('password');
   if (!(c.city || '').trim()) miss.push('city');
   return miss;
 }
@@ -97,10 +71,9 @@ export function contactsMissing(c: Partial<Contacts>, opts: { requirePassword?: 
 export function contactsMessage(field: string, email: string, c: Partial<Contacts> = {}): string {
   switch (field) {
     case 'name': return 'Укажите имя и фамилию — их видит вторая сторона в чате.';
-    case 'phone': return 'Телефон нужен для кода подтверждения и связи на смене — минимум 10 цифр.';
     case 'login': return 'Придумайте логин: 3–20 символов — латиница, цифры, точка или подчёркивание.';
-    case 'password': return passwordProblem(c.password || '', { login: c.login, phone: c.phone }) || 'Придумайте пароль.';
-    case 'email': return email.trim() ? 'Проверьте e-mail — похоже, в адресе опечатка.' : 'Укажите e-mail — на него придут чеки и важные уведомления.';
+    case 'password': return passwordProblem(c.password || '', { login: c.login, email: c.email }) || 'Придумайте пароль.';
+    case 'email': return email.trim() ? 'Проверьте e-mail — похоже, в адресе опечатка.' : 'Укажите e-mail — на него придёт код подтверждения, по нему же вход.';
     default: return 'Укажите город — по нему подбираются смены рядом.';
   }
 }
@@ -124,10 +97,10 @@ export function validateProfile(role: Role, p: { freelancer?: Partial<Freelancer
   return null;
 }
 
-export function takenMessage(by: 'phone' | 'login', role: Role): string {
-  return (by === 'phone' ? 'Этот номер' : 'Этот логин') + ' уже зарегистрирован — как ' +
+export function takenMessage(by: 'email' | 'login', role: Role): string {
+  return (by === 'email' ? 'Эта почта уже зарегистрирована' : 'Этот логин уже зарегистрирован') + ' — как ' +
     (role === 'employer' ? 'работодатель' : 'исполнитель') +
-    '. Один аккаунт — одна роль: войдите или укажите ' + (by === 'phone' ? 'другой номер.' : 'другой логин.');
+    '. Один аккаунт — одна роль: войдите или укажите ' + (by === 'email' ? 'другую почту.' : 'другой логин.');
 }
 
 // ─── Санитайзинг входных данных на сервере ───
@@ -143,7 +116,6 @@ export function sanitizeSignup(raw: unknown): SignupInput {
   const out: SignupInput = {
     role,
     name: str(r.name, 120),
-    phone: str(r.phone, 32),
     login: str(r.login, 20),
     password: typeof r.password === 'string' ? r.password.slice(0, 200) : '',
     email: str(r.email, 200),

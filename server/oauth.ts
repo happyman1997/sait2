@@ -1,13 +1,15 @@
 // Вход через Яндекс ID и VK ID (OAuth 2.0 с PKCE). Оба — российские сервисы, сами проверяющие человека по номеру
-// телефона, поэтому подходят как способ авторизации наравне с кодом на телефон.
+// телефона; сам номер площадке не нужен и не запрашивается — только имя и почта.
 //
 // Путь: /api/auth/oauth/<provider>/start → провайдер → /api/auth/oauth/<provider>/callback. Дальше одно из трёх:
-//  - аккаунт уже привязан (или найден по подтверждённому провайдером телефону) — вход;
+//  - аккаунт уже привязан — вход;
 //  - intent = link (из профиля) — привязка к текущему аккаунту;
-//  - новый человек — одноразовый билет: /auth?oauth=<билет>, анкета с уже заполненными именем, почтой и телефоном.
+//  - новый человек — одноразовый билет: /auth?oauth=<билет>, анкета с уже заполненными именем и почтой.
+// Аккаунт с той же почтой сам не привязывается (почта у сервиса могла быть не подтверждена): человек входит
+// по почте и паролю и привязывает сервис в профиле.
 // state, верификатор PKCE и билет хранятся в БД только хэшами и привязаны к браузеру, начавшему вход (cookie с nonce).
 import crypto from 'node:crypto';
-import { formatPhone, normalizePhone, phoneKey } from '@/lib/validation';
+import { EMAIL_RE } from '@/lib/validation';
 import { config } from './config';
 import { one, pool, query, type Db } from './db';
 import { AppError } from './errors';
@@ -18,8 +20,8 @@ export type Provider = 'yandex' | 'vk';
 export const PROVIDERS: Provider[] = ['yandex', 'vk'];
 export const PROVIDER_NAME: Record<Provider, string> = { yandex: 'Яндекс ID', vk: 'VK ID' };
 
-/** Профиль от провайдера: телефон — только российский и подтверждённый провайдером. */
-export type OAuthProfile = { provider: Provider; subject: string; name: string; email: string; phone: string | null };
+/** Профиль от провайдера: id аккаунта у него, имя, почта (пустая, если сервис её не дал). */
+export type OAuthProfile = { provider: Provider; subject: string; name: string; email: string };
 
 const FLOW_MIN = 10;          // от «Войти через…» до возврата
 const TICKET_MIN = 30;        // на заполнение анкеты после возврата
@@ -45,20 +47,15 @@ export function setOAuthFetch(f: Fetch | null) {
 
 async function json(url: string, init: RequestInit): Promise<Record<string, unknown>> {
   let res: Response;
-  try { res = await fetcher(url, init); } catch { throw new AppError(502, 'Сервис входа не ответил — попробуйте ещё раз или войдите по телефону.'); }
+  try { res = await fetcher(url, init); } catch { throw new AppError(502, 'Сервис входа не ответил — попробуйте ещё раз или войдите по почте.'); }
   const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-  if (!res.ok || !body) throw new AppError(502, 'Сервис входа отказал — попробуйте ещё раз или войдите по телефону.');
+  if (!res.ok || !body) throw new AppError(502, 'Сервис входа отказал — попробуйте ещё раз или войдите по почте.');
   return body;
 }
 
 const form = (o: Record<string, string>) => ({ method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(o).toString() });
 
-/** Российский мобильный номер в нашем формате или null. */
-function ruPhone(raw: unknown): string | null {
-  if (typeof raw !== 'string' || !raw.trim()) return null;
-  const pk = phoneKey(raw);
-  return pk ? normalizePhone(pk) : null;
-}
+const emailOf = (raw: unknown) => (typeof raw === 'string' && EMAIL_RE.test(raw.trim()) && raw.length <= 200 ? raw.trim() : '');
 
 const fullName = (...parts: unknown[]) => parts.filter(x => typeof x === 'string' && x.trim()).join(' ').trim().slice(0, 80);
 
@@ -77,7 +74,7 @@ function authorizeUrl(p: Provider, state: string, verifier: string): string {
   const u = new URL('https://id.vk.com/authorize');
   u.search = new URLSearchParams({
     response_type: 'code', client_id: config.vkClientId(), redirect_uri: redirectUri(p), state,
-    code_challenge: challenge, code_challenge_method: 'S256', scope: 'phone email'
+    code_challenge: challenge, code_challenge_method: 'S256', scope: 'email'
   }).toString();
   return u.toString();
 }
@@ -89,12 +86,10 @@ async function fetchProfile(p: Provider, code: string, verifier: string, state: 
     }));
     if (typeof t.access_token !== 'string') throw new AppError(502, 'Яндекс не выдал доступ — попробуйте ещё раз.');
     const i = await json('https://login.yandex.ru/info?format=json', { headers: { Authorization: 'OAuth ' + t.access_token } });
-    const phone = (i.default_phone as { number?: string } | undefined)?.number;
     return {
       provider: p, subject: String(i.id ?? ''),
       name: fullName(i.first_name, i.last_name) || fullName(i.real_name) || fullName(i.display_name),
-      email: typeof i.default_email === 'string' ? i.default_email : '',
-      phone: ruPhone(phone)
+      email: emailOf(i.default_email)
     };
   }
   if (!deviceId) throw new AppError(400, 'VK ID не передал данные устройства — попробуйте войти ещё раз.');
@@ -108,8 +103,7 @@ async function fetchProfile(p: Provider, code: string, verifier: string, state: 
   return {
     provider: p, subject: String(u.user_id ?? t.user_id ?? ''),
     name: fullName(u.first_name, u.last_name),
-    email: typeof u.email === 'string' ? u.email : '',
-    phone: ruPhone(u.phone)
+    email: emailOf(u.email)
   };
 }
 
@@ -140,7 +134,7 @@ type Flow = { id: string; provider: Provider; verifier: string; intent: 'login' 
 
 /** Возврат от провайдера: проверка state и браузера, обмен кода на профиль, вход / привязка / билет регистрации. */
 export async function finishOAuth(p: Provider, params: URLSearchParams, nonce: string | undefined, viewerId: string | null): Promise<OAuthResult> {
-  if (params.get('error')) throw new AppError(400, 'Вход отменён — можно попробовать ещё раз или войти по телефону.');
+  if (params.get('error')) throw new AppError(400, 'Вход отменён — можно попробовать ещё раз или войти по почте.');
   const state = params.get('state') || '', code = params.get('code') || '';
   if (!state || !code || !nonce) throw new AppError(400, 'Ссылка входа устарела — начните заново.');
   // Одноразово: state гасится сразу, повтор того же возврата не сработает.
@@ -166,13 +160,10 @@ export async function finishOAuth(p: Provider, params: URLSearchParams, nonce: s
   const known = await one<{ id: string; status: string }>(
     `SELECT u.id, u.status FROM user_identities i JOIN users u ON u.id = i.user_id WHERE i.provider = $1 AND i.subject = $2`, [p, prof.subject]);
   if (known) return loginResult(known, applyNum);
-  // Подтверждённый провайдером телефон уже есть у нас — это тот же человек: привязываем и входим.
-  if (prof.phone) {
-    const byPhone = await one<{ id: string; status: string }>('SELECT id, status FROM users WHERE phone_key = $1', [phoneKey(prof.phone)]);
-    if (byPhone && byPhone.status !== 'deleted') {
-      await query('INSERT INTO user_identities (provider, subject, user_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [p, prof.subject, byPhone.id]);
-      return loginResult(byPhone, applyNum);
-    }
+  // Почта от сервиса уже у аккаунта — подсказываем привязку (сами не привязываем: почта у сервиса могла быть не подтверждена).
+  if (prof.email && await one("SELECT 1 FROM users WHERE lower(email) = lower($1) AND email <> ''", [prof.email])) {
+    throw new AppError(409, 'Аккаунт с почтой ' + prof.email + ' уже есть. Войдите по почте и паролю, затем привяжите ' +
+      PROVIDER_NAME[p] + ' в профиле — раздел «Вход через сервисы». Не помните пароль — «Забыли пароль?».');
   }
   // Новый человек — билет на регистрацию с заполненными данными.
   const ticket = rnd();
@@ -202,22 +193,17 @@ export async function loadTicket(ticket: unknown, nonce: string | undefined, db:
   return r;
 }
 
-/** Что показать в анкете: данные от провайдера (телефон — уже подтверждён им). */
+/** Что показать в анкете: данные от провайдера. Почта от него — уже подтверждена, без кода. */
 export async function ticketInfo(ticket: unknown, nonce: string | undefined) {
   const t = await loadTicket(ticket, nonce);
   const pr = t.profile;
-  return { provider: pr.provider, providerName: PROVIDER_NAME[pr.provider], name: pr.name, email: pr.email, phone: pr.phone ? formatPhone(pr.phone) : '', phoneVerified: !!pr.phone };
+  return { provider: pr.provider, providerName: PROVIDER_NAME[pr.provider], name: pr.name, email: pr.email };
 }
 
-/** После создания аккаунта: привязка, подтверждённая почта (если та же), билет погашен. */
-export async function consumeTicket(t: Ticket, userId: string, email: string, db: Db) {
+/** После создания аккаунта: привязка сервиса, билет погашен. */
+export async function consumeTicket(t: Ticket, userId: string, db: Db) {
   await query('UPDATE oauth_flows SET used_at = now() WHERE id = $1', [t.id], db);
   await query('INSERT INTO user_identities (provider, subject, user_id) VALUES ($1, $2, $3)', [t.profile.provider, t.profile.subject, userId], db);
-  if (t.profile.email && t.profile.email.toLowerCase() === email.trim().toLowerCase()) {
-    await query('UPDATE users SET email_verified_at = now() WHERE id = $1', [userId], db);
-    return true;
-  }
-  return false;
 }
 
 // ───────────────────────── Профиль ─────────────────────────

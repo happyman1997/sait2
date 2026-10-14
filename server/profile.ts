@@ -1,13 +1,12 @@
 // Профиль, база для поиска, настройки уведомлений, журнал событий.
 import { ACCESS, GEAR, JOB_TYPE_IDS, OBJECT_KINDS, ORG_TYPES, TOOLS } from '@/lib/catalog';
 import { findBadField } from '@/lib/moderation';
-import { EMAIL_RE, LOGIN_RE, type Role } from '@/lib/validation';
+import { LOGIN_RE, type Role } from '@/lib/validation';
 import { loadProfile, publicUser } from './auth';
 import { one, query, tx } from './db';
 import { AppError, ModerationError } from './errors';
 import { geoSearch } from './geo';
 import { limitOrThrow } from './rate-limit';
-import { sendEmailVerification } from './verify';
 import { shortName } from './jobs';
 import type { SessionUser } from './session';
 import { doneSql } from './stats';
@@ -30,7 +29,7 @@ export async function getProfile(viewer: U | null) {
   const v = need(viewer);
   // Свежая строка: профиль читают сразу после правки, а viewer — снимок на начало запроса.
   const u = (await one<U & { email_verified_at: Date | null }>(
-    `SELECT id, role, login, phone, email, name, city, base_lat, base_lng, base_label, avatar_url, status, created_at, $2::uuid AS session_id,
+    `SELECT id, role, login, email, name, city, base_lat, base_lng, base_label, avatar_url, status, created_at, $2::uuid AS session_id,
             email_verified_at
        FROM users WHERE id = $1`, [v.id, v.session_id]))!;
   const emp = u.role === 'employer';
@@ -94,17 +93,15 @@ export async function getProfile(viewer: U | null) {
   };
 }
 
-/** Правка профиля. Телефон меняется отдельно — через код на новый номер. */
+/** Правка профиля. Почта меняется отдельно — кодом на новый адрес (по ней вход и восстановление пароля). */
 export async function updateProfile(viewer: U | null, raw: unknown) {
   const u = need(viewer);
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const first = str(r.firstName, 60), last = str(r.lastName, 60);
   const name = first !== undefined || last !== undefined ? [first ?? '', last ?? ''].join(' ').trim() : undefined;
   const login = str(r.login, 20);
-  const email = str(r.email, 200);
   if (name !== undefined && name.length < 2) throw new AppError(422, 'Укажите имя и фамилию — их видит вторая сторона в чате.', 'name');
   if (login !== undefined && !LOGIN_RE.test(login)) throw new AppError(422, 'Логин: 3–20 символов — латиница, цифры, точка или подчёркивание.', 'login');
-  if (email !== undefined && !EMAIL_RE.test(email)) throw new AppError(422, 'Проверьте e-mail — похоже, в адресе опечатка.', 'email');
 
   const f = (r.freelancer && typeof r.freelancer === 'object' ? r.freelancer : null) as Record<string, unknown> | null;
   const e = (r.employer && typeof r.employer === 'object' ? r.employer : null) as Record<string, unknown> | null;
@@ -131,7 +128,6 @@ export async function updateProfile(viewer: U | null, raw: unknown) {
   const hit = findBadField([
     { field: 'name', label: 'Имя', value: name },
     { field: 'login', label: 'Логин', value: login },
-    { field: 'email', label: 'E-mail', value: email },
     { field: 'skills', label: 'Свой навык', value: fp?.customSkills },
     { field: 'gear', label: 'Свой инвентарь', value: fp?.customGear },
     { field: 'cities', label: 'Города, где вы работаете', value: fp?.workCities },
@@ -146,10 +142,8 @@ export async function updateProfile(viewer: U | null, raw: unknown) {
       if (taken && taken.id !== u.id) throw new AppError(409, 'Этот логин уже занят — выберите другой.', 'login');
     }
     await query(
-      `UPDATE users SET name = coalesce($2, name), login = coalesce($3, login), email = coalesce($4, email), updated_at = now(),
-              email_verified_at = CASE WHEN $4::text IS NOT NULL AND lower($4) <> lower(email) THEN NULL ELSE email_verified_at END
-        WHERE id = $1`,
-      [u.id, name ?? null, login ?? null, email ?? null], db);
+      `UPDATE users SET name = coalesce($2, name), login = coalesce($3, login), updated_at = now() WHERE id = $1`,
+      [u.id, name ?? null, login ?? null], db);
     if (fp) {
       await query(
         `UPDATE freelancer_profiles SET skills = coalesce($2, skills), custom_skills = coalesce($3, custom_skills), gear = coalesce($4, gear),
@@ -165,8 +159,6 @@ export async function updateProfile(viewer: U | null, raw: unknown) {
         [u.id, ep.orgType ?? null, ep.orgName ?? null, ep.inn ?? null, ep.objectKind ?? null, ep.access ?? null, ep.tools ?? null], db);
     }
   });
-  // Новый адрес — сразу письмо со ссылкой (лимит писем не должен ломать сохранение профиля).
-  if (email !== undefined && email.toLowerCase() !== u.email.toLowerCase()) await sendEmailVerification(u).catch(() => {});
   return { ok: true };
 }
 
@@ -193,7 +185,7 @@ export async function setBase(viewer: U | null, raw: unknown) {
 // ───────────────────────── Настройки уведомлений ─────────────────────────
 
 export type Settings = {
-  enabled: boolean; push: boolean; sms: boolean; email: boolean; radiusKm: number;
+  enabled: boolean; push: boolean; email: boolean; radiusKm: number;
   quietOn: boolean; quietFrom: number; quietTo: number; urgentBypass: boolean; dailyCap: number;
 };
 
@@ -202,7 +194,7 @@ export async function getSettings(viewer: U | null): Promise<Settings> {
   await query('INSERT INTO notification_settings (user_id) VALUES ($1) ON CONFLICT DO NOTHING', [u.id]);
   const s = await one<Record<string, unknown>>('SELECT * FROM notification_settings WHERE user_id = $1', [u.id]);
   return {
-    enabled: !!s!.enabled, push: !!s!.push, sms: !!s!.sms, email: !!s!.email, radiusKm: s!.radius_km as number,
+    enabled: !!s!.enabled, push: !!s!.push, email: !!s!.email, radiusKm: s!.radius_km as number,
     quietOn: !!s!.quiet_on, quietFrom: s!.quiet_from as number, quietTo: s!.quiet_to as number, urgentBypass: !!s!.urgent_bypass, dailyCap: s!.daily_cap as number
   };
 }
@@ -217,15 +209,15 @@ export async function saveSettings(viewer: U | null, raw: unknown): Promise<Sett
   const b = (k: keyof Settings) => (typeof r[k] === 'boolean' ? (r[k] as boolean) : (cur[k] as boolean));
   const hour = (k: 'quietFrom' | 'quietTo') => (Number.isInteger(r[k]) && (r[k] as number) >= 0 && (r[k] as number) <= 23 ? (r[k] as number) : cur[k]);
   const next: Settings = {
-    enabled: b('enabled'), push: b('push'), sms: b('sms'), email: b('email'),
+    enabled: b('enabled'), push: b('push'), email: b('email'),
     radiusKm: RADIUS_OPTIONS.includes(r.radiusKm as number) ? (r.radiusKm as number) : cur.radiusKm,
     quietOn: b('quietOn'), quietFrom: hour('quietFrom'), quietTo: hour('quietTo'), urgentBypass: b('urgentBypass'),
     dailyCap: CAP_OPTIONS.includes(r.dailyCap as number) ? (r.dailyCap as number) : cur.dailyCap
   };
   await query(
-    `UPDATE notification_settings SET enabled = $2, push = $3, sms = $4, email = $5, radius_km = $6, quiet_on = $7, quiet_from = $8,
-            quiet_to = $9, urgent_bypass = $10, daily_cap = $11 WHERE user_id = $1`,
-    [u.id, next.enabled, next.push, next.sms, next.email, next.radiusKm, next.quietOn, next.quietFrom, next.quietTo, next.urgentBypass, next.dailyCap]);
+    `UPDATE notification_settings SET enabled = $2, push = $3, email = $4, radius_km = $5, quiet_on = $6, quiet_from = $7,
+            quiet_to = $8, urgent_bypass = $9, daily_cap = $10 WHERE user_id = $1`,
+    [u.id, next.enabled, next.push, next.email, next.radiusKm, next.quietOn, next.quietFrom, next.quietTo, next.urgentBypass, next.dailyCap]);
   return next;
 }
 
