@@ -1,11 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { LEGAL_DOCS } from './DocLinks';
 import sty from './LegalPage.module.css';
-
-const DOCS = [
-  ['/legal/offer', 'Оферта'], ['/legal/rules', 'Правила площадки'],
-  ['/legal/personal-data', 'Политика обработки ПДн'], ['/legal/consent', 'Согласие на обработку ПДн']
-] as const;
 
 export function LegalPage({ kicker, title, children, footer }: { kicker: string; title: string; children: ReactNode; footer?: ReactNode }) {
   return (
@@ -15,7 +11,7 @@ export function LegalPage({ kicker, title, children, footer }: { kicker: string;
       <h1 className={sty.c68398ba}>{title}</h1>
       {children}
       {footer && <p className={sty.foot}>{footer}</p>}
-      <nav className={sty.docs}>{DOCS.map(([href, label]) => <Link key={href} href={href}>{label}</Link>)}</nav>
+      <nav className={sty.docs}>{LEGAL_DOCS.map(([href, label]) => <Link key={href} href={href}>{label}</Link>)}</nav>
     </main>
   );
 }

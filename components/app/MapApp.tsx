@@ -22,6 +22,7 @@ import { useLive, useLiveEvent } from './Live';
 import { NAV_H } from './MobileShell';
 import { ObjectCardPanel, ObjectsList, type ObjectCard } from './ObjectsBlock';
 import { GuestGuide, StartSteps } from './RailSummary';
+import { DocLinks } from '@/components/DocLinks';
 import { Corners, LABEL } from './ui';
 
 export type { Me } from './Live';
@@ -627,6 +628,7 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
               {isEmp && <ObjectsList objects={objects} onMark={fromObject} onEdit={o => { setObjEdit(o); mapRef.current?.flyTo(o.lat, o.lng, 14); }} />}
             </>
           ))}
+          {!form && !selected && !objEdit && <DocLinks style="margin-top: 22px" />}
         </div>
 
         <div style={css('position: relative; min-width: 0; min-height: 0; overflow: hidden; ' + (narrow ? 'grid-row: 1; grid-column: 1' : 'grid-row: 1; grid-column: 2'))}>

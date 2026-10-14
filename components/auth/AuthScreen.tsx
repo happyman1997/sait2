@@ -10,6 +10,7 @@ import { css } from '@/lib/css';
 import { passwordProblem } from '@/lib/password-policy';
 import { contactsMessage, contactsMissing, EMAIL_RE, LOGIN_RE, validateProfile, type Role } from '@/lib/validation';
 import { showModeration } from '@/components/ModerationGuard';
+import { DocLinks } from '@/components/DocLinks';
 import { useFlash } from '@/components/Toast';
 import { useNarrow } from '@/components/useNarrow';
 import sty from './AuthScreen.module.css';
@@ -824,6 +825,8 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                 <div><button onClick={() => switchMode('login')} style={css(LINK_BTN)}>← Вернуться ко входу</button></div>
               </div>
             )}
+
+            <DocLinks newTab style="margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--color-divider)" />
           </div>
         </div>
       </div>
