@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Запуск и обновление сайта. Первый раз — после deploy/setup.sh и заполнения .env.production; потом — для
 # обновления: cd /opt/arena && git pull && bash deploy/launch.sh. Повторный запуск безопасен.
+# WWW=yes bash deploy/launch.sh — добавить www в сертификат, даже если сервер ещё не видит новую запись www.
 # Проверяет настройки и домен, выпускает сертификат (один раз), собирает и запускает сайт, ставит в cron
 # продление сертификата и ежедневную резервную копию.
 set -euo pipefail
@@ -35,6 +36,8 @@ if [ "$now" != "$me" ]; then
 fi
 www_ok=0
 [ "$(resolve "www.$DOMAIN")" = "$me" ] && www_ok=1
+# WWW=yes — не ждать, пока сервер «узнает» новую запись www (проверять её всё равно будет Let's Encrypt).
+[ "${WWW:-}" = yes ] && www_ok=1
 [ $www_ok = 1 ] || echo "Подсказка: www.$DOMAIN не указывает на этот сервер — добавьте A-запись www → $me и запустите скрипт снова, тогда адрес с www тоже заработает."
 vol="$(basename "$DIR" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')_certbot-www"
 
