@@ -19,6 +19,14 @@ set_kv() {
     END { if (!done) print k "=" v }' "$ENV" > "$tmp"
   cat "$tmp" > "$ENV"; rm -f "$tmp"
 }
+# Повторы строк (вставили новую, не удалив старую): остаётся последняя — её же видит Docker.
+dedupe() {
+  local tmp; tmp=$(mktemp)
+  awk '{ line[NR] = $0; key[NR] = "" }
+    /^[A-Za-z_][A-Za-z0-9_]*=/ { k = $0; sub(/=.*/, "", k); key[NR] = k; last[k] = NR }
+    END { for (i = 1; i <= NR; i++) if (key[i] == "" || last[key[i]] == i) print line[i] }' "$ENV" > "$tmp"
+  cat "$tmp" > "$ENV"; rm -f "$tmp"
+}
 trim() { printf '%s' "$1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'; }
 # Для логина и пароля в адресе почтового сервера: всё, кроме латиницы, цифр и ._~-, — в %XX.
 urlenc() { local s=$1 out='' c i; for ((i = 0; i < ${#s}; i++)); do c=${s:i:1}; case $c in [a-zA-Z0-9._~-]) out+=$c;; *) out+=$(printf '%%%02X' "'$c");; esac; done; printf '%s' "$out"; }
@@ -37,6 +45,7 @@ ask() {
   done
 }
 
+dedupe
 echo "Заполняем $ENV. Enter — оставить как есть (текущее значение — в квадратных скобках)."
 echo
 echo "── Ваши данные (попадут в оферту и политику на сайте)"
