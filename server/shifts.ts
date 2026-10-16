@@ -265,6 +265,11 @@ async function acceptLocked(j: JobRow, auto: boolean, db: Db) {
   if (j.status === 'cancelled') throw new AppError(409, 'Смена отменена — принимать нечего.');
   if (j.status === 'accepted') throw new AppError(409, 'Работа уже принята.');
   if (!hired.length) throw new AppError(409, 'На смену никто не нанят — принимать нечего.');
+  // До дня выхода принимать нечего (как и сдавать): иначе смену закрыли бы, а отзывы открыли до самой работы.
+  // Сданную работу принять можно всегда — даже если дату потом перенесли.
+  if (!auto && !j.repeat && j.status !== 'reported' && j.date > localClock().day) {
+    throw new AppError(409, 'Принять работу можно в день выхода или позже — ' + dateLabel(j.date) + '.');
+  }
   await query('INSERT INTO acceptances (job_id, auto) VALUES ($1, $2)', [j.id, auto], db);
   await query(`UPDATE jobs SET status = 'accepted', updated_at = now() WHERE id = $1`, [j.id], db);
   invalidateSearch();
@@ -293,7 +298,7 @@ async function acceptLocked(j: JobRow, auto: boolean, db: Db) {
   await publish([j.employer_id, ...hired.map(h => h.freelancer_id), ...rest], { t: 'job', num: j.num }, db);
 }
 
-/** «Принять работу»: только если кто-то нанят и смена не отменена. */
+/** «Принять работу»: только если кто-то нанят и смена не отменена; разовую — не раньше дня выхода. */
 export async function acceptWork(num: number, viewer: Viewer): Promise<JobDetail> {
   await tx(async (db) => {
     const j = await lockJob(num, db);

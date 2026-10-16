@@ -183,6 +183,8 @@ export const SAFETY_ITEMS = [
 ] as const;
 
 export const AUTO_ACCEPT_DAYS = 7;
+/** Приёмка необратима — спрашиваем перед ней. */
+export const ACCEPT_CONFIRM = 'Принять работу? Смена закроется, откроются отзывы и отметки о расчёте. Отменить приёмку нельзя.';
 export const REVIEW_EDIT_MIN = 10;
 export const HIRE_GREETING = 'Здравствуйте! Вы наняты на этот заказ. Подтвердите, пожалуйста, время выхода.';
 export const REPORT_MESSAGE = 'Работа выполнена — прошу принять.';

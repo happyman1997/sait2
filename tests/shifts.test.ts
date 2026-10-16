@@ -231,9 +231,21 @@ describe('приёмка, расчёт, отзывы, жалобы', () => {
     await expectErr(jobs.cancelJob(num, { reason: 'x', notice: 'больше суток' }, emp), /напишите в чат/);
   });
 
-  it('приёмка без сдачи тоже возможна (работодатель доволен сразу)', async () => {
+  it('приёмка без сдачи тоже возможна (работодатель доволен сразу), но не раньше дня выхода', async () => {
     const { num, ids } = await jobWithApps([fl]);
     await sh.staffAction(num, ids[0], 'hire', emp);
+    await expectErr(sh.acceptWork(num, emp), /в день выхода или позже/);
+    expect((await jobs.getJob(num, emp)).status).not.toBe('accepted');
+    await query('UPDATE jobs SET date = current_date - 1 WHERE num = $1', [num]);
+    expect((await sh.acceptWork(num, emp)).status).toBe('accepted');
+  });
+
+  it('сданную работу можно принять, даже если дату потом перенесли вперёд', async () => {
+    const { num, ids } = await jobWithApps([fl]);
+    await sh.staffAction(num, ids[0], 'hire', emp);
+    await query('UPDATE jobs SET date = current_date - 1 WHERE num = $1', [num]);
+    await sh.reportDone(num, fl);
+    await query("UPDATE jobs SET date = current_date + 3 WHERE num = $1", [num]);
     expect((await sh.acceptWork(num, emp)).status).toBe('accepted');
   });
 
@@ -241,6 +253,7 @@ describe('приёмка, расчёт, отзывы, жалобы', () => {
     const { num, ids } = await jobWithApps([fl]);
     await sh.staffAction(num, ids[0], 'hire', emp);
     await expectErr(sh.markSettled(num, emp), /Сначала работодатель/);
+    await query('UPDATE jobs SET date = current_date - 1 WHERE num = $1', [num]);
     await sh.acceptWork(num, emp);
     await sh.markSettled(num, emp);
     const d = await sh.markSettled(num, fl);
@@ -296,6 +309,7 @@ describe('приёмка, расчёт, отзывы, жалобы', () => {
     const { num, ids } = await jobWithApps([fl]);
     await sh.staffAction(num, ids[0], 'hire', emp);
     await expectErr(sh.fileComplaint(num, { reason: 'не рассчитались', text: 'денег нет' }, fl), /после приёмки/);
+    await query('UPDATE jobs SET date = current_date - 1 WHERE num = $1', [num]);
     await sh.acceptWork(num, emp);
     await expectErr(sh.fileComplaint(num, { reason: 'грабёж', text: 'x' }, fl), /тему/);
     await expectErr(sh.fileComplaint(num, { reason: 'не рассчитались', text: '' }, fl), /Опишите/);
@@ -336,6 +350,7 @@ describe('перенос даты', () => {
     expect(d.urgent).toBe(true);
     expect((await one<{ n: number }>(`SELECT count(*)::int n FROM events WHERE kind = 'move'`))!.n).toBe(2);
     await expectErr(sh.moveDate(num, { date: plusDays(2) }, emp2, today), /только работодатель/);
+    await query('UPDATE jobs SET date = current_date - 1 WHERE num = $1', [num]);
     await sh.acceptWork(num, emp);
     await expectErr(sh.moveDate(num, { date: plusDays(4) }, emp, today), /переносить нельзя/);
   });

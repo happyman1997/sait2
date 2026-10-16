@@ -224,3 +224,13 @@
   height: 40px !important;
   font-size: 13.5px !important;
 }
+/* На телефоне цена и кнопка переносятся под заголовок — ровно по левому краю, а не посередине строки. */
+@media (max-width: 719.98px) {
+  :where(.c30489cb) {
+    flex-basis: 100% !important;
+    text-align: left !important;
+  }
+  :where(.c493bff4) {
+    justify-content: flex-start !important;
+  }
+}

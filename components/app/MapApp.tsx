@@ -366,9 +366,9 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
     setFormStep(n); setFormErrs({}); setFormError('');
   };
 
-  const publish = async () => {
-    if (!form) return;
-    const errs = jobAllErrors(form);
+  const publish = async (f: JobForm | null = form) => {
+    if (!f) return;
+    const errs = jobAllErrors(f);
     const keys = Object.keys(errs);
     if (keys.length) {
       const stepOf: Record<string, number> = { address: 1, desc: 2, type: 2, crew: 2, pay: 3, date: 3, repeat: 3, access: 4, tools: 4 };
@@ -379,7 +379,7 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
     }
     setBusy(true);
     try {
-      const body = { job: form, today: localISO() };
+      const body = { job: f, today: localISO() };
       const r = editing
         ? await api<{ job: JobDetail }>('/api/jobs/' + editing, body, 'PATCH')
         : await api<{ job: JobDetail }>('/api/jobs', body);
@@ -411,9 +411,10 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
     setFormError('Заказ не сохранился — проверьте связь и попробуйте ещё раз.');
   };
 
-  const formNext = async () => {
+  /** patch — то, что форма дописала в последний момент (вписанный, но не добавленный доступ): состояние обновится позже. */
+  const formNext = async (patch?: Partial<JobForm>) => {
     if (!form) return;
-    if (formStep >= 4) return publish();
+    if (formStep >= 4) return publish(patch ? { ...form, ...patch } : form);
     const errs = jobStepErrors(formStep, form);
     if (Object.keys(errs).length) { setFormErrs(errs); setFormError('Заполните отмеченные поля — и перейдём дальше.'); return; }
     setFormStep(s => s + 1); setFormErrs({}); setFormError('');

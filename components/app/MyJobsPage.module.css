@@ -156,3 +156,13 @@
   text-align: center !important;
   color: color-mix(in srgb, var(--color-text) 66%, transparent) !important;
 }
+/* На телефоне цена и кнопки переносятся под заголовок — ровно по левому краю, а не посередине строки. */
+@media (max-width: 719.98px) {
+  :where(.c30489cb) {
+    flex-basis: 100% !important;
+    text-align: left !important;
+  }
+  :where(.c9a16b17) {
+    justify-content: flex-start !important;
+  }
+}

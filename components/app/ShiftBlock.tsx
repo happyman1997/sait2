@@ -5,7 +5,7 @@
 import { useId, useState } from 'react';
 import { css } from '@/lib/css';
 import { uploadForm } from '@/lib/image';
-import { COMPLAINT_KINDS, crewOf, dateLabel, DISPUTE_REASONS, isOnCall, isSeries, LEAVE_REASONS, localISO, money, plural, type DisputeInfo, type JobDetail } from '@/lib/jobs';
+import { ACCEPT_CONFIRM, COMPLAINT_KINDS, crewOf, dateLabel, DISPUTE_REASONS, isOnCall, isSeries, LEAVE_REASONS, localISO, money, plural, type DisputeInfo, type JobDetail } from '@/lib/jobs';
 import { ApplicantReviews } from './ApplicantReviews';
 import { Corners, LABEL } from './ui';
 import sty from './ShiftBlock.module.css';
@@ -151,7 +151,10 @@ export function ShiftBlock({ job, isOwner, act, onChat, onReview, busy }: {
         series
           ? <button className={'btn btn-secondary btn-block ' + sty.cb97e580} disabled={busy}
               onClick={() => { if (window.confirm('Завершить серию? Сданные дни будут приняты, оставшиеся выходы отменятся, откроются отзывы.')) act('accept', {}, 'Серия завершена — оцените исполнителей'); }}>Завершить серию</button>
-          : <button className={'btn btn-primary btn-block ' + sty.cb97e580} disabled={busy} onClick={() => act('accept', {}, 'Работа принята — оцените исполнителя')}>Принять работу</button>
+          : <button className={'btn btn-primary btn-block ' + sty.cb97e580} disabled={busy || (early && !reported)}
+              onClick={() => { if (window.confirm(ACCEPT_CONFIRM)) act('accept', {}, 'Работа принята — оцените исполнителя'); }}>
+              {early && !reported ? 'Принять работу — с ' + dateLabel(job.date) : 'Принять работу'}
+            </button>
       )}
 
       {(s.canChat && (isOwner ? s.hired.length === 1 : true)) && (

@@ -77,7 +77,7 @@ export function JobFormPanel({ form, setForm, step, goStep, errs, formError, onN
   goStep: (n: number) => void;
   errs: Record<string, string>;
   formError: string;
-  onNext: () => void;
+  onNext: (patch?: Partial<JobForm>) => void;
   onBack: () => void;
   onClose: () => void;
   types: JobTypeRow[];
@@ -88,11 +88,24 @@ export function JobFormPanel({ form, setForm, step, goStep, errs, formError, onN
   narrow: boolean;
 }) {
   const [accessDraft, setAccessDraft] = useState('');
-  const addAccess = () => {
+  /** Список доступа с тем, что вписано в поле, но ещё не добавлено; null — добавлять нечего. */
+  const withDraft = () => {
     const v = accessDraft.trim().replace(/\s+/g, ' ');
-    if (!v) return;
-    setForm({ access: form.access.some(x => x.toLowerCase() === v.toLowerCase()) ? form.access : form.access.concat([v]) }, 'access');
+    if (!v) return null;
+    return form.access.some(x => x.toLowerCase() === v.toLowerCase()) ? form.access : form.access.concat([v]);
+  };
+  const addAccess = () => {
+    const access = withDraft();
+    if (!access) return;
+    setForm({ access }, 'access');
     setAccessDraft('');
+  };
+  // Вписали, как попасть на объект, но не нажали «Добавить» — добавляем сами, иначе публикация споткнулась бы о пустой доступ.
+  const next = () => {
+    const access = step === 4 ? withDraft() : null;
+    if (!access) return onNext();
+    addAccess();
+    onNext({ access });
   };
   const onAccessKey = (e: KeyboardEvent) => { if (e.key === 'Enter') { e.preventDefault(); addAccess(); } };
   const refTypes = types.filter(t => !t.custom);
@@ -270,7 +283,7 @@ export function JobFormPanel({ form, setForm, step, goStep, errs, formError, onN
       {formError && <div role="alert" style={css(ALERT)}>{formError}</div>}
       <div className={sty.ca27aaae}>
         {step > 1 && <button className={'btn btn-secondary ' + sty.c61fef2d} onClick={onBack}>Назад</button>}
-        <button className={'btn btn-primary blueprint ' + sty.c0dd5712} onClick={onNext} disabled={busy}>
+        <button className={'btn btn-primary blueprint ' + sty.c0dd5712} onClick={next} disabled={busy}>
           <Corners />{step === 4 ? (editing ? 'Сохранить изменения' : 'Опубликовать смену') : 'Далее'}
         </button>
       </div>

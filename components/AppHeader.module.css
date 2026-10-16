@@ -23,7 +23,11 @@
   width: clamp(44px, 6vw, 84px) !important;
   height: clamp(44px, 6vw, 84px) !important;
   flex: none !important;
-  border: 1px dashed rgba(242, 239, 236, .45) !important;
+  border: 1px solid rgba(242, 239, 236, .45) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: var(--color-accent) !important;
 }
 :where(.c298aaa6) {
   font-family: var(--font-heading) !important;

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, api } from '@/lib/api';
 import { css } from '@/lib/css';
-import { dateLabel, isSeries, jobNum, jobStatus, localISO, money, plural, seriesDayLabel, type JobDetail, type MyJob } from '@/lib/jobs';
+import { ACCEPT_CONFIRM, dateLabel, isSeries, jobNum, jobStatus, localISO, money, plural, seriesDayLabel, type JobDetail, type MyJob } from '@/lib/jobs';
 import { useFlash } from '@/components/Toast';
 import { useLive, useLiveEvent } from './Live';
 import { Corners } from './ui';
@@ -158,9 +158,9 @@ export function MyJobsPage({ role }: { role: 'freelancer' | 'employer' }) {
                   ? <Link href="/apps" className={'btn btn-primary ' + sty.ca52b2a4}>Смотреть отклики</Link>
                   : isSeries(j.repeat)
                   ? <Link href={'/?job=' + j.num} className={'btn btn-primary ' + sty.c2792902}>Серия выходов</Link>
-                  : <button className={'btn btn-primary ' + sty.ca52b2a4} disabled={busy || (!emp && !j.repeat && j.date > localISO())}
-                      onClick={() => (emp ? act(j.num, 'accept', 'Работа принята — оцените исполнителя') : act(j.num, 'report', 'Работа сдана — у работодателя 7 дней на приёмку'))}>
-                      {emp ? 'Принять работу' : !j.repeat && j.date > localISO() ? 'Сдать работу — с ' + dateLabel(j.date) : 'Сдать работу'}
+                  : <button className={'btn btn-primary ' + sty.ca52b2a4} disabled={busy || (!j.repeat && j.date > localISO() && !(emp && t.reported))}
+                      onClick={() => (emp ? window.confirm(ACCEPT_CONFIRM) && act(j.num, 'accept', 'Работа принята — оцените исполнителя') : act(j.num, 'report', 'Работа сдана — у работодателя 7 дней на приёмку'))}>
+                      {(emp ? 'Принять работу' : 'Сдать работу') + (!j.repeat && j.date > localISO() && !(emp && t.reported) ? ' — с ' + dateLabel(j.date) : '')}
                     </button>)}
               </div>
               {j.status === 'accepted' && j.reviewable > 0 && (
