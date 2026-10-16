@@ -106,6 +106,11 @@ code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://$DOMAIN/api
 # www — напрямую в свой nginx, мимо DNS сервера: проверяется сам сертификат.
 wcode=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 --resolve "www.$DOMAIN:443:127.0.0.1" "https://www.$DOMAIN/" || true)
 echo
+# Закрыт кнопкой deploy/site.sh — все проверки ниже ответили бы «Сайт временно не работает».
+if [ -f deploy/site-off/on ]; then
+  echo "Сайт запущен, но закрыт для посетителей (страница «Сайт временно не работает»). Открыть: bash $DIR/deploy/site.sh on"
+  exit 0
+fi
 if [ "$code" = 200 ]; then echo "Готово: https://$DOMAIN работает."; else echo "Сайт запущен, но https://$DOMAIN ответил кодом ${code:-нет ответа} — пришлите эти строки."; fi
 if [ "$wcode" = 301 ]; then echo "Адрес с www тоже работает: https://www.$DOMAIN ведёт на https://$DOMAIN."
 else echo "Адрес с www пока НЕ работает (в сертификате нет www.$DOMAIN). Проверьте A-запись www → $me у регистратора; через 1–2 часа запустите снова: cd $DIR && bash deploy/launch.sh"; fi

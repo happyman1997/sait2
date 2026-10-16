@@ -52,6 +52,8 @@ services:
       - ${MAP_DIR:-./deploy/map}:/srv/map:ro
       # Копия карты OpenFreeMap (/ofm/…): переживает перезапуск, не больше 5 ГБ
       - mapcache:/var/cache/nginx/map
+      # «Сайт временно не работает» (bash deploy/site.sh off|on) — папкой, чтобы переключение было видно сразу
+      - ./deploy/site-off:/srv/site-off:ro
     depends_on:
       - app
 

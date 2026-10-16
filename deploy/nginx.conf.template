@@ -48,6 +48,17 @@ server {
 
   ssl_certificate     /etc/letsencrypt/live/${SERVER_NAME}/fullchain.pem;
   ssl_certificate_key /etc/letsencrypt/live/${SERVER_NAME}/privkey.pem;
+
+  # Сайт закрыт (bash deploy/site.sh off): всем — страница «Сайт временно не работает», код 503.
+  # Файл проверяется при каждом запросе — переключение без перезапуска. Продление сертификата идёт через порт 80 и не затронуто.
+  if (-f /srv/site-off/on) { return 503; }
+  error_page 503 @site_off;
+  location @site_off {
+    root /srv/site-off;
+    try_files /index.html =503;
+    add_header Cache-Control "no-store" always;
+    add_header Retry-After 3600 always;
+  }
   ssl_protocols TLSv1.2 TLSv1.3;
   ssl_session_cache shared:SSL:10m;
   ssl_session_tickets off;

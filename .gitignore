@@ -15,3 +15,5 @@ deploy/backups/
 deploy/letsencrypt/
 dist/
 deploy/map/
+# Отметка «сайт закрыт» (deploy/site.sh) — только на сервере
+deploy/site-off/on
