@@ -371,7 +371,6 @@ function Contacts({ p, onEmail }: { p: Profile; onEmail: () => void }) {
           {/* Не меняется после регистрации: по нему пользователя знает поддержка (server/profile.ts). */}
           <div className={sty.c1120df7}>
             <span style={{ overflowWrap: 'anywhere' }}>{p.user.login}</span>
-            <span style={css('font-size: 13px; ' + MUTED)}>не меняется</span>
           </div>
         </div>
         <div className="field">
