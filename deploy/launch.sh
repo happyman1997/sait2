@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Запуск и обновление сайта. Первый раз — после deploy/setup.sh и заполнения .env.production; потом — для
 # обновления: cd /opt/arena && git pull && bash deploy/launch.sh. Повторный запуск безопасен.
-# WWW=yes bash deploy/launch.sh — добавить www в сертификат, даже если сервер ещё не видит новую запись www.
 # Проверяет настройки и домен, выпускает сертификат (один раз), собирает и запускает сайт, ставит в cron
 # продление сертификата и ежедневную резервную копию.
 set -euo pipefail
@@ -14,7 +13,7 @@ dc() { docker compose -f docker-compose.prod.yml --env-file "$ENV" "$@"; }
 DOMAIN=$(get SERVER_NAME)
 MAIL=$(get OPERATOR_EMAIL)
 
-echo "== 1/5 Настройки"
+echo "== 1/5 Настройки (версия $(git log -1 --format=%h 2>/dev/null || echo ?))"
 miss=()
 for k in OPERATOR_NAME OPERATOR_OGRNIP OPERATOR_INN OPERATOR_ADDRESS OPERATOR_EMAIL PROCESSOR_HOSTING PROCESSOR_MAIL SMTP_URL; do
   [ -n "$(get "$k")" ] || miss+=("$k")
@@ -36,32 +35,34 @@ if [ "$now" != "$me" ]; then
 fi
 www_ok=0
 [ "$(resolve "www.$DOMAIN")" = "$me" ] && www_ok=1
-# WWW=yes — не ждать, пока сервер «узнает» новую запись www (проверять её всё равно будет Let's Encrypt).
-[ "${WWW:-}" = yes ] && www_ok=1
-[ $www_ok = 1 ] || echo "Подсказка: www.$DOMAIN не указывает на этот сервер — добавьте A-запись www → $me и запустите скрипт снова, тогда адрес с www тоже заработает."
 vol="$(basename "$DIR" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')_certbot-www"
 
 echo "== 3/5 Сертификат HTTPS"
 cert="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
-names=(-d "$DOMAIN"); [ $www_ok = 1 ] && names+=(-d "www.$DOMAIN")
+# Без конвейера с grep -q: при pipefail ранний выход grep мог бы дать ложный ответ.
+has_www() { case "$(openssl x509 -in "$cert" -noout -text 2>/dev/null || true)" in *"DNS:www.$DOMAIN"*) return 0;; esac; return 1; }
 reload=0
 if [ ! -f "$cert" ]; then
+  names=(-d "$DOMAIN"); [ $www_ok = 1 ] && names+=(-d "www.$DOMAIN")
   dc stop nginx >/dev/null 2>&1 || true   # порт 80 нужен certbot
   docker run --rm -p 80:80 -v /etc/letsencrypt:/etc/letsencrypt certbot/certbot \
     certonly --standalone "${names[@]}" -m "$MAIL" --agree-tos -n
-elif [ $www_ok = 1 ] && ! openssl x509 -in "$cert" -noout -text | grep -q "DNS:www.$DOMAIN"; then
+elif has_www; then
+  echo "уже есть, вместе с www.$DOMAIN"
+else
+  # Пробуем всегда, даже если сервер ещё не видит запись www (его DNS-кэш может отставать на часы):
+  # решает Let's Encrypt. Не вышло — сайт без www работает дальше, скрипт не прерывается.
   echo "добавляю www.$DOMAIN в сертификат"
+  ok=0
   if [ -n "$(dc ps -q nginx 2>/dev/null)" ]; then
     # Сайт работает — проверка через него, без остановки.
     docker run --rm -v /etc/letsencrypt:/etc/letsencrypt -v "$vol":/var/www/certbot certbot/certbot \
-      certonly --webroot -w /var/www/certbot --expand "${names[@]}" -m "$MAIL" --agree-tos -n
-    reload=1
+      certonly --webroot -w /var/www/certbot --expand -d "$DOMAIN" -d "www.$DOMAIN" -m "$MAIL" --agree-tos -n && ok=1 && reload=1
   else
     docker run --rm -p 80:80 -v /etc/letsencrypt:/etc/letsencrypt certbot/certbot \
-      certonly --standalone --expand "${names[@]}" -m "$MAIL" --agree-tos -n
+      certonly --standalone --expand -d "$DOMAIN" -d "www.$DOMAIN" -m "$MAIL" --agree-tos -n && ok=1
   fi
-else
-  echo "уже есть"
+  [ $ok = 1 ] || echo "www.$DOMAIN пока не добавлен — причина в строках выше (обычно запись www ещё не разошлась). Продолжаю без него."
 fi
 
 echo "== 4/5 Сборка и запуск — первый раз 5–15 минут"
@@ -90,5 +91,9 @@ CRON
 chmod 644 /etc/cron.d/arena
 
 code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://$DOMAIN/api/health" || true)
+# www — напрямую в свой nginx, мимо DNS сервера: проверяется сам сертификат.
+wcode=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 --resolve "www.$DOMAIN:443:127.0.0.1" "https://www.$DOMAIN/" || true)
 echo
 if [ "$code" = 200 ]; then echo "Готово: https://$DOMAIN работает."; else echo "Сайт запущен, но https://$DOMAIN ответил кодом ${code:-нет ответа} — пришлите эти строки."; fi
+if [ "$wcode" = 301 ]; then echo "Адрес с www тоже работает: https://www.$DOMAIN ведёт на https://$DOMAIN."
+else echo "Адрес с www пока НЕ работает (в сертификате нет www.$DOMAIN). Проверьте A-запись www → $me у регистратора; через 1–2 часа запустите снова: cd $DIR && bash deploy/launch.sh"; fi
