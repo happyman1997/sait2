@@ -16,9 +16,12 @@ export const config = {
   // Только для разработки: фиксированный код из письма вместо случайного (6 цифр, например 123456).
   devFixedCode: () => (isProd ? '' : env('DEV_FIXED_CODE', '')),
   secureCookies: () => env('SECURE_COOKIES', isProd ? '1' : '0') === '1',
-  // Nominatim-совместимый геокодер. Публичный nominatim.openstreetmap.org — только для разработки (лимит 1 запрос/с).
-  geocoderUrl: () => env('GEOCODER_URL', 'https://nominatim.openstreetmap.org'),
+  // Nominatim-совместимый геокодер. Публичный nominatim.openstreetmap.org — только для разработки (лимит 1 запрос/с,
+  // сервер за рубежом); в продакшене без своего адреса и без ключа DaData поиск адреса выключен. Заглушка из примера — не адрес.
+  geocoderUrl: () => { const u = env('GEOCODER_URL', isProd ? '' : 'https://nominatim.openstreetmap.org'); return /\.example\./.test(u) ? '' : u; },
   geocoderUserAgent: () => env('GEOCODER_USER_AGENT', 'arena-raboty/0.1 (dev)'),
+  // DaData — поиск адреса в продакшене (API-ключ из личного кабинета dadata.ru). Задан — GEOCODER_URL не используется.
+  dadataKey: () => env('DADATA_API_KEY', ''),
   // Сколько доверенных прокси стоит перед приложением (для IP в X-Forwarded-For). 0 — не доверять заголовку.
   trustProxyHops: () => Math.max(0, parseInt(env('TRUST_PROXY_HOPS', '1'), 10) || 0),
   // Почта: console (в лог) | smtp (SMTP_URL, например smtps://user:pass@smtp.yandex.ru:465).

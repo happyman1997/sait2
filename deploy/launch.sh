@@ -23,6 +23,11 @@ if [ ${#miss[@]} -gt 0 ]; then
   echo "Не заполнено в $ENV:"; printf '  - %s\n' "${miss[@]}"
   echo "Заполните: bash $DIR/deploy/configure.sh — и запустите этот скрипт снова."; exit 1
 fi
+# Карта раньше по умолчанию грузилась браузером напрямую с OpenFreeMap (за рубежом) — теперь через свой nginx.
+if grep -qE '^NEXT_PUBLIC_MAP_STYLE_URL=https://tiles\.openfreemap\.org/styles/liberty$' "$ENV"; then
+  sed -i 's#^NEXT_PUBLIC_MAP_STYLE_URL=https://tiles\.openfreemap\.org/styles/liberty$#NEXT_PUBLIC_MAP_STYLE_URL=/ofm/styles/liberty#' "$ENV"
+  echo "Карта: теперь через ваш сервер (/ofm/…) — браузер посетителя не обращается к зарубежным серверам."
+fi
 
 echo "== 2/5 Домен $DOMAIN"
 me=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1)}')
@@ -73,6 +78,13 @@ for _ in $(seq 1 60); do
   [ "$st" = healthy ] && break
   sleep 5
 done
+# Настройки nginx — файл, смонтированный в контейнер: после git pull контейнер видит старый файл. Изменился — пересоздаём.
+if [ -n "$(dc ps -q nginx 2>/dev/null)" ] && ! dc exec -T nginx cat /etc/nginx/templates/default.conf.template 2>/dev/null | cmp -s - deploy/nginx.conf.template; then
+  echo "обновляю настройки nginx"
+  dc up -d --force-recreate --no-deps nginx
+  sleep 3
+  reload=0
+fi
 # nginx держит сертификат в памяти: после добавления www — перечитать.
 [ $reload = 1 ] && dc exec -T nginx nginx -s reload
 if [ "$st" != healthy ]; then
@@ -97,3 +109,19 @@ echo
 if [ "$code" = 200 ]; then echo "Готово: https://$DOMAIN работает."; else echo "Сайт запущен, но https://$DOMAIN ответил кодом ${code:-нет ответа} — пришлите эти строки."; fi
 if [ "$wcode" = 301 ]; then echo "Адрес с www тоже работает: https://www.$DOMAIN ведёт на https://$DOMAIN."
 else echo "Адрес с www пока НЕ работает (в сертификате нет www.$DOMAIN). Проверьте A-запись www → $me у регистратора; через 1–2 часа запустите снова: cd $DIR && bash deploy/launch.sh"; fi
+
+# Карта через свой сервер: nginx берёт стиль у OpenFreeMap и отдаёт со своими адресами.
+style=$(get NEXT_PUBLIC_MAP_STYLE_URL)
+case "${style:-/ofm/styles/liberty}" in
+  /ofm/*)
+    m=$(curl -s --max-time 20 "https://$DOMAIN${style:-/ofm/styles/liberty}" || true)
+    if printf '%s' "$m" | grep -q "https://$DOMAIN/ofm/"; then echo "Карта: работает через ваш сервер."
+    else echo "Карта: сервер не получил карту от OpenFreeMap — посетители увидят метки без подложки. Пришлите эти строки."; fi;;
+  /map/*) echo "Карта: свой файл тайлов (/map/)." ;;
+  *) echo "Карта: грузится браузером напрямую с $style — зарубежный сервер. Уберите строку NEXT_PUBLIC_MAP_STYLE_URL из $ENV и запустите скрипт снова." ;;
+esac
+# Поиск адреса: один пробный запрос через сайт.
+g=$(curl -s --max-time 20 "https://$DOMAIN/api/geo/search?q=%D0%9C%D0%BE%D1%81%D0%BA%D0%B2%D0%B0%2C%20%D0%A2%D0%B2%D0%B5%D1%80%D1%81%D0%BA%D0%B0%D1%8F%2C%201" || true)
+if printf '%s' "$g" | grep -q '"lat"'; then echo "Поиск адреса: работает."
+elif [ -z "$(get DADATA_API_KEY)" ]; then echo "Поиск адреса: не подключён — добавьте ключ DaData: bash $DIR/deploy/configure.sh, затем снова этот скрипт."
+else echo "Поиск адреса: DaData не ответил или не принял ключ. Проверьте ключ (bash $DIR/deploy/configure.sh) и пришлите строки ниже:"; dc logs --tail 200 app 2>/dev/null | grep '\[geo\]' | tail -3 || true; fi

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Заполнение .env.production вопросами: реквизиты ИП, почта для писем с кодами, обработчики данных.
+# Заполнение .env.production вопросами: реквизиты ИП, почта для писем с кодами, обработчики данных, ключ поиска адреса.
 #   bash /opt/arena/deploy/configure.sh
 # Повторный запуск безопасен: Enter оставляет прежнее значение (оно показано в скобках).
 set -euo pipefail
@@ -89,10 +89,27 @@ ask SUPPORT_EMAIL  "Адрес для жалоб пользователей [о�
 ask OPERATOR_EMAIL "Адрес для обращений по персональным данным — виден на сайте [обычно privacy@$DOMAIN]" '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' "Это не адрес почты."
 
 echo
+echo "── Поиск адреса на карте (DaData: dadata.ru → личный кабинет → «API-ключ»)"
+# Ключ DaData — 40 знаков (цифры и латинские a–f). Ввод скрыт: вывод терминала часто пересылают.
+bad=''
+while :; do
+  read -r -s -p "API-ключ DaData (при вводе не виден; Enter — $( [ -n "$(get DADATA_API_KEY)" ] && echo 'оставить прежний' || echo 'пропустить')): " key || key=''
+  echo
+  key=${key//[[:space:]]/}
+  [ -z "$key" ] || [[ "$key" =~ ^[0-9a-fA-F]{40}$ ]] || [ "$key" = "$bad" ] && break
+  bad=$key
+  echo "  Введено символов: ${#key}, а API-ключ DaData — 40 знаков (цифры и буквы a–f). Скопируйте его ещё раз и вставьте."
+  echo "  Нужен «API-ключ», не «Секретный ключ». (Если он точно такой — вставьте тот же ещё раз.)"
+done
+[ -n "$key" ] && set_kv DADATA_API_KEY "$key"
+[ -n "$(get DADATA_API_KEY)" ] || echo "  Без ключа поиск адреса не работает: работодатели ставят метку кликом по карте. Ключ можно добавить позже — запустите этот скрипт ещё раз."
+
+echo
 echo "Сохранено. Сейчас в настройках (пароли не показываются):"
 for k in OPERATOR_NAME OPERATOR_OGRNIP OPERATOR_INN OPERATOR_ADDRESS OPERATOR_EMAIL PROCESSOR_HOSTING PROCESSOR_MAIL EMAIL_FROM SUPPORT_EMAIL; do
   printf '  %-18s %s\n' "$k" "$(get "$k")"
 done
 if [[ "$(get SMTP_URL)" == *ПАРОЛЬ* || -z "$(get SMTP_URL)" ]]; then echo "  SMTP_URL           НЕ ЗАДАН"; else echo "  SMTP_URL           задан"; fi
+if [ -n "$(get DADATA_API_KEY)" ]; then echo "  DADATA_API_KEY     задан"; else echo "  DADATA_API_KEY     не задан (поиск адреса выключен)"; fi
 echo
 echo "Если всё верно — запускайте сайт:  bash $(pwd)/deploy/launch.sh"

@@ -1,4 +1,6 @@
-// Геокодер: Nominatim-совместимый API (в продакшене — свой Nominatim/Photon; публичный OSM — только для разработки).
+// Геокодер: в продакшене — DaData (российский сервис адресов ФИАС/ГАР, бесплатно до 10 000 запросов в сутки;
+// ключ — DADATA_API_KEY). Без ключа — Nominatim-совместимый API по GEOCODER_URL (публичный OSM — только для разработки).
+// Запросы идут с сервера: сервису уходят только адрес или координаты — без IP, cookie и данных пользователя.
 import { config } from './config';
 import { AppError } from './errors';
 
@@ -14,17 +16,25 @@ const cache = new Map<string, { at: number; value: unknown }>();
 const CACHE_MS = 24 * 3600_000;
 const CACHE_MAX = 2000;
 
-async function getJson(url: string): Promise<unknown> {
-  const hit = cache.get(url);
+async function getJson(url: string, init: { method?: string; headers?: Record<string, string>; body?: string } = {}): Promise<unknown> {
+  const key = url + ' ' + (init.body || '');
+  const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.value;
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(url, { headers: { 'Accept': 'application/json', 'User-Agent': config.geocoderUserAgent(), 'Accept-Language': 'ru' }, signal: ctl.signal });
-    if (!res.ok) throw new AppError(502, 'Геокодер недоступен — поставьте метку кликом по карте.');
+    const res = await fetch(url, {
+      method: init.method || 'GET', body: init.body, signal: ctl.signal,
+      headers: { 'Accept': 'application/json', 'User-Agent': config.geocoderUserAgent(), 'Accept-Language': 'ru', ...init.headers }
+    });
+    if (!res.ok) {
+      // Причину — в журнал: неверный ключ (401/403) или исчерпан суточный лимит видны только здесь.
+      console.error(`[geo] ${new URL(url).host} ответил ${res.status}`);
+      throw new AppError(502, 'Геокодер недоступен — поставьте метку кликом по карте.');
+    }
     const value = await res.json();
     if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value as string);
-    cache.set(url, { at: Date.now(), value });
+    cache.set(key, { at: Date.now(), value });
     return value;
   } catch (e) {
     if (e instanceof AppError) throw e;
@@ -65,7 +75,43 @@ export function inZone(a: Record<string, string> | undefined): boolean {
   return EXTRA_REGIONS.test([a.state, a.region, a.province, a.city].filter(Boolean).join(' '));
 }
 
+// ───────────────────────── DaData ─────────────────────────
+
+const DADATA = 'https://suggestions.dadata.ru/suggestions/api/4_1/rs/';
+
+type DadataSuggestion = { value?: string; data?: Record<string, string | null | undefined> | null };
+
+/** Подсказка DaData → точка: «Москва, ул Тверская, д 18», ниже — регион и район. Без координат — не годится. */
+export function fromDadata(s: DadataSuggestion): GeoHit | null {
+  const d = s.data || {};
+  const lat = parseFloat(d.geo_lat || ''), lng = parseFloat(d.geo_lon || '');
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  // Город и посёлок внутри него (поселения Москвы); вне города — посёлок или село.
+  const place = [d.city, d.settlement_with_type].filter(Boolean) as string[];
+  if (!place.length) place.push((d.area_with_type || d.region_with_type || '') as string);
+  const house = d.house ? [d.house_type, d.house, d.block_type, d.block].filter(Boolean).join(' ') : '';
+  const label = [...place, d.street_with_type, house].filter(Boolean).join(', ') || String(s.value || '');
+  const sub = [d.region !== d.city ? d.region_with_type : '', d.area_with_type].filter(x => x && !place.includes(x)).join(', ');
+  return { lat, lng, label, sub, district: (d.city || d.settlement || d.region || '') as string };
+}
+
+async function dadata(method: 'suggest/address' | 'geolocate/address', body: Record<string, unknown>): Promise<GeoHit[]> {
+  const r = (await getJson(DADATA + method, {
+    method: 'POST', body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Token ' + config.dadataKey() }
+  })) as { suggestions?: DadataSuggestion[] };
+  const seen = new Set<string>();
+  return (Array.isArray(r?.suggestions) ? r.suggestions : []).map(fromDadata)
+    .filter((h): h is GeoHit => !!h && !seen.has(h.label) && !!seen.add(h.label));
+}
+
+// ───────────────────────── Поиск и обратный поиск ─────────────────────────
+
+const OFF = 'Поиск адреса пока не подключён — поставьте метку кликом по карте.';
+
 export async function geoSearch(q: string, limit = 5): Promise<GeoHit[]> {
+  if (config.dadataKey()) return (await dadata('suggest/address', { query: q, count: Math.min(20, limit * 2) })).slice(0, limit);
+  if (!config.geocoderUrl()) throw new AppError(503, OFF);
   const u = new URL('/search', config.geocoderUrl());
   u.searchParams.set('format', 'json');
   // С запасом: часть ответов отсеется по зоне.
@@ -81,6 +127,9 @@ export async function geoSearch(q: string, limit = 5): Promise<GeoHit[]> {
 }
 
 export async function geoReverse(lat: number, lng: number): Promise<GeoHit | null> {
+  // Ближайший дом в радиусе 300 м; в поле или в лесу — ничего: метка остаётся, адрес вписывают сами.
+  if (config.dadataKey()) return (await dadata('geolocate/address', { lat, lon: lng, count: 1, radius_meters: 300 }))[0] ?? null;
+  if (!config.geocoderUrl()) throw new AppError(503, OFF);
   const u = new URL('/reverse', config.geocoderUrl());
   u.searchParams.set('format', 'json');
   u.searchParams.set('zoom', '18');

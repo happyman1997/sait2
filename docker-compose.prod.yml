@@ -21,7 +21,8 @@ services:
     build:
       context: .
       args:
-        NEXT_PUBLIC_MAP_STYLE_URL: ${NEXT_PUBLIC_MAP_STYLE_URL:-https://tiles.openfreemap.org/styles/liberty}
+        # Карта — через свой nginx (/ofm/…, deploy/nginx.conf.template): браузер не ходит на зарубежные серверы.
+        NEXT_PUBLIC_MAP_STYLE_URL: ${NEXT_PUBLIC_MAP_STYLE_URL:-/ofm/styles/liberty}
     restart: unless-stopped
     env_file: .env.production
     environment:
@@ -49,6 +50,8 @@ services:
       - certbot-www:/var/www/certbot:ro
       # Своя карта: стиль, шрифты, значки, russia.pmtiles (DEPLOY.md, «Своя карта»)
       - ${MAP_DIR:-./deploy/map}:/srv/map:ro
+      # Копия карты OpenFreeMap (/ofm/…): переживает перезапуск, не больше 5 ГБ
+      - mapcache:/var/cache/nginx/map
     depends_on:
       - app
 
@@ -56,3 +59,4 @@ volumes:
   pgdata:
   uploads:
   certbot-www:
+  mapcache:
