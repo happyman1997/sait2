@@ -10,7 +10,7 @@
 apt-get update && apt-get install -y git
 git clone https://github.com/happyman1997/sait2.git /opt/arena
 bash /opt/arena/deploy/setup.sh      # Docker, файрвол, автообновления, .env.production с готовыми паролями и ключами
-nano /opt/arena/.env.production      # реквизиты ИП, почта SMTP, обработчики данных
+bash /opt/arena/deploy/configure.sh  # вопросы: реквизиты ИП, почта для писем с кодами, обработчики данных
 bash /opt/arena/deploy/launch.sh     # проверка настроек и домена, сертификат, сборка, запуск, cron (продление, копии)
 ```
 

@@ -21,7 +21,7 @@ done
 case "$(get SMTP_URL)" in *ПАРОЛЬ*) miss+=("SMTP_URL (вместо слова ПАРОЛЬ — пароль приложения почты)");; esac
 if [ ${#miss[@]} -gt 0 ]; then
   echo "Не заполнено в $ENV:"; printf '  - %s\n' "${miss[@]}"
-  echo "Откройте: nano $DIR/$ENV — и запустите скрипт снова."; exit 1
+  echo "Заполните: bash $DIR/deploy/configure.sh — и запустите этот скрипт снова."; exit 1
 fi
 
 echo "== 2/5 Домен $DOMAIN"
