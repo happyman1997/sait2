@@ -3,7 +3,7 @@
 import crypto from 'node:crypto';
 import { config } from './config';
 import { AppError } from './errors';
-import { getMailer } from './mail';
+import { getMailer, mailErrorText } from './mail';
 
 export const CODE_LEN = 6;
 export type CodePurpose = 'signup' | 'recover' | 'email';
@@ -38,7 +38,9 @@ export async function sendCodeEmail(to: string, purpose: CodePurpose, code: stri
     await getMailer().send(to, 'Арена Работы: ' + l.subject + ' ' + code,
       l.why + '\n\nКод: ' + code + '\n\nДействует ' + ttlMin + ' минут. Никому его не сообщайте — сотрудники площадки код не спрашивают.\n' +
       'Если это были не вы, просто удалите письмо.');
-  } catch {
+  } catch (e) {
+    // Адрес получателя сами в журнал не добавляем. Разобрать причину по шагам — bash deploy/mailcheck.sh.
+    console.error(`[email] письмо с кодом (${purpose}) не отправлено: ${mailErrorText(e)}`);
     throw new AppError(502, 'Письмо не отправилось — проверьте адрес или повторите через минуту.');
   }
 }
