@@ -18,8 +18,9 @@ function advice(e: unknown): string {
   if (/not owned|sender address|5\.7\.1.*sender/i.test(s))
     return 'Адрес отправителя (EMAIL_FROM) не совпадает с ящиком, под которым сайт входит в почту. Укажите ящик и пароль к нему заново: ' + fix;
   if (/EAUTH|535|invalid user|authentication failed|invalid login/i.test(s))
-    return 'Почта не приняла логин или пароль. Пароль приложения создаётся, когда вы вошли в Яндекс именно как этот ящик (не как ваш личный аккаунт), ' +
-      'тип — «Почта». Создайте новый и введите его — на всех вопросах Enter, на пароле вставьте новый: ' + fix;
+    return 'Почта не приняла логин или пароль. Проверьте: 1) в настройках этого ящика, «Почтовые программы», включены IMAP и «Пароли приложений»; ' +
+      '2) пароль приложения создан, когда вы вошли в Яндекс именно как этот ящик (не как ваш личный аккаунт), тип — «Почта». ' +
+      'Создайте новый и введите его — на всех вопросах Enter, на пароле вставьте новый: ' + fix;
   if (/ENOTFOUND|EAI_AGAIN|EDNS/i.test(s))
     return 'Сервер не нашёл адрес почтового сервера. Проверьте адрес в SMTP_URL (для Яндекса — smtp.yandex.ru) и повторите через пару минут.';
   if (/ETIMEDOUT|ECONNREFUSED|ECONNRESET|ESOCKET|ECONNECTION|EHOSTUNREACH|greeting|timeout/i.test(s))
@@ -39,14 +40,18 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  let user = '?', host = '?', port = '?';
+  let user = '?', host = '?', port = '?', pass = '?';
   try {
     const u = new URL(url);
     user = decodeURIComponent(u.username);
     host = u.hostname;
     port = u.port || (u.protocol === 'smtps:' ? '465' : '587');
+    // Сам пароль не печатаем — только длину и состав: так видно, что вставилось не то.
+    const pw = decodeURIComponent(u.password);
+    pass = `${[...pw].length} символов` + (/^[a-zA-Z0-9]+$/.test(pw) ? '' : ', есть пробелы, русские буквы или знаки — похоже, вставилось не то');
   } catch { /* разбор только для подписи; ошибку адреса покажет nodemailer */ }
   console.log(`Ящик: ${user}, сервер: ${host}:${port}, отправитель: ${from || '(не задан)'}`);
+  console.log(`Пароль: ${pass}`);
 
   const t = smtpTransport(url);
   try {
