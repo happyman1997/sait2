@@ -569,7 +569,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                       <div className="field">
                         <label htmlFor="su-login">Логин <span style={css(REQ)}>обязательно</span></label>
                         <input id="su-login" className="input" value={login} onChange={e => { setLogin(e.target.value.replace(/[^a-zA-Z0-9._]/g, '').slice(0, 20)); setStepError(''); }} placeholder="daniyar_s" autoComplete="username" style={css(missStyle('login', true))} />
-                        <span style={css(HINT)}>Латиница, цифры, точка и подчёркивание, 3–20 символов. Виден в профиле и откликах.</span>
+                        <span style={css(HINT)}>Латиница, цифры, точка и подчёркивание, 3–20 символов. Нужен для входа; потом его не изменить.</span>
                       </div>
                       {!oauth && (
                         <div className="field">

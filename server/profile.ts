@@ -1,7 +1,6 @@
 // Профиль, база для поиска, настройки уведомлений, журнал событий.
 import { ACCESS, GEAR, JOB_TYPE_IDS, OBJECT_KINDS, ORG_TYPES, TOOLS } from '@/lib/catalog';
 import { findBadField } from '@/lib/moderation';
-import { LOGIN_RE, type Role } from '@/lib/validation';
 import { loadProfile, publicUser } from './auth';
 import { one, query, tx } from './db';
 import { AppError, ModerationError } from './errors';
@@ -93,7 +92,11 @@ export async function getProfile(viewer: U | null) {
   };
 }
 
-/** Правка профиля. Почта меняется отдельно — кодом на новый адрес (по ней вход и восстановление пароля). */
+/**
+ * Правка профиля. Почта меняется отдельно — кодом на новый адрес (по ней вход и восстановление пароля).
+ * Логин после регистрации не меняется: по нему пользователя знает поддержка (жалобы, споры, письма о жалобах),
+ * а освободившийся логин мог бы занять другой человек.
+ */
 export async function updateProfile(viewer: U | null, raw: unknown) {
   const u = need(viewer);
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
@@ -101,7 +104,7 @@ export async function updateProfile(viewer: U | null, raw: unknown) {
   const name = first !== undefined || last !== undefined ? [first ?? '', last ?? ''].join(' ').trim() : undefined;
   const login = str(r.login, 20);
   if (name !== undefined && name.length < 2) throw new AppError(422, 'Укажите имя и фамилию — их видит вторая сторона в чате.', 'name');
-  if (login !== undefined && !LOGIN_RE.test(login)) throw new AppError(422, 'Логин: 3–20 символов — латиница, цифры, точка или подчёркивание.', 'login');
+  if (login !== undefined && login !== u.login) throw new AppError(422, 'Логин после регистрации не меняется.', 'login');
 
   const f = (r.freelancer && typeof r.freelancer === 'object' ? r.freelancer : null) as Record<string, unknown> | null;
   const e = (r.employer && typeof r.employer === 'object' ? r.employer : null) as Record<string, unknown> | null;
@@ -127,7 +130,6 @@ export async function updateProfile(viewer: U | null, raw: unknown) {
 
   const hit = findBadField([
     { field: 'name', label: 'Имя', value: name },
-    { field: 'login', label: 'Логин', value: login },
     { field: 'skills', label: 'Свой навык', value: fp?.customSkills },
     { field: 'gear', label: 'Свой инвентарь', value: fp?.customGear },
     { field: 'cities', label: 'Города, где вы работаете', value: fp?.workCities },
@@ -137,13 +139,7 @@ export async function updateProfile(viewer: U | null, raw: unknown) {
   if (fp?.workCities && !fp.workCities.length) throw new AppError(422, 'Добавьте хотя бы один город, где вы работаете.', 'cities');
 
   await tx(async (db) => {
-    if (login !== undefined) {
-      const taken = await one<{ id: string; role: Role }>('SELECT id, role FROM users WHERE lower(login) = lower($1)', [login], db);
-      if (taken && taken.id !== u.id) throw new AppError(409, 'Этот логин уже занят — выберите другой.', 'login');
-    }
-    await query(
-      `UPDATE users SET name = coalesce($2, name), login = coalesce($3, login), updated_at = now() WHERE id = $1`,
-      [u.id, name ?? null, login ?? null], db);
+    await query(`UPDATE users SET name = coalesce($2, name), updated_at = now() WHERE id = $1`, [u.id, name ?? null], db);
     if (fp) {
       await query(
         `UPDATE freelancer_profiles SET skills = coalesce($2, skills), custom_skills = coalesce($3, custom_skills), gear = coalesce($4, gear),

@@ -115,7 +115,7 @@ describe('подтверждение e-mail', () => {
   });
 
   it('сохранение профиля с тем же адресом не шлёт повторных писем', async () => {
-    await prof.updateProfile(fl, { login: 'daniyar_new', email: fl.email });
+    await prof.updateProfile(fl, { firstName: 'Данияр', lastName: 'Сапаров', email: fl.email });
     await ev.processOutbox();
     expect(mails).toHaveLength(0);
   });

@@ -329,11 +329,6 @@
   font-size: 12.5px !important;
   padding: 0 8px !important;
 }
-:where(.c5c223c4) {
-  display: flex !important;
-  gap: 8px !important;
-  margin-top: 12px !important;
-}
 :where(.cdffc4db) {
   margin-top: 14px !important;
 }

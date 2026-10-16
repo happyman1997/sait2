@@ -88,13 +88,15 @@ afterAll(async () => {
 });
 
 describe('профиль', () => {
-  it('правка имени, логина, навыков и инвентаря; занятый логин и мат отклоняются', async () => {
+  it('правка имени, навыков и инвентаря; логин не меняется; мат отклоняется', async () => {
     await prof.updateProfile(fl, { firstName: 'Данияр', lastName: 'Сапаров-Ким', freelancer: { skills: ['snow', 'grass', 'хак'], gear: ['Лопата и скребок', 'Моё'], customGear: ['Моё'], ownCar: true } });
     const p = await prof.getProfile(fl);
     expect(p.user.name).toBe('Данияр Сапаров-Ким');
     expect(p.profile).toMatchObject({ skills: ['snow', 'grass'], gear: ['Лопата и скребок', 'Моё'], customGear: ['Моё'], ownCar: true });
-    await expectErr(prof.updateProfile(fl, { login: 'OLGA_K' }), /занят/i, 'login');
-    await expectErr(prof.updateProfile(fl, { login: 'a' }), /Логин/, 'login');
+    await expectErr(prof.updateProfile(fl, { login: 'olga_new' }), /не меняется/, 'login');
+    await expectErr(prof.updateProfile(fl, { login: fl.login.toUpperCase() }), /не меняется/, 'login');
+    await prof.updateProfile(fl, { login: fl.login });
+    expect((await prof.getProfile(fl)).user.login).toBe(fl.login);
     await expectErr(prof.updateProfile(fl, { freelancer: { customSkills: ['хуйня'] } }));
     await expectErr(prof.updateProfile(fl, { freelancer: { workCities: [] } }), /город/, 'cities');
   });

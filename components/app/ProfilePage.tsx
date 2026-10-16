@@ -136,7 +136,7 @@ export function ProfilePage() {
           <HeaderCard p={p} setP={setP} patch={patch} busy={busy} err={err} />
 
           <div className={sty.ce5a6d3c}>
-            <Contacts p={p} patch={patch} busy={busy} fieldErr={fieldErr} onEmail={load} />
+            <Contacts p={p} onEmail={load} />
             {p.oauth && (p.oauth.providers.length > 0 || p.oauth.linked.length > 0) && <Services oauth={p.oauth} onChange={load} />}
 
             {isEmp ? <Organization p={p} patch={patch} busy={busy} fieldErr={fieldErr} /> : (
@@ -358,22 +358,21 @@ function HeaderCard({ p, setP, patch, busy, err }: {
 
 // ───────────────────────── Вход и контакты ─────────────────────────
 
-function Contacts({ p, patch, busy, fieldErr, onEmail }: {
-  p: Profile; patch: (b: Record<string, unknown>, ok?: string, key?: string) => Promise<boolean>; busy: string; fieldErr: (f: string) => ReactNode; onEmail: () => void;
-}) {
+function Contacts({ p, onEmail }: { p: Profile; onEmail: () => void }) {
   const { setRail } = useLive();
-  const [login, setLogin] = useState(p.user.login);
   const [emailOpen, setEmailOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
-  const dirty = login.trim() !== p.user.login;
 
   return (
     <Section title="Вход и контакты" note="Войти можно по почте или логину.">
       <div className={sty.ca630824}>
         <div className="field">
-          <label htmlFor="pf-login">Логин</label>
-          <input id="pf-login" className="input" value={login} onChange={e => setLogin(e.target.value)} placeholder="daniyar_s" autoComplete="username" maxLength={20} />
-          {fieldErr('login')}
+          <label>Логин</label>
+          {/* Не меняется после регистрации: по нему пользователя знает поддержка (server/profile.ts). */}
+          <div className={sty.c1120df7}>
+            <span style={{ overflowWrap: 'anywhere' }}>{p.user.login}</span>
+            <span style={css('font-size: 13px; ' + MUTED)}>не меняется</span>
+          </div>
         </div>
         <div className="field">
           <label>E-mail</label>
@@ -391,12 +390,6 @@ function Contacts({ p, patch, busy, fieldErr, onEmail }: {
           </div>
         </div>
       </div>
-      {dirty && (
-        <div className={sty.c5c223c4}>
-          <button className={'btn btn-primary ' + sty.cf8f6389} disabled={busy === 'contacts'} onClick={() => patch({ login: login.trim() }, 'Логин сохранён', 'contacts')}>Сохранить</button>
-          <button className={'btn btn-ghost ' + sty.c1d41128} onClick={() => setLogin(p.user.login)}>Отменить</button>
-        </div>
-      )}
       {emailOpen && <EmailChange current={p.user.email} onDone={() => { setEmailOpen(false); onEmail(); }} />}
       <div className={sty.cdffc4db}>
         {!pwOpen
