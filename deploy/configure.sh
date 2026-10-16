@@ -10,11 +10,12 @@ DOMAIN=$(grep -E '^SERVER_NAME=' "$ENV" | tail -1 | cut -d= -f2- || true)
 DOMAIN=${DOMAIN:-arenarabot.ru}
 
 get() { grep -E "^$1=" "$ENV" | tail -1 | cut -d= -f2- || true; }
-# Замена строки KEY=… целиком (значение — любой текст в одну строку); нет строки — добавляется в конец.
+# Замена строки KEY=… целиком (значение — любой текст в одну строку); повторы строки убираются,
+# нет строки — добавляется в конец.
 set_kv() {
   local tmp; tmp=$(mktemp)
   K="$1" V="$2" awk 'BEGIN { k = ENVIRON["K"]; v = ENVIRON["V"] }
-    index($0, k "=") == 1 && !done { print k "=" v; done = 1; next } { print }
+    index($0, k "=") == 1 { if (!done) print k "=" v; done = 1; next } { print }
     END { if (!done) print k "=" v }' "$ENV" > "$tmp"
   cat "$tmp" > "$ENV"; rm -f "$tmp"
 }
