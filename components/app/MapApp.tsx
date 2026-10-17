@@ -668,7 +668,7 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
             <div className={'blueprint ' + sty.c030d8ff}>
               <Corners />
               <div className={sty.c403498b}>
-                <div className={'fh ' + sty.cae1709c}>Ещё на этом адресе</div>
+                <div className={'fh ' + sty.cae1709c}>Заказы на этом адресе</div>
                 <button className={'btn btn-ghost ' + sty.cd1673a6} onClick={() => setStackPick(null)}>Закрыть</button>
               </div>
               <div className={sty.c380f53b}>

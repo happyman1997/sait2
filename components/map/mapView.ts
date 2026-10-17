@@ -58,6 +58,8 @@ export class SeasonMapView {
   private gl: typeof import('maplibre-gl') | null = null;
   private ready = false;
   private touched = false;
+  /** Перелёт к метке, запрошенный до готовности карты (открыли ссылку /?job=N) — выполняется при старте. */
+  private pendingFly: { lat: number; lng: number; zoom: number } | null = null;
   private ruDone = false;
   private ro: ResizeObserver | null = null;
   private flyPaint: ReturnType<typeof setInterval> | undefined;
@@ -128,10 +130,12 @@ export class SeasonMapView {
   }
 
   flyTo(lat: number, lng: number, zoom = 8) {
-    if (!this.map) return;
     this.touched = true;
+    if (!this.map || !this.ready) { this.pendingFly = { lat, lng, zoom }; return; }
     const z = Math.max(this.map.getZoom(), zoom);
-    this.map.easeTo({ center: [lng, lat], zoom: z, duration: 620, easing: (t) => t * (2 - t) });
+    // Точка чуть ниже центра: плашка метки растёт вверх и на низкой карте телефона иначе упирается в край.
+    const dy = Math.round(Math.min(36, this.host.clientHeight * 0.2));
+    this.map.easeTo({ center: [lng, lat], zoom: z, offset: [0, dy], duration: 620, easing: (t) => t * (2 - t) });
     clearInterval(this.flyPaint);
     const tick = () => { if (this.map) { this.map.triggerRepaint(); this.paint(); } };
     this.flyPaint = setInterval(tick, 40);
@@ -187,7 +191,10 @@ export class SeasonMapView {
       this.ready = true;
       this.ruLabels();
       this.drawRadius();
-      this.fitData();
+      const fly = this.pendingFly;
+      this.pendingFly = null;
+      if (fly) this.flyTo(fly.lat, fly.lng, fly.zoom);
+      else this.fitData();
       this.paint();
     };
     map.on('styledata', () => { this.ruLabels(); this.drawRadius(); start(); });
@@ -421,11 +428,13 @@ export class SeasonMapView {
         if (anchor[1] < 0 || (hostH && anchor[1] > hostH)) return;
         const room = Math.max(1, Math.floor((Math.min(anchor[1], hostH || anchor[1]) - 16) / 48));
         const cap = Math.max(1, Math.min(4, room));
-        const shown = group.slice(0, cap);
+        // Открытый заказ — в показанной части веера, а не в «ещё N здесь».
+        const ordered = group.some(p => p.active) ? [...group].sort((a, b) => +b.active - +a.active) : group;
+        const shown = ordered.slice(0, cap);
         const restN = group.length - shown.length;
         shown.forEach((p, i) => renderPin(p, shown.length - 1 - i, shown.length, gi));
         if (restN > 0) {
-          const rest = group.slice(shown.length);
+          const rest = ordered.slice(shown.length);
           html.push('<div data-ids="' + esc(rest.map(r => r.id).join(',')) + '" data-kind="stackmore" data-g="' + gi + '" title="' +
             esc('Ещё ' + restN + ' на этом адресе') + '" style="position:absolute;left:' + (anchor[0] + 14) + 'px;top:' + anchor[1] +
             'px;transform:translate(0,-50%);pointer-events:auto;cursor:pointer;padding:3px 7px;box-sizing:border-box;' +
@@ -497,6 +506,7 @@ export class SeasonMapView {
       if (dy) c.style.top = ((parseFloat(c.style.top) || 0) + dy) + 'px';
     };
     const overlaps = (r: R, q: R) => !(r.right < q.left || q.right < r.left || r.bottom < q.top || q.bottom < r.top);
+    const overlapArea = (r: R, q: R) => Math.max(0, Math.min(r.right, q.right) - Math.max(r.left, q.left)) * Math.max(0, Math.min(r.bottom, q.bottom) - Math.max(r.top, q.top));
     const hitIdx = (r: R) => placedC.findIndex(q => overlaps(r, q));
     const fixedZ: R[] = [];
     const dot0 = this.overlay.querySelector('[data-kind="base"]');
@@ -510,17 +520,33 @@ export class SeasonMapView {
         fixedZ.push(grow({ left: dotRect.left - 13 - lr.width, right: dotRect.left - 13, top: lr.top, bottom: lr.bottom }, 2));
       }
     }
+    // Кнопки масштаба, линейка и подпись карты лежат поверх меток — метки обходят и их.
+    // Подпись карты (data-attrib) — соседний с картой элемент в SeasonMap.
+    const ctrls = Array.from((this.root.parentElement || this.root).querySelectorAll<HTMLElement>('.maplibregl-ctrl, [data-attrib]'))
+      .map(el => el.getBoundingClientRect()).filter(r => r.width > 0).map(r => grow(r, 2));
+    fixedZ.push(...ctrls);
+    // Группы «N заказов» обходят и плашку открытого заказа — иначе она их закрывает.
+    const act0 = this.overlay.querySelector<HTMLElement>('[data-active="1"]');
+    const actZ = act0 && clusters.length ? grow(act0.getBoundingClientRect(), 6) : null;
+    if (actZ) fixedZ.push(actZ);
     const hitFixed = (r: R) => fixedZ.some(q => overlaps(r, q));
     clusters.forEach(c => {
       const l0 = parseFloat(c.style.left) || 0, t0 = parseFloat(c.style.top) || 0;
       const r0 = c.getBoundingClientRect();
       const sx = r0.width + 6, sy = r0.height + 6;
       const tries = [[0, 0], [0, -sy], [0, sy], [sx, 0], [-sx, 0], [sx, -sy], [-sx, -sy], [sx, sy], [-sx, sy], [0, -2 * sy], [0, 2 * sy], [2 * sx, 0], [-2 * sx, 0]];
+      // Рядом с плашкой открытого заказа — вплотную справа, слева, снизу, сверху (на маленькой карте телефона иначе места нет).
+      if (actZ) tries.push([actZ.right + 4 - r0.left, 0], [actZ.left - 4 - r0.right, 0], [0, actZ.bottom + 4 - r0.top], [0, actZ.top - 4 - r0.bottom]);
       let okC = false;
+      // Запасной вариант — место, где перекрытие с уже занятым меньше всего.
+      let best = { left: l0, top: t0, cost: Infinity };
       for (const [dx, dy] of tries) {
         c.style.left = (l0 + dx) + 'px'; c.style.top = (t0 + dy) + 'px';
         clampIn(c);
-        if (hitIdx(grow(c.getBoundingClientRect(), 3)) < 0 && !hitFixed(grow(c.getBoundingClientRect(), 3))) { okC = true; break; }
+        const r = grow(c.getBoundingClientRect(), 3);
+        if (hitIdx(r) < 0 && !hitFixed(r)) { okC = true; break; }
+        const cost = placedC.concat(fixedZ).reduce((sum, q) => sum + overlapArea(r, q), 0);
+        if (cost < best.cost) best = { left: parseFloat(c.style.left) || 0, top: parseFloat(c.style.top) || 0, cost };
       }
       if (!okC) {
         // Места нет — вливаем в группу, с которой сталкиваемся.
@@ -544,6 +570,8 @@ export class SeasonMapView {
           placedC[hi] = host2.getBoundingClientRect();
           return;
         }
+        // Мешают только кнопки карты и плашка открытого заказа — ставим туда, где закрыто меньше всего.
+        c.style.left = best.left + 'px'; c.style.top = best.top + 'px';
       }
       placedC.push(c.getBoundingClientRect()); placedEl.push(c);
       const nl = parseFloat(c.style.left) || 0, nt = parseFloat(c.style.top) || 0;
@@ -562,7 +590,7 @@ export class SeasonMapView {
       }
     });
     clusters = clusters.filter(c => c.isConnected);
-    const boxes: R[] = clusters.concat(all.filter(el => el.children.length === 0)).map(el => el.getBoundingClientRect());
+    const boxes: R[] = clusters.concat(all.filter(el => el.children.length === 0)).map(el => el.getBoundingClientRect() as R).concat(ctrls);
     const hits = (r: R) => boxes.some(q => overlaps(r, q));
     const isActive = (el: HTMLElement) => el.dataset.active === '1';
     const placeSingle = (el: HTMLElement) => {

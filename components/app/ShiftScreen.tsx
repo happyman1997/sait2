@@ -17,7 +17,7 @@ import sty from './ShiftScreen.module.css';
 
 const TIP_KEY = 'arena:first-tip-hidden';
 
-export function ShiftScreen() {
+export function ShiftScreen({ pick = null }: { pick?: number | null }) {
   const live = useLive();
   const flash = useFlash();
   const [job, setJob] = useState<JobDetail | null | undefined>(undefined);
@@ -28,13 +28,12 @@ export function ShiftScreen() {
 
   const load = useCallback(() => {
     const nearest = () => api<{ job: JobDetail | null }>('/api/me/shift').then(r => setJob(r.job));
-    // /shift?job=N — смена конкретного заказа (из его карточки); без номера или не своя — ближайшая смена.
-    const num = Number(new URLSearchParams(window.location.search).get('job')) || 0;
-    const own = num
-      ? api<{ job: JobDetail }>('/api/jobs/' + num).then(r => (r.job.mine || r.job.myStatus === 'hired' ? setJob(r.job) : nearest()), nearest)
+    // Смена конкретного заказа (из его карточки); без номера или заказ не свой — ближайшая смена.
+    const own = pick
+      ? api<{ job: JobDetail }>('/api/jobs/' + pick).then(r => (r.job.mine || r.job.myStatus === 'hired' ? setJob(r.job) : nearest()), nearest)
       : nearest();
     own.catch(() => setJob(j => j ?? null));
-  }, []);
+  }, [pick]);
   useEffect(load, [load]);
   useEffect(() => { try { setTipHidden(localStorage.getItem(TIP_KEY) === '1'); } catch { setTipHidden(false); } }, []);
   // Своя смена изменилась — перечитать; событие по другому заказу могло сделать актуальной другую смену.

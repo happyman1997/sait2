@@ -37,7 +37,7 @@ export const SeasonMap = forwardRef<SeasonMapHandle, Props>(function SeasonMap(p
     <div style={{ position: 'absolute', inset: 0 }}>
       <div ref={el} />
       {/* Атрибуция обязательна: данные © OpenStreetMap (ODbL); схема тайлов — OpenMapTiles, хостинг — OpenFreeMap или свой. */}
-      <div style={{ position: 'absolute', right: 0, bottom: 0, zIndex: 6, padding: '2px 6px', fontSize: 10.5, lineHeight: 1.4, background: 'color-mix(in srgb, var(--color-neutral-100) 82%, transparent)', color: 'color-mix(in srgb, var(--color-text) 70%, transparent)' }}>
+      <div data-attrib="" style={{ position: 'absolute', right: 0, bottom: 0, zIndex: 6, padding: '2px 6px', fontSize: 10.5, lineHeight: 1.4, background: 'color-mix(in srgb, var(--color-neutral-100) 82%, transparent)', color: 'color-mix(in srgb, var(--color-text) 70%, transparent)' }}>
         {SELF_HOSTED_MAP
           ? <a href="https://openmaptiles.org" target="_blank" rel="noreferrer">© OpenMapTiles</a>
           : <a href="https://openfreemap.org" target="_blank" rel="noreferrer">OpenFreeMap</a>} · © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">участники OpenStreetMap</a>
