@@ -114,6 +114,10 @@
   text-overflow: ellipsis !important;
   max-width: 180px !important;
 }
+/* Страница карты: края шапки совпадают с левой панелью, а не с колонкой 1440 px по центру. */
+@media (min-width: 720px) {
+  .full { padding-left: clamp(14px, 2vw, 20px) !important; padding-right: clamp(14px, 2vw, 20px) !important; }
+}
 /* Телефон: шапка в одну строку — знак, название, «Войти». */
 @media (max-width: 719.98px) {
   :where(.c8d4eda9) { min-height: 56px !important; padding: 8px 16px !important; flex-wrap: nowrap !important; }

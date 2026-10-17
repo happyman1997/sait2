@@ -259,8 +259,8 @@
 }
 :where(.c969623c) {
   display: flex !important;
+  flex-wrap: wrap !important;
   gap: 6px !important;
-  overflow-x: auto !important;
   margin-bottom: 8px !important;
   padding-bottom: 2px !important;
 }
@@ -290,8 +290,20 @@
 }
 /* Телефон: быстрые ответы — переносом в две строки, а не обрезанной лентой. */
 @media (max-width: 719.98px) {
-  :where(.c969623c) { flex-wrap: wrap !important; overflow-x: visible !important; }
-}
-@media (max-width: 719.98px) {
   :where(.c30a4f79) { min-height: 36px !important; }
 }
+
+/* Крестик подсказки «новое сообщение». */
+.hintClose {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  padding: 6px 10px;
+  border: 0;
+  background: none;
+  color: rgba(242, 239, 236, .72);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.hintClose:hover { color: #fff; }

@@ -27,7 +27,13 @@ export function ShiftScreen() {
   const isEmp = role === 'employer';
 
   const load = useCallback(() => {
-    api<{ job: JobDetail | null }>('/api/me/shift').then(r => setJob(r.job)).catch(() => setJob(j => j ?? null));
+    const nearest = () => api<{ job: JobDetail | null }>('/api/me/shift').then(r => setJob(r.job));
+    // /shift?job=N — смена конкретного заказа (из его карточки); без номера или не своя — ближайшая смена.
+    const num = Number(new URLSearchParams(window.location.search).get('job')) || 0;
+    const own = num
+      ? api<{ job: JobDetail }>('/api/jobs/' + num).then(r => (r.job.mine || r.job.myStatus === 'hired' ? setJob(r.job) : nearest()), nearest)
+      : nearest();
+    own.catch(() => setJob(j => j ?? null));
   }, []);
   useEffect(load, [load]);
   useEffect(() => { try { setTipHidden(localStorage.getItem(TIP_KEY) === '1'); } catch { setTipHidden(false); } }, []);

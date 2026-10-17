@@ -12,7 +12,9 @@ export function pool(): Pool {
       connectionString: config.databaseUrl(), max: config.dbPoolMax(), idleTimeoutMillis: 30_000, connectionTimeoutMillis: 10_000,
       statement_timeout: config.dbStatementTimeoutMs(),
       // current_date и границы суток в SQL — в часовом поясе площадки, как и в коде (localClock).
-      options: '-c timezone=' + config.timeZone()
+      // JIT выключен: на запросах с подзапросами («Мои смены») планировщик завышает стоимость и тратит на компиляцию
+      // около секунды, а сам запрос идёт меньше миллисекунды.
+      options: '-c timezone=' + config.timeZone() + ' -c jit=off'
     });
     // Обрыв простаивающего соединения не должен ронять процесс — пул переподключится сам.
     p.on('error', (e) => console.error('[db] idle client error:', e.message));

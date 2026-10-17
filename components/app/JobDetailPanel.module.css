@@ -442,3 +442,21 @@
   box-shadow: 0 -6px 14px rgba(31, 45, 58, .08);
 }
 .stickyAct > :global(.btn) { margin-top: 0; }
+
+/* Статус «Вы наняты» в карточке — плашка, а не выключенная кнопка. */
+.hiredPlate {
+  margin-top: 14px;
+  min-height: 52px;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: var(--color-accent-900);
+  color: #fff;
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: .02em;
+}
+.shiftLink { margin-top: 8px; height: 44px; font-size: 15px; }

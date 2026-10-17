@@ -93,6 +93,13 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
     if (!role) return (
       <Link href={'/auth?apply=' + job.num} className={'btn btn-primary btn-block ' + sty.c570d8ab}>Откликнуться на заказ</Link>
     );
+    // Наняли — не бледная «неработающая» кнопка, а заметный статус и переход к смене.
+    if (st.key === 'hired') return (
+      <>
+        <div className={'fh ' + sty.hiredPlate} role="status">✓ {st.label}</div>
+        {job.status !== 'accepted' && <Link href={'/shift?job=' + job.num} className={'btn btn-secondary btn-block ' + sty.shiftLink}>Экран смены →</Link>}
+      </>
+    );
     return (
       <button className={'btn btn-primary btn-block ' + sty.c570d8ab} onClick={() => onApply(reqOk)} disabled={busy || st.key !== 'open' || isEmp}>
         {isEmp && st.key === 'open' ? 'Откликаются исполнители' : st.label}
@@ -113,7 +120,7 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
         : role !== 'freelancer' ? null
           : st.key === 'open' ? <button className="btn btn-primary btn-block" onClick={() => onApply(reqOk)} disabled={busy}>Откликнуться на заказ</button>
             : st.key === 'req' ? <button className="btn btn-secondary btn-block" onClick={() => reqRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>Отметьте условие заказчика ↑</button>
-              : st.key === 'hired' && job.status !== 'accepted' ? <Link href="/shift" className="btn btn-primary btn-block">Экран смены</Link>
+              : st.key === 'hired' && job.status !== 'accepted' ? <Link href={'/shift?job=' + job.num} className="btn btn-primary btn-block">Экран смены</Link>
                 : null;
 
   return (
@@ -151,9 +158,12 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
           {role === 'freelancer' && job.myStatus === 'sent' && (
             <button className={'btn btn-ghost btn-block ' + sty.cdf03ebe} onClick={onWithdraw} disabled={busy}>Отказаться</button>
           )}
-          <div className={sty.cbca74d7}>
-            {isEmp ? 'Откликаться может только исполнитель — для этого нужен отдельный аккаунт.' : <>Пока вас не наняли, отклик можно отозвать. Найм — договор с работодателем на условиях заказа и <a href="/legal/offer#shift" target="_blank" rel="noreferrer">условиях смены</a>.</>}
-          </div>
+          {(isEmp || ['open', 'req', 'applied', 'hired'].includes(st.key)) && (
+            <div className={sty.cbca74d7}>
+              {isEmp ? 'Откликаться может только исполнитель — для этого нужен отдельный аккаунт.'
+                : <>{st.key === 'hired' ? '' : 'Пока вас не наняли, отклик можно отозвать. '}Найм — договор с работодателем на условиях заказа и <a href="/legal/offer#shift" target="_blank" rel="noreferrer">условиях смены</a>.</>}
+            </div>
+          )}
         </div>
       )}
 

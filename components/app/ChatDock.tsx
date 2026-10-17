@@ -14,6 +14,9 @@ import sty from './ChatDock.module.css';
 
 type Thread = { messages: ChatMessage[]; canSend: boolean; who: string; initials: string; title: string };
 
+/** Время последнего сообщения, о котором уже подсказали. */
+const HINT_KEY = 'arena:chat-hint';
+
 const time = (iso: string) => {
   const d = new Date(iso);
   const today = new Date();
@@ -49,6 +52,25 @@ export function ChatDock({ place }: { place: 'map' | 'form' | 'page' }) {
   });
   useEffect(() => { listRef.current?.scrollTo({ top: listRef.current.scrollHeight }); }, [thread?.messages.length]);
 
+  // Подсказка «новое сообщение» — один раз на каждое новое сообщение: скрывается крестиком, открытием «Сообщений»
+  // или сама через несколько секунд и на других страницах больше не появляется (до следующего сообщения).
+  const newest = chats.reduce((m, c) => (c.unread > 0 && c.lastAt && c.lastAt > m ? c.lastAt : m), '');
+  const [hintSeen, setHintSeen] = useState<string | null>(null);
+  useEffect(() => { try { setHintSeen(localStorage.getItem(HINT_KEY) || ''); } catch { setHintSeen(''); } }, []);
+  const seeHint = () => {
+    if (!newest) return;
+    setHintSeen(newest);
+    try { localStorage.setItem(HINT_KEY, newest); } catch { /* приватный режим */ }
+  };
+  const fresh = hintSeen != null && newest > hintSeen;
+  const showHint = !narrow && !dock.open && unread > 0 && fresh;
+  useEffect(() => {
+    if (!fresh || narrow) return;
+    // Открыли «Сообщения» — подсказка своё сделала; иначе прячется сама.
+    const t = setTimeout(seeHint, dock.open ? 0 : 12_000);
+    return () => clearTimeout(t);
+  }, [fresh, narrow, dock.open, newest]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // На телефоне плашку заменяет пункт «Чат» нижнего меню; открытый чат — на весь экран над меню.
   if (!me || (narrow && (place === 'form' || !dock.open))) return null;
 
@@ -77,8 +99,9 @@ export function ChatDock({ place }: { place: 'map' | 'form' | 'page' }) {
 
   return (
     <div className={narrow ? '' : 'blueprint'} style={css(style)} aria-label="Сообщения">
-      {!dock.open && unread > 0 && !narrow && (
+      {showHint && (
         <div className={sty.ca2b78a5}>
+          <button type="button" className={sty.hintClose} onClick={seeHint} aria-label="Скрыть подсказку">×</button>
           <div className={'fh ' + sty.cfb36ef6}>новое сообщение</div>
           <div className={sty.c8388489}>Переписка живёт здесь — откройте «Сообщения».</div>
           <div className={sty.cd99d3cf}>▼</div>

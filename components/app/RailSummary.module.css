@@ -78,28 +78,6 @@
   color: var(--color-accent-900) !important;
   border-color: var(--color-accent-100) !important;
 }
-:where(.c6840f0a) {
-  margin-top: 18px !important;
-}
-:where(.ccd64abd) {
-  height: 58px !important;
-  font-size: 16px !important;
-  letter-spacing: .08em !important;
-  text-transform: uppercase !important;
-}
-:where(.ccec5e2f) {
-  margin-top: 8px !important;
-  height: 46px !important;
-  font-size: 14px !important;
-  letter-spacing: .06em !important;
-  text-transform: uppercase !important;
-}
-:where(.c2d87e17) {
-  font-size: 13px !important;
-  line-height: 1.45 !important;
-  margin-top: 8px !important;
-  color: color-mix(in srgb, var(--color-text) 62%, transparent) !important;
-}
 :where(.ce15ec2e) {
   font-family: var(--font-heading) !important;
   font-weight: 600 !important;

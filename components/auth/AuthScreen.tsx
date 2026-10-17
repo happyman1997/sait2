@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type Reac
 import { ApiError, api } from '@/lib/api';
 import { ACCESS, GEAR, JOB_TYPES, OBJECT_KINDS, ORG_TYPES, PASS_MODES, SAFETY_REQ, TOOLS } from '@/lib/catalog';
 import { css } from '@/lib/css';
+import { plural } from '@/lib/jobs';
 import { passwordProblem } from '@/lib/password-policy';
 import { contactsMessage, contactsMissing, EMAIL_RE, LOGIN_RE, validateProfile, type Role } from '@/lib/validation';
 import { showModeration } from '@/components/ModerationGuard';
@@ -54,6 +55,8 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
 }
 
 const fmtNum = (v: number) => String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+/** С какого числа показывать счётчики людей на площадке. */
+const STATS_MIN = 50;
 
 type OAuthProvider = 'yandex' | 'vk';
 const OAUTH_LABEL: Record<OAuthProvider, string> = { yandex: 'Войти через Яндекс ID', vk: 'Войти через VK ID' };
@@ -453,6 +456,11 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
   // ─── Разметка ───
 
   const statDate = new Date(stats.day + 'T00:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+  // Счётчики — когда цифры стали заметными: «2 исполнителя» на входе выглядит пусто.
+  const counters = ([
+    [stats.freelancers, plural(stats.freelancers, 'исполнитель', 'исполнителя', 'исполнителей')],
+    [stats.employers, plural(stats.employers, 'работодатель', 'работодателя', 'работодателей')]
+  ] as [number, string][]).filter(([n]) => n >= STATS_MIN);
   const nextLabel = step === 1 ? 'Далее — контакты' : step === 2 ? 'Далее — профиль' : step === 3 ? (skipCode ? 'Далее — согласие' : 'Далее — код') : (isEmp ? 'Создать аккаунт работодателя' : 'Создать аккаунт исполнителя');
   const isPrivateOrg = orgType === 'частное лицо';
   const sentTo = challenge?.sentTo || email;
@@ -483,16 +491,18 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                 <span className={sty.ce8254e2}>{v}</span>
               </div>
             ))}
-            <div className={sty.c8bc77da} />
-            <div className={sty.c483a622}>
-              {[[stats.freelancers, 'исполнителей'], [stats.employers, 'работодателей']].map(([n, l]) => (
-                <div key={l} className={sty.c9dde168}>
-                  <span className={'fh ' + sty.c1607229}>{fmtNum(n as number)}</span>
-                  <span className={'fh ' + sty.c31092bb}>{l}</span>
-                </div>
-              ))}
-            </div>
-            <div className={sty.c444bcf2}>на площадке · данные на {statDate}</div>
+            {counters.length > 0 && <>
+              <div className={sty.c8bc77da} />
+              <div className={sty.c483a622}>
+                {counters.map(([n, l]) => (
+                  <div key={l} className={sty.c9dde168}>
+                    <span className={'fh ' + sty.c1607229}>{fmtNum(n)}</span>
+                    <span className={'fh ' + sty.c31092bb}>{l}</span>
+                  </div>
+                ))}
+              </div>
+              <div className={sty.c444bcf2}>на площадке · данные на {statDate}</div>
+            </>}
           </div>
         </div>
 

@@ -21,6 +21,8 @@ const ACCENT = A('--color-accent', '#5980a6');
 const DEEP = A('--color-accent-900', '#2f4a63');
 const PAPER = A('--color-neutral-100', '#fff');
 const INK = A('--color-text', '#1d1f20');
+// Открытый сейчас заказ — тёмная плашка: отличается и от обычных, и от срочных.
+const NIGHT = A('--ink', '#22282e');
 const esc = (s: unknown) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 
 const plural = (k: number, a: string, b: string, c: string) => {
@@ -364,14 +366,17 @@ export class SeasonMapView {
     // заказов налезали друг на друга, поэтому там раньше собираем их в метки «N заказов».
     const narrow = window.matchMedia('(max-width: 719.98px)').matches;
     const near = this.map.getZoom() >= (narrow ? 11 : 7);
-    const groups = near ? this.coincident(pins) : this.cluster(pins);
+    // Открытый заказ не прячем в группу «N заказов» — он всегда виден своей плашкой.
+    const lone = near ? null : pins.find(p => p.active) || null;
+    const others = lone ? pins.filter(p => p !== lone) : pins;
+    const groups = near ? this.coincident(others) : this.cluster(others);
     const dense = pins.length > 14 && !near;
     // Метки далеко за краем кадра не создаём — на всю Россию это сотни лишних DOM-узлов на кадр.
     const hostRect = this.host.getBoundingClientRect();
     const M = 160;
     const inView = (pt: [number, number]) => pt[0] > -M && pt[1] > -M && pt[0] < hostRect.width + M && pt[1] < hostRect.height + M;
 
-    const renderPin = (p: Pin, stackIdx: number, stackN: number) => {
+    const renderPin = (p: Pin, stackIdx: number, stackN: number, fan = -1) => {
       const pt = this.pt(p.lat, p.lng);
       if (!pt || !inView(pt)) return;
       const isHot = String(p.id) === hot;
@@ -385,13 +390,15 @@ export class SeasonMapView {
       // Плашка — ставка и тип работы, а не номер.
       const solid = p.active || p.urgent;
       const ink = solid ? '#fff' : INK;
-      const edge = solid ? DEEP : ACCENT;
+      const edge = p.active ? NIGHT : solid ? DEEP : ACCENT;
+      const fill = p.active ? NIGHT : solid ? ACCENT : PAPER;
       const stem = 11 + stackIdx * 48;
-      html.push('<div data-id="' + esc(p.id) + '" data-kind="pin"' + (stackN > 1 ? ' data-stack="1"' : '') + ' title="' + esc(p.title) + '" style="position:absolute;left:' +
-        pt[0] + 'px;top:' + pt[1] + 'px;transform:translate(-50%,-100%) scale(' + (isHot ? 1.08 : 1) + ');transform-origin:50% 100%;z-index:2;' +
+      html.push('<div data-id="' + esc(p.id) + '" data-kind="pin"' + (stackN > 1 ? ' data-stack="1"' : '') + (fan >= 0 ? ' data-g="' + fan + '"' : '') +
+        (p.active ? ' data-active="1"' : '') + ' title="' + esc(p.title) + '" style="position:absolute;left:' +
+        pt[0] + 'px;top:' + pt[1] + 'px;transform:translate(-50%,-100%) scale(' + (p.active ? 1.12 : isHot ? 1.08 : 1) + ');transform-origin:50% 100%;z-index:' + (p.active ? 6 : 2) + ';' +
         'pointer-events:auto;cursor:pointer;display:flex;flex-direction:column;align-items:center;white-space:nowrap">' +
-          '<span style="display:flex;align-items:stretch;box-sizing:border-box;background:' + (solid ? ACCENT : PAPER) +
-            ';border:1px solid ' + edge + ';box-shadow:' + (isHot ? '0 8px 20px rgba(31,45,58,.32)' : '0 3px 10px rgba(31,45,58,.18)') + '">' +
+          '<span style="display:flex;align-items:stretch;box-sizing:border-box;background:' + fill +
+            ';border:1px solid ' + edge + ';box-shadow:' + (p.active ? '0 0 0 3px ' + PAPER + ',0 10px 24px rgba(31,45,58,.4)' : isHot ? '0 8px 20px rgba(31,45,58,.32)' : '0 3px 10px rgba(31,45,58,.18)') + '">' +
             (p.urgent ? '<span style="width:4px;background:' + (solid ? '#fff' : ACCENT) + '"></span>' : '') +
             '<span style="display:flex;flex-direction:column;gap:1px;padding:5px 10px">' +
               '<span style="font-family:var(--font-heading,sans-serif);font-weight:600;font-size:15px;line-height:1;letter-spacing:.01em;color:' + ink + '">' + esc(p.rate) + '</span>' +
@@ -400,11 +407,11 @@ export class SeasonMapView {
             '</span>' +
           '</span>' +
           '<span style="width:1px;height:' + stem + 'px;background:' + edge + '"></span>' +
-          '<span style="width:7px;height:7px;margin-top:-4px;transform:rotate(45deg);background:' + (solid ? ACCENT : PAPER) + ';border:1px solid ' + edge + '"></span>' +
+          '<span style="width:7px;height:7px;margin-top:-4px;transform:rotate(45deg);background:' + fill + ';border:1px solid ' + edge + '"></span>' +
         '</div>');
     };
 
-    groups.forEach(group => {
+    groups.forEach((group, gi) => {
       if (near || group.length === 1) {
         if (group.length === 1) { renderPin(group[0], 0, 1); return; }
         // Веер не уходит за верх карты: сколько влезло — показываем, остальное — «ещё N здесь».
@@ -416,10 +423,10 @@ export class SeasonMapView {
         const cap = Math.max(1, Math.min(4, room));
         const shown = group.slice(0, cap);
         const restN = group.length - shown.length;
-        shown.forEach((p, i) => renderPin(p, shown.length - 1 - i, shown.length));
+        shown.forEach((p, i) => renderPin(p, shown.length - 1 - i, shown.length, gi));
         if (restN > 0) {
           const rest = group.slice(shown.length);
-          html.push('<div data-ids="' + esc(rest.map(r => r.id).join(',')) + '" data-kind="stackmore" title="' +
+          html.push('<div data-ids="' + esc(rest.map(r => r.id).join(',')) + '" data-kind="stackmore" data-g="' + gi + '" title="' +
             esc('Ещё ' + restN + ' на этом адресе') + '" style="position:absolute;left:' + (anchor[0] + 14) + 'px;top:' + anchor[1] +
             'px;transform:translate(0,-50%);pointer-events:auto;cursor:pointer;padding:3px 7px;box-sizing:border-box;' +
             'font-family:var(--font-heading,sans-serif);font-size:12.5px;line-height:1;letter-spacing:.06em;color:#fff;background:' + ACCENT +
@@ -443,6 +450,8 @@ export class SeasonMapView {
         (urgentN ? '<span data-role="u" style="padding:3px 9px;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;background:' + PAPER + ';color:' + DEEP + '">' +
           urgentN + ' срочн' + (urgentN === 1 ? 'ый' : 'ых') + '</span>' : '') + '</div>');
     });
+
+    if (lone) renderPin(lone, 0, 1);
 
     // Точка базирования исполнителя.
     if (this.anchor && this.mode !== 'employer') {
@@ -474,7 +483,6 @@ export class SeasonMapView {
     const grow = (r: R, m: number): R => ({ left: r.left - m, right: r.right + m, top: r.top - m, bottom: r.bottom + m });
     const all = Array.from(this.overlay.querySelectorAll<HTMLElement>('[data-kind="pin"]'));
     const els = all.filter(el => el.children.length >= 3 && el.dataset.stack !== '1');
-    const stacked = all.filter(el => el.dataset.stack === '1');
     let clusters = Array.from(this.overlay.querySelectorAll<HTMLElement>('[data-kind="cluster"]'));
     const host = this.host.getBoundingClientRect();
     const placedC: R[] = [], placedEl: HTMLElement[] = [];
@@ -554,10 +562,77 @@ export class SeasonMapView {
       }
     });
     clusters = clusters.filter(c => c.isConnected);
-    const boxes: R[] = clusters.concat(all.filter(el => el.children.length === 0)).concat(stacked)
-      .concat(Array.from(this.overlay.querySelectorAll<HTMLElement>('[data-kind="stackmore"]')))
-      .map(el => el.getBoundingClientRect());
+    const boxes: R[] = clusters.concat(all.filter(el => el.children.length === 0)).map(el => el.getBoundingClientRect());
     const hits = (r: R) => boxes.some(q => overlaps(r, q));
+    const isActive = (el: HTMLElement) => el.dataset.active === '1';
+    const placeSingle = (el: HTMLElement) => {
+      const left0 = parseFloat(el.style.left) || 0;
+      const top0 = parseFloat(el.style.top) || 0;
+      const stem = el.children[el.children.length - 2] as HTMLElement;
+      const stem0 = parseFloat(stem.style.height) || 11;
+      let lift = 0, ok = false;
+      for (let i = 0; i < 7; i++) {
+        let r = el.getBoundingClientRect();
+        let dx = 0;
+        if (r.right > host.right - 6) dx = host.right - 6 - r.right;
+        if (r.left + dx < host.left + 6) dx = host.left + 6 - r.left;
+        if (dx) { el.style.left = ((parseFloat(el.style.left) || 0) + dx) + 'px'; r = el.getBoundingClientRect(); }
+        if (!hits(grow(r, 2))) { ok = true; if (!isActive(el)) el.style.zIndex = '3'; break; }
+        if (r.top - 18 < host.top + 4) break;
+        lift += 18;
+        el.style.top = (top0 - lift) + 'px';
+        stem.style.height = (stem0 + lift) + 'px';
+      }
+      if (!ok && isActive(el)) {
+        // Открытый заказ не сворачиваем — остаётся плашкой поверх соседей.
+        el.style.left = left0 + 'px';
+        el.style.top = top0 + 'px';
+        stem.style.height = stem0 + 'px';
+      } else if (!ok) {
+        // Места нет — сворачиваем плашку в точку на её настоящей координате.
+        el.style.left = left0 + 'px';
+        el.style.top = top0 + 'px';
+        el.style.transform = 'translate(-50%, -50%)';
+        // Свёрнутая точка — под плашками, а не поверх их текста.
+        el.style.zIndex = '1';
+        el.innerHTML = '<span style="display:block;width:11px;height:11px;transform:rotate(45deg);box-sizing:border-box;background:' +
+          PAPER + ';border:1.5px solid ' + ACCENT + ';box-shadow:0 2px 6px rgba(31,45,58,.22)"></span>';
+      }
+      boxes.push(el.getBoundingClientRect());
+    };
+    // Открытый заказ ставим первым — остальные уступают ему место.
+    els.filter(isActive).forEach(placeSingle);
+    // Веер (несколько заказов на одном адресе) не двигается: если он налезает на уже поставленные плашки —
+    // сворачиваем его в одну метку «N заказов здесь», по нажатию откроется их список.
+    const fans = new Map<string, HTMLElement[]>();
+    this.overlay.querySelectorAll<HTMLElement>('[data-g]').forEach(el => fans.set(el.dataset.g!, (fans.get(el.dataset.g!) || []).concat(el)));
+    [...fans.values()].sort((a, b) => +b.some(isActive) - +a.some(isActive)).forEach(fan => {
+      const rects = fan.map(el => el.getBoundingClientRect());
+      const pinEls = fan.filter(el => el.dataset.kind === 'pin');
+      if (!pinEls.length || fan.some(isActive) || !rects.some(r => hits(grow(r, 2)))) { boxes.push(...rects); return; }
+      const ids = pinEls.map(el => el.dataset.id!).concat(fan.flatMap(el => (el.dataset.ids || '').split(',').filter(Boolean)));
+      const badge = document.createElement('div');
+      badge.dataset.kind = 'stackmore';
+      badge.dataset.ids = ids.join(',');
+      badge.title = 'Заказы на этом адресе';
+      badge.textContent = ids.length + ' ' + plural(ids.length, 'заказ', 'заказа', 'заказов') + ' здесь';
+      badge.style.cssText = 'position:absolute;left:' + pinEls[0].style.left + ';top:' + pinEls[0].style.top + ';transform:translate(-50%,-50%);z-index:4;' +
+        'pointer-events:auto;cursor:pointer;padding:5px 9px;box-sizing:border-box;white-space:nowrap;font-family:var(--font-heading,sans-serif);' +
+        'font-weight:600;font-size:12.5px;line-height:1;letter-spacing:.06em;color:#fff;background:' + ACCENT + ';border:1px solid ' + DEEP +
+        ';box-shadow:0 3px 10px rgba(31,45,58,.22)';
+      fan.forEach(el => el.remove());
+      this.overlay.appendChild(badge);
+      // Метка тоже не ложится на соседей: пробуем чуть ниже, сбоку, выше своей точки.
+      const x0 = parseFloat(badge.style.left) || 0, y0 = parseFloat(badge.style.top) || 0;
+      const b0 = badge.getBoundingClientRect();
+      const bx = b0.width / 2 + 8, by = b0.height + 6;
+      const spot = [[0, 0], [0, by], [bx, 0], [-bx, 0], [0, -by], [bx, by], [-bx, by], [0, 2 * by]].find(([dx, dy]) => {
+        badge.style.left = (x0 + dx) + 'px'; badge.style.top = (y0 + dy) + 'px';
+        return !hits(grow(badge.getBoundingClientRect(), 2));
+      });
+      if (!spot) { badge.style.left = x0 + 'px'; badge.style.top = y0 + 'px'; }
+      boxes.push(badge.getBoundingClientRect());
+    });
     const baseDot = this.overlay.querySelector<HTMLElement>('[data-kind="base"]');
     if (baseDot) boxes.push(baseDot.getBoundingClientRect());
     const baseEl = this.overlay.querySelector<HTMLElement>('[data-kind="baselabel"]');
@@ -570,35 +645,6 @@ export class SeasonMapView {
       }
       boxes.push(baseEl.getBoundingClientRect());
     }
-    els.forEach(el => {
-      const left0 = parseFloat(el.style.left) || 0;
-      const top0 = parseFloat(el.style.top) || 0;
-      const stem = el.children[el.children.length - 2] as HTMLElement;
-      const stem0 = parseFloat(stem.style.height) || 11;
-      let lift = 0, ok = false;
-      for (let i = 0; i < 7; i++) {
-        let r = el.getBoundingClientRect();
-        let dx = 0;
-        if (r.right > host.right - 6) dx = host.right - 6 - r.right;
-        if (r.left + dx < host.left + 6) dx = host.left + 6 - r.left;
-        if (dx) { el.style.left = ((parseFloat(el.style.left) || 0) + dx) + 'px'; r = el.getBoundingClientRect(); }
-        if (!hits(grow(r, 2))) { ok = true; el.style.zIndex = '3'; break; }
-        if (r.top - 18 < host.top + 4) break;
-        lift += 18;
-        el.style.top = (top0 - lift) + 'px';
-        stem.style.height = (stem0 + lift) + 'px';
-      }
-      if (!ok) {
-        // Места нет — сворачиваем плашку в точку на её настоящей координате.
-        el.style.left = left0 + 'px';
-        el.style.top = top0 + 'px';
-        el.style.transform = 'translate(-50%, -50%)';
-        // Свёрнутая точка — под плашками, а не поверх их текста.
-        el.style.zIndex = '1';
-        el.innerHTML = '<span style="display:block;width:11px;height:11px;transform:rotate(45deg);box-sizing:border-box;background:' +
-          PAPER + ';border:1.5px solid ' + ACCENT + ';box-shadow:0 2px 6px rgba(31,45,58,.22)"></span>';
-      }
-      boxes.push(el.getBoundingClientRect());
-    });
+    els.filter(el => !isActive(el)).forEach(placeSingle);
   }
 }

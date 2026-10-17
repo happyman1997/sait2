@@ -60,11 +60,6 @@ export function GuestGuide() {
         <div className={sty.cf7a0fd3}>{g.note}</div>
         <Link href={'/auth?role=' + who} className={'btn btn-secondary btn-block ' + sty.cd488481}>{g.cta}</Link>
       </div>
-      <div className={sty.c6840f0a}>
-        <Link href="/auth" className={'btn btn-primary btn-block blueprint ' + sty.ccd64abd}><Corners />Зарегистрироваться</Link>
-        <Link href="/auth?mode=login" className={'btn btn-secondary btn-block ' + sty.ccec5e2f}>Войти</Link>
-        <div className={sty.c2d87e17}>Смотреть заказы можно без профиля — он нужен только для отклика.</div>
-      </div>
     </div>
   );
 }

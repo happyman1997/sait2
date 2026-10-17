@@ -28,7 +28,8 @@ export function AppHeader({ me, onHome, unread = 0, onChat, chatActive = false, 
   if (me?.isStaff) tabs.push({ href: '/support', label: 'Поддержка' });
 
   return (
-    <div className={('nav dark-bar' + (wideOnly ? ' only-wide' : '')) + ' ' + sty.c8d4eda9}>
+    // На карте шапка — во всю ширину, как карта и левая панель под ней; на остальных страницах — по колонке текста.
+    <div className={('nav dark-bar' + (wideOnly ? ' only-wide' : '')) + ' ' + sty.c8d4eda9 + (path === '/' ? ' ' + sty.full : '')}>
       <Link href="/" onClick={onHome} title="На главную" aria-label="Арена Работы — на главную" className={sty.ca4a0310}>
         {/* Знак площадки — та же метка на карте, что в иконке сайта (app/icon.svg). */}
         <span aria-hidden="true" className={sty.c6261e49}>

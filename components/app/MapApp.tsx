@@ -550,7 +550,8 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
   const shellStyle = narrow
     ? 'position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: ' + (form || selected ? 'minmax(110px, 22%)' : 'minmax(220px, 46%)') + ' minmax(0, 1fr)'
     : 'position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: ' + (form ? 'minmax(420px, 620px)' : 'minmax(320px, 420px)') + ' minmax(340px, 1fr); overflow-x: auto';
-  const PAD = 'max(clamp(14px, 2vw, 24px), calc((100% - 1440px) / 2))';
+  // Как у шапки на карте и левой панели — во всю ширину экрана.
+  const PAD = 'clamp(14px, 2vw, 20px)';
 
   return (
     <div className={sty.cecc0ae7}>
