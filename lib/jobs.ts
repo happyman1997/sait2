@@ -268,7 +268,7 @@ export function jobStepErrors(step: number, f: JobForm): Record<string, string> 
   const e: Record<string, string> = {};
   if (step === 1) {
     if (!f.address.trim()) e.address = 'Укажите адрес — исполнитель должен понимать, куда идти.';
-    else if (f.lat == null || f.lng == null) e.address = 'Поставьте метку на карте — кликом по карте или через поиск адреса.';
+    else if (f.lat == null || f.lng == null) e.address = 'Поставьте метку на карте — нажатием на карту или через поиск адреса.';
   } else if (step === 2) {
     if (!f.desc.trim()) e.desc = 'Опишите, что нужно сделать — объём, особенности объекта.';
     if (!f.type.trim() && !f.typeOther.trim()) e.type = 'Впишите тип работы или выберите готовый из списка.';

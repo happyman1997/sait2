@@ -366,3 +366,13 @@ button:not(:disabled):active { transform: translateY(1px); }
 :root[data-work] .job-row { min-height: 76px; }
 /* Уведомление поднимается над нижним меню на телефоне */
 @media (max-width: 719.98px) { :root { --toast-lift: calc(56px + env(safe-area-inset-bottom)); } }
+
+/* Телефон. Поля ввода — 16 px: с более мелким шрифтом iPhone увеличивает страницу при каждом нажатии на поле.
+   Кнопки и переключатели — не ниже 40/36 px, чтобы попадать пальцем; метки-теги — не мельче 12 px.
+   !important — сильнее статичных стилей модулей (:where с !important) и атрибутов style. */
+@media (max-width: 719.98px) {
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), select, textarea, .input { font-size: 16px !important; }
+  .btn { min-height: 40px !important; }
+  .tag { font-size: 12px !important; }
+  button.tag, a.tag { min-height: 36px !important; padding-top: 6px !important; padding-bottom: 6px !important; }
+}

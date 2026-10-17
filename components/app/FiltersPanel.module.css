@@ -178,3 +178,7 @@
   height: 26px !important;
   font-size: 12.5px !important;
 }
+/* Телефон: крестик «убрать фильтр» — зона касания больше значка. */
+@media (max-width: 719.98px) {
+  :where(.c3846a47) { padding: 8px 9px !important; margin: -8px -9px -8px 0 !important; }
+}

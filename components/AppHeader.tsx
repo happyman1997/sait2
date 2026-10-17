@@ -37,7 +37,8 @@ export function AppHeader({ me, onHome, unread = 0, onChat, chatActive = false, 
         <span className={'fh ' + sty.c298aaa6}>Арена Работы</span>
       </Link>
 
-      {!me && <Link href="/auth" className="btn btn-primary" style={css(HBTN + '; padding: 0 clamp(12px, 2vw, 22px)')}>Создать профиль</Link>}
+      {/* На телефоне «Создать профиль» — в строке под шапкой карты, шапка остаётся в одну строку. */}
+      {!me && <Link href="/auth" className="btn btn-primary only-wide" style={css(HBTN + '; padding: 0 clamp(12px, 2vw, 22px)')}>Создать профиль</Link>}
 
       {me && (
         <nav aria-label="Разделы" className={sty.c39b724b}>

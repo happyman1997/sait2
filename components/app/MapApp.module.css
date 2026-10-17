@@ -232,3 +232,13 @@
   font-size: 13.5px !important;
   line-height: 1.4 !important;
 }
+/* Гость на телефоне: короткая строка и кнопка регистрации вместо абзаца. */
+.guestLine {
+  flex: 1 1 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, .92);
+}
+.guestCta { min-height: 36px; padding: 0 14px; font-size: 13px; white-space: nowrap; }

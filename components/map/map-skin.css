@@ -10,3 +10,7 @@
   border-radius: 0; border: 1px solid var(--color-accent, #5980a6); border-top: 0; color: var(--color-text, #1d1f20);
   background: color-mix(in srgb, var(--color-neutral-100, #fff) 82%, transparent); font-size: 10px;
 }
+/* Телефон: кнопки масштаба крупнее — под палец. */
+@media (max-width: 719.98px) {
+  .maplibregl-ctrl-group button { width: 40px; height: 40px; }
+}

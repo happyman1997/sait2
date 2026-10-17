@@ -336,7 +336,7 @@ function HeaderCard({ p, setP, patch, busy, err }: {
             {tags.map(t => (
               <span key={t.label} className={'tag tag-outline ' + sty.c687e3e0}>
                 {t.label}
-                {t.onRemove && <button onClick={t.onRemove} title="Убрать тег" aria-label={'Убрать «' + t.label + '»'} style={css('all: unset; cursor: pointer; line-height: 1; font-size: 14px; ' + MUTED)}>×</button>}
+                {t.onRemove && <button onClick={t.onRemove} title="Убрать тег" aria-label={'Убрать «' + t.label + '»'} style={css('all: unset; cursor: pointer; line-height: 1; font-size: 14px; padding: 9px 10px; margin: -9px -10px -9px -4px; ' + MUTED)}>×</button>}
               </span>
             ))}
             {!isEmp && !adding && freeSkills.length > 0 && (

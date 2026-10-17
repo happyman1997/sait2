@@ -152,7 +152,7 @@ export function ShiftScreen() {
             <div className={sty.cad948e3}>
               <span className={'fh ' + sty.c2e2088c}>Первый выход</span>
               <button onClick={() => { setTipHidden(true); try { localStorage.setItem(TIP_KEY, '1'); } catch { /* не критично */ } }} aria-label="Скрыть подсказку"
-                style={css('all: unset; cursor: pointer; font-size: 17px; line-height: 1; padding: 4px; ' + MUTED)}>×</button>
+                style={css('all: unset; cursor: pointer; font-size: 17px; line-height: 1; padding: 10px 12px; margin: -10px -12px; ' + MUTED)}>×</button>
             </div>
             <div className={sty.cb80f41a}>
               {[

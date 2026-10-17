@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { api } from '@/lib/api';
 import type { ChatThread, JobDetail } from '@/lib/jobs';
 import { useFlash } from '@/components/Toast';
+import { useBackClose } from '@/lib/backstack';
 
 export type LiveEvent =
   | { t: 'message'; num: number; thread: string }
@@ -140,6 +141,9 @@ export function LiveProvider({ me, children }: { me: Me; children: ReactNode }) 
   }, []);
 
   const setDock = useCallback((d: Partial<Dock>) => setDockState(s => ({ ...s, ...d })), []);
+  // «Назад» на телефоне закрывает чат и панели журнала и настроек.
+  useBackClose(dock.open, () => setDockState(s => ({ ...s, open: false })));
+  useBackClose(rail != null, () => setRail(null));
   const openChat = useCallback((num: number, thread: string) => setDockState({ open: true, view: 'chat', num, thread }), []);
 
   const value = useMemo<Ctx>(() => ({

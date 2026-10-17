@@ -288,3 +288,10 @@
   padding: 0 14px !important;
   flex: none !important;
 }
+/* Телефон: быстрые ответы — переносом в две строки, а не обрезанной лентой. */
+@media (max-width: 719.98px) {
+  :where(.c969623c) { flex-wrap: wrap !important; overflow-x: visible !important; }
+}
+@media (max-width: 719.98px) {
+  :where(.c30a4f79) { min-height: 36px !important; }
+}

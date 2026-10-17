@@ -360,7 +360,10 @@ export class SeasonMapView {
     const html: string[] = [];
     const pins = this.pins;
     const hot = this.highlight == null ? '' : String(this.highlight);
-    const near = this.map.getZoom() >= 7;
+    // Плашки по одной — с масштаба области; на телефоне — только с масштаба города: на узкой карте плашки соседних
+    // заказов налезали друг на друга, поэтому там раньше собираем их в метки «N заказов».
+    const narrow = window.matchMedia('(max-width: 719.98px)').matches;
+    const near = this.map.getZoom() >= (narrow ? 11 : 7);
     const groups = near ? this.coincident(pins) : this.cluster(pins);
     const dense = pins.length > 14 && !near;
     // Метки далеко за краем кадра не создаём — на всю Россию это сотни лишних DOM-узлов на кадр.
@@ -385,7 +388,7 @@ export class SeasonMapView {
       const edge = solid ? DEEP : ACCENT;
       const stem = 11 + stackIdx * 48;
       html.push('<div data-id="' + esc(p.id) + '" data-kind="pin"' + (stackN > 1 ? ' data-stack="1"' : '') + ' title="' + esc(p.title) + '" style="position:absolute;left:' +
-        pt[0] + 'px;top:' + pt[1] + 'px;transform:translate(-50%,-100%) scale(' + (isHot ? 1.08 : 1) + ');transform-origin:50% 100%;' +
+        pt[0] + 'px;top:' + pt[1] + 'px;transform:translate(-50%,-100%) scale(' + (isHot ? 1.08 : 1) + ');transform-origin:50% 100%;z-index:2;' +
         'pointer-events:auto;cursor:pointer;display:flex;flex-direction:column;align-items:center;white-space:nowrap">' +
           '<span style="display:flex;align-items:stretch;box-sizing:border-box;background:' + (solid ? ACCENT : PAPER) +
             ';border:1px solid ' + edge + ';box-shadow:' + (isHot ? '0 8px 20px rgba(31,45,58,.32)' : '0 3px 10px rgba(31,45,58,.18)') + '">' +
@@ -432,7 +435,7 @@ export class SeasonMapView {
       const big = n >= 15 ? 19 : n >= 5 ? 17 : 15;
       html.push('<div data-id="c:' + c.lat + ':' + c.lng + '" data-kind="cluster" data-n="' + n + '" data-u="' + urgentN + '" title="' +
         esc(n + ' предложений' + (urgentN ? ', срочных ' + urgentN : '')) +
-        '" style="position:absolute;left:' + pt[0] + 'px;top:' + pt[1] + 'px;transform:translate(-50%,-50%);' +
+        '" style="position:absolute;left:' + pt[0] + 'px;top:' + pt[1] + 'px;transform:translate(-50%,-50%);z-index:4;' +
         'display:flex;flex-direction:column;align-items:stretch;box-sizing:border-box;pointer-events:auto;cursor:pointer;white-space:nowrap;' +
         'font-family:var(--font-heading,sans-serif);font-weight:600;line-height:1;color:#fff;background:' + ACCENT + ';border:1px solid ' + DEEP + ';box-shadow:0 4px 14px rgba(31,45,58,.26)">' +
         '<span style="display:flex;align-items:baseline;gap:5px;padding:6px 9px"><span data-role="n" style="font-size:' + big + 'px">' + n + '</span>' +
@@ -579,7 +582,7 @@ export class SeasonMapView {
         if (r.right > host.right - 6) dx = host.right - 6 - r.right;
         if (r.left + dx < host.left + 6) dx = host.left + 6 - r.left;
         if (dx) { el.style.left = ((parseFloat(el.style.left) || 0) + dx) + 'px'; r = el.getBoundingClientRect(); }
-        if (!hits(grow(r, 2))) { ok = true; break; }
+        if (!hits(grow(r, 2))) { ok = true; el.style.zIndex = '3'; break; }
         if (r.top - 18 < host.top + 4) break;
         lift += 18;
         el.style.top = (top0 - lift) + 'px';
@@ -590,6 +593,8 @@ export class SeasonMapView {
         el.style.left = left0 + 'px';
         el.style.top = top0 + 'px';
         el.style.transform = 'translate(-50%, -50%)';
+        // Свёрнутая точка — под плашками, а не поверх их текста.
+        el.style.zIndex = '1';
         el.innerHTML = '<span style="display:block;width:11px;height:11px;transform:rotate(45deg);box-sizing:border-box;background:' +
           PAPER + ';border:1.5px solid ' + ACCENT + ';box-shadow:0 2px 6px rgba(31,45,58,.22)"></span>';
       }

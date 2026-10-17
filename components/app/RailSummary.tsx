@@ -12,7 +12,7 @@ const GUIDE = {
     title: 'Подработка рядом — без резюме',
     lead: 'На карте — разовые заказы от городских подрядчиков и частных лиц. На каждой метке видны ставка и тип работы.',
     steps: [
-      'Выберите метку на карте — слева откроются условия смены и оплата.',
+      'Выберите метку на карте — откроются условия смены и оплата.',
       'Откликнитесь. Профиль спросим только на этом шаге.',
       'После найма откроются чат с работодателем и телефон встречающего.'
     ],
@@ -24,7 +24,7 @@ const GUIDE = {
     lead: 'Опубликуйте заказ точкой на карте — его увидят исполнители поблизости. Ставка, дата и условия видны сразу, лишних вопросов меньше.',
     steps: [
       'Создайте профиль работодателя — имя, почта и город.',
-      'Щёлкните по карте или найдите адрес — укажите тип работы, дату, объём и оплату.',
+      'Нажмите на карту или найдите адрес — укажите тип работы, дату, объём и оплату.',
       'Выберите исполнителя из откликов — откроется чат. После работы примите её и оцените.'
     ],
     note: 'Посмотреть, какие заказы уже есть в вашем районе, можно без регистрации.',
@@ -37,7 +37,7 @@ export function GuestGuide() {
   const g = GUIDE[who];
   const tab = (id: 'freelancer' | 'employer', label: string) => (
     <button role="tab" aria-selected={who === id} onClick={() => setWho(id)}
-      style={css('cursor: pointer; border: 0; padding: 7px 6px; font-family: var(--font-heading); font-weight: 600; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; ' +
+      style={css('cursor: pointer; border: 0; padding: 7px 6px; min-height: 40px; font-family: var(--font-heading); font-weight: 600; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; ' +
         (who === id ? 'background: var(--color-accent-100); color: var(--color-accent-900)' : 'background: transparent; color: var(--color-accent-100)'))}>{label}</button>
   );
   return (
@@ -74,12 +74,22 @@ export function StartSteps({ isEmp, addr }: {
   addr?: { query: string; setQuery: (v: string) => void; busy: boolean; note: string; error: boolean; onFind: () => void };
 }) {
   const steps = isEmp
-    ? ['Щёлкните по карте или найдите адрес — откроется форма заказа.', 'Укажите тип работы, дату, объём и оплату. Условия видны исполнителю сразу.', 'Опубликуйте — исполнители откликнутся, их список появится в карточке заказа.']
-    : ['Выберите метку на карте — слева откроются условия смены и оплата.', 'Откликнитесь. Профиль спросим только на этом шаге.', 'После найма откроются чат с работодателем и телефон встречающего.'];
+    ? ['Нажмите на карту или найдите адрес — откроется форма заказа.', 'Укажите тип работы, дату, объём и оплату. Условия видны исполнителю сразу.', 'Опубликуйте — исполнители откликнутся, их список появится в карточке заказа.']
+    : ['Выберите метку на карте — откроются условия смены и оплата.', 'Откликнитесь. Профиль спросим только на этом шаге.', 'После найма откроются чат с работодателем и телефон встречающего.'];
   const onKey = (e: KeyboardEvent) => { if (e.key === 'Enter') { e.preventDefault(); addr?.onFind(); } };
   return (
     <div>
-      <div style={css(LABEL)}>Как это работает</div>
+      {isEmp && addr && (
+        <div className={sty.c4f7f1ad}>
+          <div style={css(LABEL + '; margin-bottom: 10px')}>Новый заказ</div>
+          <div className={sty.cfabd50d}>
+            <input className={'input ' + sty.c8b4ab7f} aria-label="Адрес заказа" value={addr.query} onChange={e => addr.setQuery(e.target.value)} onKeyDown={onKey} placeholder="Москва, ул. Тверская, 18" />
+            <button className={'btn btn-primary ' + sty.c6afc525} onClick={addr.onFind} disabled={addr.busy}>{addr.busy ? '…' : 'Найти'}</button>
+          </div>
+          <div style={css('font-size: 13px; line-height: 1.4; margin-top: 8px; color: ' + (addr.error ? 'var(--color-accent-900)' : 'color-mix(in srgb, var(--color-text) 66%, transparent)'))}>{addr.note}</div>
+        </div>
+      )}
+      <div style={css(LABEL + (isEmp && addr ? '; margin-top: 22px' : ''))}>Как это работает</div>
       <div className={'fh ' + sty.ce15ec2e}>{isEmp ? 'Заказ за три шага' : 'Смена за три шага'}</div>
       <div className={sty.cd8f77ee}>
         {steps.map((t, i) => (
@@ -92,19 +102,9 @@ export function StartSteps({ isEmp, addr }: {
       </div>
       <div className={sty.c9ccca91}>
         {isEmp
-          ? 'Щёлкните по любой точке карты — откроется форма заказа: тип, адрес, дата, оплата и объём. Регион определится по метке. Чат с исполнителем открывается после найма.'
+          ? 'Нажмите на любую точку карты — откроется форма заказа: тип, адрес, дата, оплата и объём. Регион определится по метке. Чат с исполнителем открывается после найма.'
           : 'На карте у каждого заказа видна ставка и тип работы — выберите любую, чтобы прочитать условия и откликнуться. Чат открывается после найма.'}
       </div>
-      {isEmp && addr && (
-        <div className={sty.c4f7f1ad}>
-          <div style={css(LABEL + '; margin-bottom: 10px')}>Заказ по адресу</div>
-          <div className={sty.cfabd50d}>
-            <input className={'input ' + sty.c8b4ab7f} aria-label="Адрес заказа" value={addr.query} onChange={e => addr.setQuery(e.target.value)} onKeyDown={onKey} placeholder="Москва, ул. Тверская, 18" />
-            <button className={'btn btn-primary ' + sty.c6afc525} onClick={addr.onFind} disabled={addr.busy}>{addr.busy ? '…' : 'Найти'}</button>
-          </div>
-          <div style={css('font-size: 13px; line-height: 1.4; margin-top: 8px; color: ' + (addr.error ? 'var(--color-accent-900)' : 'color-mix(in srgb, var(--color-text) 66%, transparent)'))}>{addr.note}</div>
-        </div>
-      )}
     </div>
   );
 }

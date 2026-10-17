@@ -66,7 +66,7 @@ describe('DaData', () => {
     process.env.DADATA_API_KEY = 'bad';
     try {
       const { geoSearch } = await import('@/server/geo');
-      await expect(geoSearch('несуществующий запрос 403')).rejects.toThrow(/метку кликом/);
+      await expect(geoSearch('несуществующий запрос 403')).rejects.toThrow(/метку нажатием/);
       expect(err.mock.calls.flat().join(' ')).toMatch(/suggestions\.dadata\.ru ответил 403/);
     } finally {
       delete process.env.DADATA_API_KEY;
@@ -84,7 +84,7 @@ describe('без геокодера', () => {
     process.env.GEOCODER_URL = 'https://nominatim.example.ru';
     try {
       const { geoSearch, geoReverse } = await import('@/server/geo');
-      await expect(geoSearch('Москва, Тверская 1 example')).rejects.toThrow(/не подключён.*кликом по карте/);
+      await expect(geoSearch('Москва, Тверская 1 example')).rejects.toThrow(/не подключён.*нажатием на карту/);
       await expect(geoReverse(55.7, 37.6)).rejects.toThrow(/не подключён/);
       expect(fetchSpy).not.toHaveBeenCalled();
     } finally {

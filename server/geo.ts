@@ -30,7 +30,7 @@ async function getJson(url: string, init: { method?: string; headers?: Record<st
     if (!res.ok) {
       // Причину — в журнал: неверный ключ (401/403) или исчерпан суточный лимит видны только здесь.
       console.error(`[geo] ${new URL(url).host} ответил ${res.status}`);
-      throw new AppError(502, 'Геокодер недоступен — поставьте метку кликом по карте.');
+      throw new AppError(502, 'Геокодер недоступен — поставьте метку нажатием на карту.');
     }
     const value = await res.json();
     if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value as string);
@@ -39,7 +39,7 @@ async function getJson(url: string, init: { method?: string; headers?: Record<st
   } catch (e) {
     if (e instanceof AppError) throw e;
     const aborted = (e as Error).name === 'AbortError';
-    throw new AppError(504, aborted ? 'Геокодер не ответил за 5 секунд — поставьте метку кликом по карте.' : 'Геокодер недоступен — поставьте метку кликом по карте.');
+    throw new AppError(504, aborted ? 'Геокодер не ответил за 5 секунд — поставьте метку нажатием на карту.' : 'Геокодер недоступен — поставьте метку нажатием на карту.');
   } finally {
     clearTimeout(t);
   }
@@ -107,7 +107,7 @@ async function dadata(method: 'suggest/address' | 'geolocate/address', body: Rec
 
 // ───────────────────────── Поиск и обратный поиск ─────────────────────────
 
-const OFF = 'Поиск адреса пока не подключён — поставьте метку кликом по карте.';
+const OFF = 'Поиск адреса пока не подключён — поставьте метку нажатием на карту.';
 
 export async function geoSearch(q: string, limit = 5): Promise<GeoHit[]> {
   if (config.dadataKey()) return (await dadata('suggest/address', { query: q, count: Math.min(20, limit * 2) })).slice(0, limit);

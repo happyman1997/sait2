@@ -1,7 +1,8 @@
 'use client';
 
-// Мобильная оболочка (< 720 px, как в прототипе): узкая верхняя полоса с журналом и нижнее меню
-// «Карта · Смена · Отклики · Чат · Проф.». На широком экране скрыта через CSS (.only-narrow).
+// Мобильная оболочка (< 720 px): узкая верхняя полоса с журналом и нижнее меню — у исполнителя
+// «Карта · Смена · Мои смены · Чат · Проф.», у работодателя «Карта · Заказы · Отклики · Чат · Проф.».
+// На широком экране скрыта через CSS (.only-narrow).
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { css } from '@/lib/css';
@@ -35,16 +36,23 @@ export function MobileNav() {
   const { me, unread, dock, setDock } = useLive();
   const path = usePathname();
   if (!me) return null;
-  const items: { key: string; label: string; href?: string; badge?: number }[] = [
+  // Названия пунктов совпадают с заголовками страниц, куда они ведут.
+  const items: { key: string; label: string; href?: string; badge?: number }[] = me.role === 'employer' ? [
+    { key: '/', label: 'Карта', href: '/' },
+    { key: '/mine', label: 'Заказы', href: '/mine' },
+    { key: '/apps', label: 'Отклики', href: '/apps' },
+    { key: 'chat', label: 'Чат', badge: unread },
+    { key: '/profile', label: 'Проф.', href: '/profile' }
+  ] : [
     { key: '/', label: 'Карта', href: '/' },
     { key: '/shift', label: 'Смена', href: '/shift' },
-    { key: me.role === 'employer' ? '/apps' : '/mine', label: 'Отклики', href: me.role === 'employer' ? '/apps' : '/mine' },
+    { key: '/mine', label: 'Мои смены', href: '/mine' },
     { key: 'chat', label: 'Чат', badge: unread },
     { key: '/profile', label: 'Проф.', href: '/profile' }
   ];
   const style = (on: boolean) => css('flex: 1; min-width: 0; min-height: 52px; cursor: pointer; background: ' + (on ? 'color-mix(in srgb, var(--color-accent) 14%, transparent)' : 'transparent') +
     '; border: none; border-top: 2px solid ' + (on ? 'var(--color-accent)' : 'transparent') + '; color: ' + (on ? 'var(--color-accent-900)' : 'color-mix(in srgb, var(--color-text) 70%, transparent)') +
-    '; font-family: var(--font-heading); font-size: 12px; letter-spacing: .04em; text-transform: uppercase; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 0 2px; overflow: hidden; text-decoration: none');
+    '; font-family: var(--font-heading); font-size: 12px; line-height: 1.15; letter-spacing: .04em; text-transform: uppercase; text-align: center; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 0 2px; overflow: hidden; text-decoration: none');
   return (
     <>
       {/* Место под фиксированное меню, чтобы контент не уходил под него */}

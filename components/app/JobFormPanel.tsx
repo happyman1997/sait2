@@ -124,7 +124,7 @@ export function JobFormPanel({ form, setForm, step, goStep, errs, formError, onN
               style={css('flex: 1 1 0; min-width: 0; cursor: pointer; text-align: left; padding: 7px 9px 8px; background: ' + (active ? 'var(--color-accent)' : 'transparent') +
                 '; border: 1px solid ' + (active || done ? 'var(--color-accent)' : 'var(--color-divider)') +
                 '; color: ' + (active ? '#fff' : done ? 'var(--color-accent-900)' : 'color-mix(in srgb, var(--color-text) 55%, transparent)') +
-                '; font-family: var(--font-heading); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; line-height: 1.25; display: block')}>0{n} {label}</button>
+                '; font-family: var(--font-heading); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; line-height: 1.25; display: block')}>0{n} {label}</button>
           );
         })}
       </div>
@@ -137,7 +137,7 @@ export function JobFormPanel({ form, setForm, step, goStep, errs, formError, onN
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onAddrBlur(); } }} placeholder="ул. Тверская, 18" style={css(errs.address ? errFieldStyle : '')} />
             <FieldError text={errs.address} />
             <div className={sty.c598668c}>
-              {addrNote || ((form.district ? form.district + ' · ' : '') + (form.lat != null ? 'метка стоит на карте, её можно переставить кликом' : 'введите адрес или кликните по карте — там встанет метка'))}
+              {addrNote || ((form.district ? form.district + ' · ' : '') + (form.lat != null ? 'метка стоит на карте, её можно переставить нажатием на карту' : 'введите адрес или нажмите на карту — там встанет метка'))}
             </div>
           </div>
         )}
@@ -178,7 +178,7 @@ export function JobFormPanel({ form, setForm, step, goStep, errs, formError, onN
             </div>
             <div className="field">
               <label htmlFor="jf-req">Своё условие для отклика (необязательно)</label>
-              <input id="jf-req" className="input" value={form.req} onChange={e => setForm({ req: e.target.value })} placeholder="нужна санкнижка / права категории B" />
+              <input id="jf-req" className="input" value={form.req} onChange={e => setForm({ req: e.target.value })} placeholder="нужна санкнижка" />
             </div>
           </>
         )}
@@ -223,7 +223,7 @@ export function JobFormPanel({ form, setForm, step, goStep, errs, formError, onN
                   <option value="">— выберите график —</option>
                   {REPEATS.map(r => <option key={r}>{r}</option>)}
                 </select>
-                <input className={'input ' + sty.c0d69e4b} aria-label="График — время и условия" value={form.repeatNote} onChange={e => setForm({ repeatNote: e.target.value })} placeholder="время и условия, напр. с 7:00, пока лежит снег" />
+                <input className={'input ' + sty.c0d69e4b} aria-label="График — время и условия" value={form.repeatNote} onChange={e => setForm({ repeatNote: e.target.value })} placeholder="например, с 7:00, пока лежит снег" />
                 <FieldError text={errs.repeat} />
               </div>
             )}
@@ -235,7 +235,7 @@ export function JobFormPanel({ form, setForm, step, goStep, errs, formError, onN
             <div style={css(errs.access ? errFieldStyle + '; padding: 8px' : '')}>
               <div style={css(LABEL + '; margin-bottom: 8px')}>Как попасть на объект</div>
               <div className={sty.cfabd50d}>
-                <input className={'input ' + sty.c8b4ab7f} value={accessDraft} onChange={e => setAccessDraft(e.target.value)} onKeyDown={onAccessKey} aria-label="Доступ на объект" placeholder="домофон 12, шлагбаум открыт до 9:00" />
+                <input className={'input ' + sty.c8b4ab7f} value={accessDraft} onChange={e => setAccessDraft(e.target.value)} onKeyDown={onAccessKey} aria-label="Доступ на объект" placeholder="например, домофон 12" />
                 <button type="button" className={'btn btn-secondary ' + sty.c0b0526d} onClick={addAccess} disabled={!accessDraft.trim()}>Добавить</button>
               </div>
               {form.access.length > 0 && (
@@ -267,7 +267,7 @@ export function JobFormPanel({ form, setForm, step, goStep, errs, formError, onN
             <div className={sty.cabb3d2f}>
               <div className="field">
                 <label htmlFor="jf-meet">Кто встречает на объекте</label>
-                <input id="jf-meet" className="input" value={form.meetName} onChange={e => setForm({ meetName: e.target.value })} placeholder="я сам / Марат, старший по дому" />
+                <input id="jf-meet" className="input" value={form.meetName} onChange={e => setForm({ meetName: e.target.value })} placeholder="Марат, старший" />
               </div>
               <div className="field">
                 <label htmlFor="jf-meetphone">Телефон встречающего</label>

@@ -2,11 +2,12 @@
 
 // Карточка заказа в левой панели: условия, кнопка отклика с единым статусом, работодатель, отклики, отмена.
 import Link from 'next/link';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { css } from '@/lib/css';
 import { crewOf, dateLabel, jobNum, jobStatus, localISO, money, type JobDetail, type JobSummary } from '@/lib/jobs';
 import { ApplicantsBlock, LeaveShiftForm, MoveDateForm, ShiftBlock, type Act, type ReviewOpen } from './ShiftBlock';
 import { SeriesBlock } from './SeriesBlock';
+import { useLive } from './Live';
 import { Corners, LABEL } from './ui';
 import sty from './JobDetailPanel.module.css';
 
@@ -101,6 +102,20 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
 
   const lateNow = notice === 'меньше суток' && job.hired > 0;
 
+  // Телефон: главное действие закреплено внизу карточки — не нужно искать кнопку, листая. В рабочем режиме
+  // такую кнопку показывает сама карта (крупнее), здесь не дублируем.
+  const { workMode } = useLive();
+  const reqRef = useRef<HTMLDivElement>(null);
+  const live = job.status === 'open' || job.status === 'staffed';
+  const sticky = workMode ? null
+    : job.mine ? (live ? <Link href="/apps" className="btn btn-primary btn-block">{'Отклики · ' + job.applicants}</Link> : null)
+      : !role ? <Link href={'/auth?apply=' + job.num} className="btn btn-primary btn-block">Откликнуться на заказ</Link>
+        : role !== 'freelancer' ? null
+          : st.key === 'open' ? <button className="btn btn-primary btn-block" onClick={() => onApply(reqOk)} disabled={busy}>Откликнуться на заказ</button>
+            : st.key === 'req' ? <button className="btn btn-secondary btn-block" onClick={() => reqRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>Отметьте условие заказчика ↑</button>
+              : st.key === 'hired' && job.status !== 'accepted' ? <Link href="/shift" className="btn btn-primary btn-block">Экран смены</Link>
+                : null;
+
   return (
     <div>
       <div className={sty.cf5c1e62}>
@@ -120,7 +135,7 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
           <div className={'fh ' + sty.cedbf1c2}>{money(job.pay, job.unit)}</div>
           <div className={sty.c42a2800}>{when} · {job.payType || 'по договорённости'}</div>
           {job.requirement && (
-            <div className={sty.c72c2647}>
+            <div ref={reqRef} className={sty.c72c2647}>
               <div className={'fh ' + sty.c870fd56}>Условие заказчика</div>
               <div className={sty.c18fc486}>{job.requirement}</div>
               {role === 'freelancer' && st.key !== 'applied' && st.key !== 'hired' && (
@@ -132,7 +147,7 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
               {!role && <div className={sty.ce8dd76b}>Подтвердить условие можно только в профиле — зарегистрируйтесь, чтобы откликнуться.</div>}
             </div>
           )}
-          {applyBtn()}
+          {sticky ? <div className="only-wide">{applyBtn()}</div> : applyBtn()}
           {role === 'freelancer' && job.myStatus === 'sent' && (
             <button className={'btn btn-ghost btn-block ' + sty.cdf03ebe} onClick={onWithdraw} disabled={busy}>Отказаться</button>
           )}
@@ -276,6 +291,7 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
       )}
 
       {person && <PersonModal job={job} onClose={() => setPerson(false)} />}
+      {sticky && <div className={'only-narrow ' + sty.stickyAct}>{sticky}</div>}
     </div>
   );
 }

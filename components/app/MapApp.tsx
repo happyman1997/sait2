@@ -11,6 +11,7 @@ import {
 } from '@/lib/jobs';
 import { showModeration } from '@/components/ModerationGuard';
 import { useFlash } from '@/components/Toast';
+import { navigatingByLink, popOwnEntry, useBackClose } from '@/lib/backstack';
 import { useNarrow } from '@/components/useNarrow';
 import { SeasonMap, type SeasonMapHandle } from '@/components/map/SeasonMap';
 import type { LatLng, Pin } from '@/components/map/mapView';
@@ -121,14 +122,32 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
   const [listOpen, setListOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
+  // Открытая карточка — в адресе (?job=…). Открыли нажатием — новая запись истории: «Назад» закрывает карточку,
+  // а не уводит со страницы. Закрыли кнопкой — свою запись снимаем. Переход между карточками — без новых записей.
   useEffect(() => {
     const url = new URL(window.location.href);
     const cur = url.searchParams.get('job');
     if (String(selected ?? '') === (cur ?? '')) return;
     if (selected) url.searchParams.set('job', String(selected)); else url.searchParams.delete('job');
     url.searchParams.delete('apply');
-    window.history.replaceState(null, '', url);
+    const st = window.history.state as { arenaJob?: boolean; arenaLayer?: string } | null;
+    if (selected && !cur) {
+      // Запись только что закрытого списка или формы занимаем под карточку: «Назад» вернёт к карте.
+      if (st?.arenaLayer) window.history.replaceState({ arenaJob: true }, '', url);
+      else window.history.pushState({ arenaJob: true }, '', url);
+    } else if (!selected && st?.arenaJob && !navigatingByLink()) {
+      popOwnEntry();
+    } else {
+      window.history.replaceState({ arenaJob: !!st?.arenaJob }, '', url);
+    }
   }, [selected]);
+
+  // «Назад» и «Вперёд» браузера: карточка — та, что в адресе.
+  useEffect(() => {
+    const onPop = () => setSelected(Number(new URL(window.location.href).searchParams.get('job')) || null);
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   useEffect(() => {
     if (!selected) { setDetail(null); return; }
@@ -236,6 +255,11 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
     setAddrNote('');
   }, [form, editing, formStep]);
 
+  // «Назад» на телефоне закрывает список, фильтры и форму заказа (черновик сохраняется), а не уводит со страницы.
+  useBackClose(listOpen, () => setListOpen(false));
+  useBackClose(filtersOpen, () => setFiltersOpen(false));
+  useBackClose(!!form, () => closeForm(true));
+
   const reverse = useCallback(async (p: LatLng) => {
     setAddrNote('Определяем адрес точки…');
     try {
@@ -329,13 +353,13 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
     setAddrNote('Ищем адрес на карте…');
     try {
       const hit = await geocode(q);
-      if (!hit) { setAddrNote('Адрес не найден. Оставьте как вписали или поставьте метку кликом по карте.'); return; }
+      if (!hit) { setAddrNote('Адрес не найден. Оставьте как вписали или поставьте метку нажатием на карту.'); return; }
       setFormState(f => (f ? { ...f, lat: hit.lat, lng: hit.lng, district: hit.district || f.district } : f));
       setFormErrs(e => ({ ...e, address: '' }));
       setAddrNote('Метка на карте: ' + hit.label);
       mapRef.current?.flyTo(hit.lat, hit.lng, 14);
     } catch (e) {
-      setAddrNote((e instanceof ApiError ? e.message : 'Геокодер недоступен.') + ' Адрес можно оставить как вписали — метку поставьте кликом по карте.');
+      setAddrNote((e instanceof ApiError ? e.message : 'Геокодер недоступен.') + ' Адрес можно оставить как вписали — метку поставьте нажатием на карту.');
     }
   };
 
@@ -345,14 +369,14 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
     setAddrBusy(true); setAddrError('');
     try {
       const hit = await geocode(q);
-      if (!hit) { setAddrManual(true); setAddrError('Адрес не найден. Поставьте метку кликом по карте — адресом станет то, что вы ввели.'); return; }
+      if (!hit) { setAddrManual(true); setAddrError('Адрес не найден. Поставьте метку нажатием на карту — адресом станет то, что вы ввели.'); return; }
       setAddrManual(false);
       placeAt({ lat: hit.lat, lng: hit.lng }, hit);
       mapRef.current?.flyTo(hit.lat, hit.lng, 14);
       flash('Адрес найден — заполните данные заказа');
     } catch {
       setAddrManual(true);
-      setAddrError('Геокодер недоступен — поставьте метку кликом по карте.');
+      setAddrError('Геокодер недоступен — поставьте метку нажатием на карту.');
     } finally { setAddrBusy(false); }
   };
 
@@ -524,7 +548,7 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
     ? 'grid-row: 2; grid-column: 1; min-height: 0; border-top: 1px solid var(--color-divider); overflow-y: auto; overflow-x: hidden; padding: 14px 16px ' + (me && live.workMode && detail ? '96px' : '26px') + '; background: var(--color-neutral-100); box-shadow: 0 -6px 18px rgba(31,45,58,.10)'
     : 'grid-row: 1; grid-column: 1; min-height: 0; border-right: 1px solid var(--color-divider); overflow-y: auto; overflow-x: hidden; padding: 20px 22px 26px 20px; background: var(--color-neutral-100)';
   const shellStyle = narrow
-    ? 'position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: ' + (form ? 'minmax(120px, 24%)' : 'minmax(220px, 46%)') + ' minmax(0, 1fr)'
+    ? 'position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: ' + (form || selected ? 'minmax(110px, 22%)' : 'minmax(220px, 46%)') + ' minmax(0, 1fr)'
     : 'position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: ' + (form ? 'minmax(420px, 620px)' : 'minmax(320px, 420px)') + ' minmax(340px, 1fr); overflow-x: auto';
   const PAD = 'max(clamp(14px, 2vw, 24px), calc((100% - 1440px) / 2))';
 
@@ -533,8 +557,12 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
 
       {!me && !(narrow && (form || selected)) && (
         <div style={css('flex: none; display: flex; align-items: baseline; gap: 6px 16px; flex-wrap: wrap; padding: clamp(9px, 1.4vw, 13px) ' + PAD + '; background: var(--color-accent-900); border-bottom: 1px solid var(--color-accent-900)')}>
-          <span className={'fh ' + sty.cd0d9449}>Сезонные работы на карте</span>
-          <span className={sty.c3230d14}>Здесь ищут подработку: убрать снег, скосить траву, разгрузить машину. Видно, где работа, когда выходить и сколько заплатят. Резюме не нужно.</span>
+          <span className={'fh only-wide ' + sty.cd0d9449}>Сезонные работы на карте</span>
+          <span className={'only-wide ' + sty.c3230d14}>Здесь ищут подработку: убрать снег, скосить траву, разгрузить машину. Видно, где работа, когда выходить и сколько заплатят. Резюме не нужно.</span>
+          <span className={'only-narrow ' + sty.guestLine}>
+            <span>Подработка рядом — без резюме</span>
+            <Link href="/auth" className={'btn btn-primary ' + sty.guestCta}>Создать профиль</Link>
+          </span>
         </div>
       )}
 
@@ -547,7 +575,7 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
         </div>
       )}
 
-      {!(narrow && form) && (
+      {!(narrow && (form || selected)) && (
         <div style={css('flex: none; display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 10px ' + PAD + '; border-bottom: 1px solid var(--color-divider); background: var(--color-neutral-100)')}>
           <button className={'btn btn-primary ' + sty.c524a41d} onClick={() => setListOpen(o => !o)} aria-expanded={listOpen}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /></svg>
@@ -624,7 +652,7 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
             <>
               <StartSteps isEmp={isEmp} addr={isEmp ? {
                 query: addrQuery, setQuery: v => { setAddrQuery(v); setAddrError(''); setAddrManual(false); }, busy: addrBusy,
-                note: addrError || 'Найденный адрес станет черновиком заказа. Можно просто кликнуть по карте.', error: !!addrError, onFind: findAddress
+                note: addrError || 'Найденный адрес станет черновиком заказа. Можно просто нажать на карту.', error: !!addrError, onFind: findAddress
               } : undefined} />
               {isEmp && <ObjectsList objects={objects} onMark={fromObject} onEdit={o => { setObjEdit(o); mapRef.current?.flyTo(o.lat, o.lng, 14); }} />}
             </>
@@ -633,7 +661,7 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
         </div>
 
         <div style={css('position: relative; min-width: 0; min-height: 0; overflow: hidden; ' + (narrow ? 'grid-row: 1; grid-column: 1' : 'grid-row: 1; grid-column: 2'))}>
-          <SeasonMap ref={mapRef} pins={pins} draft={draftPoint} mode={isEmp ? 'employer' : 'view'} highlight={hover} anchor={isEmp ? null : anchor}
+          <SeasonMap ref={mapRef} pins={pins} draft={draftPoint} mode={isEmp ? 'employer' : 'view'} highlight={hover} anchor={isEmp || !me ? null : anchor}
             radiusKm={isEmp ? 0 : filters.km} onMapClick={onMapClick} onPinClick={onPinClick} onStackClick={onStackClick} />
           {stackPick && stackPick.length > 0 && !form && (
             <div className={'blueprint ' + sty.c030d8ff}>
@@ -657,7 +685,7 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
           )}
           {loaded && !found && !form && (
             <div className={sty.ca7e8c51}>
-              {nFilters || filters.q.trim() ? 'Под фильтр ничего не попало — снимите лишние условия.' : isEmp ? 'Заказов пока нет — кликните по карте, чтобы опубликовать первый.' : 'Открытых заказов пока нет — загляните позже.'}
+              {nFilters || filters.q.trim() ? 'Под фильтр ничего не попало — снимите лишние условия.' : isEmp ? 'Заказов пока нет — нажмите на карту, чтобы опубликовать первый.' : 'Открытых заказов пока нет — загляните позже.'}
             </div>
           )}
         </div>
