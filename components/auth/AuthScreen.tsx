@@ -14,6 +14,7 @@ import { showModeration } from '@/components/ModerationGuard';
 import { DocLinks } from '@/components/DocLinks';
 import { useFlash } from '@/components/Toast';
 import { useNarrow } from '@/components/useNarrow';
+import { CityInput } from '@/components/CityInput';
 import sty from './AuthScreen.module.css';
 
 export type AuthMode = 'signup' | 'login' | 'recover';
@@ -363,8 +364,9 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
     flash((kind === 'skill' ? 'Навык' : 'Инвентарь') + ' «' + v + '» добавлен в профиль');
   };
 
-  const addCity = () => {
-    const v = cityDraft.trim();
+  /** picked — город, выбранный в подсказках (черновик в этот момент ещё не обновился). */
+  const addCity = (picked?: string) => {
+    const v = (picked ?? cityDraft).trim();
     if (!v) return;
     if (workCities.some(c => c.toLowerCase() === v.toLowerCase())) { setCityDraft(''); return; }
     setWorkCities(c => c.concat([v]));
@@ -589,7 +591,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                       )}
                       <div className="field">
                         <label htmlFor="su-city">Город <span style={css(REQ)}>обязательно</span></label>
-                        <input id="su-city" className="input" value={city} onChange={e => { setCity(e.target.value); setStepError(''); }} placeholder="Москва" autoComplete="address-level2" style={css(missStyle('city', true))} />
+                        <CityInput id="su-city" value={city} onChange={v => { setCity(v); setStepError(''); }} placeholder="Начните вводить — например, Москва" style={css(missStyle('city', true))} />
                       </div>
                     </div>
                   </div>
@@ -621,8 +623,9 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                       <div className="field">
                         <label htmlFor="su-cities">Города, где вы работаете</label>
                         <div className={sty.caea80b7}>
-                          <input id="su-cities" className="input" style={css('flex: 1; min-width: 160px; border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 8%, transparent); color: var(--color-accent-900); --placeholder-color: var(--color-accent-700); ' + missStyle('cities', false))} value={cityDraft} onChange={e => setCityDraft(e.target.value)} onKeyDown={onEnter(addCity)} placeholder="Химки, Одинцово… — Enter, чтобы добавить" />
-                          <button className={'btn btn-secondary ' + sty.cec058aa} onClick={addCity}>Добавить</button>
+                          <CityInput id="su-cities" wrapStyle={{ flex: 1, minWidth: 160 }} style={css('border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 8%, transparent); color: var(--color-accent-900); --placeholder-color: var(--color-accent-700); ' + missStyle('cities', false))}
+                            value={cityDraft} onChange={setCityDraft} onPick={addCity} onKeyDown={onEnter(() => addCity())} placeholder="Химки, Одинцово… — начните вводить" />
+                          <button className={'btn btn-secondary ' + sty.cec058aa} onClick={() => addCity()}>Добавить</button>
                         </div>
                       </div>
                       <div className={sty.ca8e3223}>

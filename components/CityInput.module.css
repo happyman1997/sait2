@@ -1,0 +1,31 @@
+/* Подсказки городов под полем (components/CityInput.tsx). */
+.wrap { position: relative; }
+.wrap > :global(.input) { width: 100%; box-sizing: border-box; }
+.list {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 2px);
+  z-index: 30;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  max-height: 288px;
+  overflow-y: auto;
+  background: var(--color-neutral-100);
+  border: 1px solid var(--color-accent);
+  box-shadow: var(--shadow-lg);
+}
+.item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  cursor: pointer;
+}
+.on { background: var(--color-accent-100); }
+.name { font-size: 15px; color: var(--color-text); }
+.region { font-size: 13px; text-align: right; color: color-mix(in srgb, var(--color-text) 60%, transparent); }

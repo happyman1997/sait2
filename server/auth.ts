@@ -3,7 +3,7 @@
 // Все правила из README проверяются здесь — клиентские проверки только для удобства.
 import crypto from 'node:crypto';
 import { findBadField } from '@/lib/moderation';
-import { cityPoint } from '@/lib/catalog';
+import { cityPoint } from '@/lib/city-point';
 import {
   EMAIL_RE, parseIdentifier, sanitizeSignup, signupTextFields, takenMessage,
   validateContacts, validateProfile, type Role, type SignupInput
