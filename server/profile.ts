@@ -10,6 +10,8 @@ import { shortName } from './jobs';
 import type { SessionUser } from './session';
 import { doneSql } from './stats';
 import { enabledProviders, identitiesOf } from './oauth';
+import { PERSON_NAME } from '@/lib/text';
+import { NAME_RULE } from '@/lib/validation';
 
 type U = SessionUser;
 
@@ -104,6 +106,7 @@ export async function updateProfile(viewer: U | null, raw: unknown) {
   const name = first !== undefined || last !== undefined ? [first ?? '', last ?? ''].join(' ').trim() : undefined;
   const login = str(r.login, 20);
   if (name !== undefined && name.length < 2) throw new AppError(422, 'Укажите имя и фамилию — их видит вторая сторона в чате.', 'name');
+  if (name !== undefined && !PERSON_NAME.test(name)) throw new AppError(422, NAME_RULE, 'name');
   if (login !== undefined && login !== u.login) throw new AppError(422, 'Логин после регистрации не меняется.', 'login');
 
   const f = (r.freelancer && typeof r.freelancer === 'object' ? r.freelancer : null) as Record<string, unknown> | null;

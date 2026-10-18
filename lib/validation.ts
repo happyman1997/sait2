@@ -1,6 +1,7 @@
 // Проверки полей регистрации/входа — общие для клиента и сервера. Тексты ошибок — из прототипа.
 import { passwordProblem } from './password-policy';
 import { ACCESS, GEAR, JOB_TYPE_IDS, OBJECT_KINDS, ORG_TYPES, PASS_MODES, SAFETY_REQ, TOOLS } from './catalog';
+import { PERSON_NAME } from './text';
 
 export type Role = 'freelancer' | 'employer';
 export type FieldError = { field: string; message: string };
@@ -57,10 +58,14 @@ export type SignupInput = Contacts & {
   employer?: EmployerProfile;
 };
 
+/** Имя — буквами: без цифр, эмодзи и значков (их видит вторая сторона в чате и откликах). */
+export const NAME_RULE = 'Имя и фамилия — только буквами: без цифр, эмодзи и значков; можно пробел, дефис и апостроф.';
+
 /** Все пропущенные поля шага «Контакты» по порядку; первое — для текста ошибки. */
 export function contactsMissing(c: Partial<Contacts>, opts: { requirePassword?: boolean } = {}): string[] {
   const miss: string[] = [];
-  if ((c.name || '').trim().length < 2) miss.push('name');
+  const name = (c.name || '').trim();
+  if (name.length < 2 || !PERSON_NAME.test(name)) miss.push('name');
   if (!EMAIL_RE.test((c.email || '').trim())) miss.push('email');
   if (!LOGIN_RE.test((c.login || '').trim())) miss.push('login');
   if (opts.requirePassword !== false && passwordProblem(c.password || '', { login: c.login, email: c.email })) miss.push('password');
@@ -70,7 +75,7 @@ export function contactsMissing(c: Partial<Contacts>, opts: { requirePassword?: 
 
 export function contactsMessage(field: string, email: string, c: Partial<Contacts> = {}): string {
   switch (field) {
-    case 'name': return 'Укажите имя и фамилию — их видит вторая сторона в чате.';
+    case 'name': return (c.name || '').trim().length < 2 ? 'Укажите имя и фамилию — их видит вторая сторона в чате.' : NAME_RULE;
     case 'login': return 'Придумайте логин: 3–20 символов — латиница, цифры, точка или подчёркивание.';
     case 'password': return passwordProblem(c.password || '', { login: c.login, email: c.email }) || 'Придумайте пароль.';
     case 'email': return email.trim() ? 'Проверьте e-mail — похоже, в адресе опечатка.' : 'Укажите e-mail — на него придёт код подтверждения, по нему же вход.';

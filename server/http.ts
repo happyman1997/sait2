@@ -2,6 +2,7 @@ import zlib from 'node:zlib';
 import { promisify } from 'node:util';
 import { cookies, headers } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { cleanDeep } from '@/lib/text';
 import { config } from './config';
 import { AppError } from './errors';
 import { observe } from './metrics';
@@ -42,7 +43,8 @@ export async function readJson(req: Request): Promise<Record<string, unknown>> {
   if (text.length > JSON_LIMIT) throw new AppError(413, 'Слишком большой запрос.');
   try {
     const body = JSON.parse(text);
-    return body && typeof body === 'object' && !Array.isArray(body) ? body : {};
+    // Все тексты — без невидимых и «ломающих» символов (lib/text.ts); пароли и коды — как есть.
+    return body && typeof body === 'object' && !Array.isArray(body) ? cleanDeep(body) : {};
   } catch {
     throw new AppError(400, 'Некорректный JSON.');
   }
