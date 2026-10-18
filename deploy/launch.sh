@@ -19,8 +19,15 @@ for k in OPERATOR_NAME OPERATOR_OGRNIP OPERATOR_INN OPERATOR_ADDRESS OPERATOR_EM
   [ -n "$(get "$k")" ] || miss+=("$k")
 done
 case "$(get SMTP_URL)" in *ПАРОЛЬ*) miss+=("SMTP_URL (вместо слова ПАРОЛЬ — пароль приложения почты)");; esac
+# Эти поля видны всем в оферте и политике. Команда из инструкции, вставленная вместо ответа, — не публикуем.
+looks_cmd() { case "$1" in *'/opt/'*|*'.env'*|*'&&'*|*'grep '*|*'bash '*|*'sudo '*|*'docker '*|*'cd /'*) return 0;; esac; return 1; }
+for k in OPERATOR_NAME OPERATOR_ADDRESS OPERATOR_EMAIL PROCESSOR_HOSTING PROCESSOR_MAIL; do
+  looks_cmd "$(get "$k")" && miss+=("$k — вместо ответа туда попала команда: «$(get "$k")»")
+done
+n=$(get OPERATOR_NAME)
+if [ -n "$n" ] && ! looks_cmd "$n" && printf '%s' "$n" | LC_ALL=C grep -q '[A-Za-z0-9/=]'; then miss+=("OPERATOR_NAME — ФИО русскими буквами, сейчас: «$n»"); fi
 if [ ${#miss[@]} -gt 0 ]; then
-  echo "Не заполнено в $ENV:"; printf '  - %s\n' "${miss[@]}"
+  echo "Не заполнено или заполнено неверно в $ENV:"; printf '  - %s\n' "${miss[@]}"
   echo "Заполните: bash $DIR/deploy/configure.sh — и запустите этот скрипт снова."; exit 1
 fi
 # Карта раньше по умолчанию грузилась браузером напрямую с OpenFreeMap (за рубежом) — теперь через свой nginx.
