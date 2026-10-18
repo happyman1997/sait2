@@ -9,7 +9,7 @@ import sty from './CityInput.module.css';
 let loading: Promise<City[]> | null = null;
 const loadCities = () => (loading ??= import('@/lib/cities.json').then(m => m.default.cities as City[]));
 
-export function CityInput({ id, value, onChange, onPick, onKeyDown, placeholder, style, className = 'input', ariaLabel, wrapStyle }: {
+export function CityInput({ id, value, onChange, onPick, onKeyDown, onBlur, placeholder, style, className = 'input', ariaLabel, wrapStyle, autoFocus }: {
   id?: string;
   value: string;
   onChange: (v: string) => void;
@@ -17,12 +17,15 @@ export function CityInput({ id, value, onChange, onPick, onKeyDown, placeholder,
   onPick?: (v: string) => void;
   /** Клавиши, которые подсказки не забрали себе (например, Enter, когда список закрыт). */
   onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void;
+  /** Ушли из поля (выбор из подсказок фокус не снимает). */
+  onBlur?: () => void;
   placeholder?: string;
   style?: CSSProperties;
   className?: string;
   ariaLabel?: string;
   /** Обёртке поля — например, flex: 1, если поле стоит в строке с кнопкой. */
   wrapStyle?: CSSProperties;
+  autoFocus?: boolean;
 }) {
   const [list, setList] = useState<City[] | null>(null);
   const [open, setOpen] = useState(false);
@@ -64,14 +67,16 @@ export function CityInput({ id, value, onChange, onPick, onKeyDown, placeholder,
   const blur = () => {
     setOpen(false);
     setActive(-1);
-    if (!list || !value.trim() || done) return;
-    const same = list.filter(c => normCity(c[0]) === normCity(value));
-    if (same.length === 1) onChange(cityValue(same[0], list));
+    if (list && value.trim() && !done) {
+      const same = list.filter(c => normCity(c[0]) === normCity(value));
+      if (same.length === 1) onChange(cityValue(same[0], list));
+    }
+    onBlur?.();
   };
 
   return (
     <div className={sty.wrap} style={wrapStyle}>
-      <input id={id} className={className} style={style} value={value} placeholder={placeholder} aria-label={ariaLabel}
+      <input id={id} className={className} style={style} value={value} placeholder={placeholder} aria-label={ariaLabel} autoFocus={autoFocus}
         role="combobox" aria-autocomplete="list" aria-expanded={show} aria-controls={lid}
         aria-activedescendant={show && active >= 0 ? lid + '-' + active : undefined} autoComplete="off"
         onFocus={() => { loadCities().then(setList).catch(() => {}); setOpen(true); }}

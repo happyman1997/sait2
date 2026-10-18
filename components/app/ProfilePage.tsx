@@ -11,6 +11,8 @@ import { css } from '@/lib/css';
 import { uploadForm } from '@/lib/image';
 import { disablePush } from '@/lib/push-client';
 import { dateLabel, money, plural } from '@/lib/jobs';
+import { normCity } from '@/lib/cities';
+import { CityInput } from '@/components/CityInput';
 import { DocLinks } from '@/components/DocLinks';
 import { useFlash } from '@/components/Toast';
 import { SELF_HOSTED_MAP } from '@/components/map/style';
@@ -251,6 +253,8 @@ function HeaderCard({ p, setP, patch, busy, err }: {
   const [first, setFirst] = useState('');
   const [last, setLast] = useState('');
   const [adding, setAdding] = useState(false);
+  const [addingCity, setAddingCity] = useState(false);
+  const [cityDraft, setCityDraft] = useState('');
   const [uploading, setUploading] = useState(false);
   const isEmp = p.user.role === 'employer';
   const fp = p.profile || {};
@@ -294,6 +298,14 @@ function HeaderCard({ p, setP, patch, busy, err }: {
         ...(fp.workCities || []).map(c => ({ label: c, onRemove: (fp.workCities || []).length > 1 ? () => patch({ freelancer: { workCities: (fp.workCities || []).filter(x => x !== c) } }) : undefined }))
       ];
   const freeSkills = JOB_TYPES.filter(t => !(fp.skills || []).includes(t.id));
+  // Город работы — с подсказками (components/CityInput); не из списка (посёлок) — своим текстом по Enter.
+  const addWorkCity = async (raw: string) => {
+    const v = raw.trim();
+    setAddingCity(false);
+    setCityDraft('');
+    if (!v || (fp.workCities || []).some(c => normCity(c) === normCity(v))) return;
+    await patch({ freelancer: { workCities: [...(fp.workCities || []), v] } }, 'Город «' + v + '» добавлен');
+  };
 
   return (
     <div className={'blueprint ' + sty.cdc6b6e9}>
@@ -341,6 +353,14 @@ function HeaderCard({ p, setP, patch, busy, err }: {
             ))}
             {!isEmp && !adding && freeSkills.length > 0 && (
               <button className={'tag tag-outline ' + sty.c86fd59c} onClick={() => setAdding(true)}>+ навык</button>
+            )}
+            {!isEmp && !addingCity && (fp.workCities || []).length < 20 && (
+              <button className={'tag tag-outline ' + sty.c86fd59c} onClick={() => setAddingCity(true)}>+ город</button>
+            )}
+            {!isEmp && addingCity && (
+              <CityInput autoFocus ariaLabel="Добавить город, где вы работаете" placeholder="город — начните вводить" value={cityDraft} onChange={setCityDraft}
+                onPick={addWorkCity} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addWorkCity(cityDraft); } if (e.key === 'Escape') setAddingCity(false); }}
+                onBlur={() => { setAddingCity(false); setCityDraft(''); }} wrapStyle={{ width: 'min(260px, 100%)' }} />
             )}
             {!isEmp && adding && (
               <select className={'input ' + sty.c772d10c} autoFocus aria-label="Добавить навык" defaultValue="" onBlur={() => setAdding(false)}
