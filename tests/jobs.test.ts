@@ -71,7 +71,7 @@ describe('публикация', () => {
   it('создаёт заказ с номером, автозаголовком и срочностью по дате', async () => {
     const j = await jobs.createJob(form({ dateISO: plusDays(1) }), emp, today);
     expect(j.num).toBeGreaterThan(0);
-    expect(j.title).toBe('Уборка снега — ул. Тверская, 18');
+    expect(j.title).toBe('Уборка снега — Москва, ул. Тверская');
     expect(j.pay).toBe(6000);
     expect(j.urgent).toBe(true);
     expect(j.mine).toBe(true);
