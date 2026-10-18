@@ -31,7 +31,8 @@ export function cityValue(c: City, list: City[]): string {
 
 /** Подсказки по введённому: сначала точное совпадение и начало названия, потом начало любого слова; крупные — выше. */
 export function searchCities(list: City[], query: string, limit = 8): City[] {
-  const q = normCity(query.replace(/\s*\(.*$/, ''));
+  // Регион в скобках не ищем: «Белогорск (Респ. Крым)» → «белогорск».
+  const q = normCity(query.split('(')[0]);
   if (!q) return [];
   const hits: [number, City][] = [];
   for (const c of list) {
@@ -44,7 +45,10 @@ export function searchCities(list: City[], query: string, limit = 8): City[] {
 
 /** Город по записанному значению («Химки», «химки», «Белогорск (Респ. Крым)»); из одноимённых — самый крупный. */
 export function findCity(list: City[], value: string): City | null {
-  const m = /^(.*?)\s*\((.+)\)\s*$/.exec(value);
+  // «Название (Регион)» — без регулярного выражения: на длинной строке пробелов оно перебирало бы за квадрат.
+  const v = value.trim();
+  const open = v.indexOf('(');
+  const m = open >= 0 && v.endsWith(')') && v.length - open > 2 ? [v, v.slice(0, open), v.slice(open + 1, -1)] : null;
   const name = normCity(m ? m[1] : value);
   if (!name) return null;
   let best: City | null = null;

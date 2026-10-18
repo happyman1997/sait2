@@ -24,10 +24,10 @@ export const BAD_WORDS: { cat: BadCategory; re: RegExp }[] = [
 ];
 
 // Символика, за демонстрацию которой в РФ наказывают (КоАП 20.3): свастики, руны и «молнии» СС, нацистские коды
-// и лозунги; и жест «фак». Проверяется по тексту до транслитерации.
+// и лозунги; и жест «фак». Проверяется по тексту до транслитерации, пробелы в нём схлопнуты до одного.
 export const BAD_SYMBOLS: { cat: BadCategory; re: RegExp }[] = [
   { cat: 'запрещённая символика', re: /[\u{5350}\u{534D}\u{0FD5}-\u{0FD8}\u{16A0}-\u{16FF}]|\u{03DF}\u{03DF}/u },
-  { cat: 'запрещённая символика', re: /(?<!\d)14\s*[\/.\-]?\s*88(?!\d)|зиг\s*хайл|хайль\s*гитлер|sieg\s*heil|heil\s*hitler|white\s*power|(?<![a-zа-яё])ауе(?![a-zа-яё])/u },
+  { cat: 'запрещённая символика', re: /(?<!\d)14 ?[\/.\-]? ?88(?!\d)|зиг ?хайл|хайль ?гитлер|sieg ?heil|heil ?hitler|white ?power|(?<![a-zа-яё])ауе(?![a-zа-яё])/u },
   { cat: 'нецензурная лексика', re: /\u{1F595}/u }
 ];
 
@@ -91,7 +91,8 @@ export function normBad(text: unknown): string[] {
 /** Категория нарушения или null, если текст чистый. */
 export function badWordIn(text: unknown): BadCategory | null {
   if (text == null || text === '') return null;
-  const raw = prep(text);
+  // «зиг    хайл» = «зиг хайл»; одиночный пробел в выражениях вместо «\s*» — без квадратичного перебора.
+  const raw = prep(text).replace(/\s+/g, ' ');
   const sym = BAD_SYMBOLS.find(w => w.re.test(raw));
   if (sym) return sym.cat;
   const vs = normBad(text);

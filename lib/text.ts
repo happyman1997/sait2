@@ -8,13 +8,23 @@ export const INVISIBLE = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u18
 /** Полноширинные латиница, цифры и знаки (ＡＢＣ１２３) — в обычные. */
 const fullwidth = (s: string) => s.replace(/[\uFF01-\uFF5E]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0)).replace(/\u3000/g, ' ');
 
+/** Повтор одного знака (в том числе эмодзи) длиннее 10 — до 10. Цифры не трогаем — это суммы и номера. */
+const REPEAT = /([^\p{M}\p{N}]\p{M}?)\1{10,}/gu;
+const capRepeats = (t: string) => t.replace(REPEAT, (m, unit: string) => unit.repeat(10));
+
+/** Только печатная латиница, кириллица (без её диакритических знаков) и пробел — чистить нечего, кроме повторов. */
+const PLAIN = /^[\x20-\x7E\u0400-\u0482\u048A-\u04FF]*$/;
+
 /**
  * Чистый текст: без невидимых и управляющих символов, без «частных» и неназначенных знаков Юникода, не больше
  * одного диакритического знака на букву, повтор одного символа — не длиннее 10 подряд. Переводы строк остаются
- * (не больше двух подряд), табуляция — пробел.
+ * (не больше двух подряд), табуляция — пробел, пробелы в конце строк убираются.
+ * Все выражения здесь работают за линейное время: сервер чистит каждую строку каждого запроса.
  */
 export function cleanText(s: string): string {
-  let t = fullwidth(s.normalize('NFC'))
+  // Быстрый путь для обычного текста — его большинство.
+  if (PLAIN.test(s)) return s.length > 10 ? capRepeats(s) : s;
+  const t = fullwidth(s.normalize('NFC'))
     .replace(/\r\n?/g, '\n')
     .replace(/\t/g, ' ')
     .replace(INVISIBLE, '')
@@ -22,21 +32,29 @@ export function cleanText(s: string): string {
     .replace(/[\p{Cc}\p{Co}\p{Cn}\p{Cs}]/gu, ch => (ch === '\n' ? ch : ''))
     // Диакритика: после буквы — не больше одного знака (й, ё уже собраны NFC; «Zalgo» — десятки знаков).
     .replace(/(\p{M})\p{M}+/gu, '$1');
-  // Повтор одного знака (в том числе эмодзи): не длиннее 10. Цифры не трогаем — это суммы и номера.
-  t = t.replace(/([^\p{M}\p{N}]\p{M}?)\1{10,}/gu, (m, unit: string) => unit.repeat(10));
-  return t.replace(/[ \u00A0]+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
+  // Пробелы в конце строк — без «[ ]+\n»: на длинной цепочке пробелов без перевода строки оно работает за квадрат.
+  return capRepeats(t).split('\n').map(l => l.trimEnd()).join('\n').replace(/\n{3,}/g, '\n\n');
 }
 
 /** Ключи, значения которых не трогаем: пароли, коды, токены — они должны дойти ровно такими, как введены. */
-const RAW_KEY = /pass|code|token|ticket|secret|nonce|signature/i;
+const RAW_KEY = /password|code|token|ticket|secret|nonce|signature/i;
+
+/**
+ * Длиннее любого поля площадки (самое длинное — 2000 знаков) с запасом на вычищаемые знаки. Длиннее — обрезаем
+ * до проверок: ни одна проверка не должна получать на вход сотни килобайт.
+ */
+export const MAX_STRING = 10000;
 
 /** Чистит все строки в разобранном JSON (объекты и массивы — рекурсивно). */
 export function cleanDeep<T>(v: T, key = ''): T {
-  if (typeof v === 'string') return (RAW_KEY.test(key) ? v : cleanText(v)) as T;
+  if (typeof v === 'string') return (RAW_KEY.test(key) ? v : cleanText(v.length > MAX_STRING ? v.slice(0, MAX_STRING) : v)) as T;
   if (Array.isArray(v)) return v.map(x => cleanDeep(x, key)) as T;
   if (v && typeof v === 'object') {
     const out: Record<string, unknown> = {};
-    for (const [k, x] of Object.entries(v as Record<string, unknown>)) out[k] = cleanDeep(x, k);
+    for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
+      // «__proto__» из JSON — обычный ключ, но присваивание ему подменило бы прототип объекта.
+      if (k !== '__proto__') out[k] = cleanDeep(x, k);
+    }
     return out as T;
   }
   return v;

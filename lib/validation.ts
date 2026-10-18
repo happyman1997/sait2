@@ -7,14 +7,16 @@ export type Role = 'freelancer' | 'employer';
 export type FieldError = { field: string; message: string };
 
 export const LOGIN_RE = /^[a-zA-Z0-9._]{3,20}$/;
-export const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+// Домен — части без точек через точку: так выражение работает за линейное время (прежнее «[^@\s]+\.[^@\s]+»
+// на строке «a@a.a.a.…» думало секундами — один запрос на вход подвешивал сервер).
+export const EMAIL_RE = /^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$/;
 
 /** Почта или логин: есть «@» — почта, иначе логин. */
 export function parseIdentifier(raw: string): { kind: 'email'; email: string } | { kind: 'login'; login: string } | { kind: 'invalid'; message: string } {
   const t = String(raw || '').trim();
   if (!t) return { kind: 'invalid', message: 'Введите почту или логин.' };
   if (t.includes('@')) {
-    if (!EMAIL_RE.test(t) || t.length > 200) return { kind: 'invalid', message: 'Проверьте почту — похоже, в адресе опечатка.' };
+    if (t.length > 200 || !EMAIL_RE.test(t)) return { kind: 'invalid', message: 'Проверьте почту — похоже, в адресе опечатка.' };
     return { kind: 'email', email: t };
   }
   if (!LOGIN_RE.test(t)) return { kind: 'invalid', message: 'Логин — 3–20 символов: латиница, цифры, точка или подчёркивание.' };

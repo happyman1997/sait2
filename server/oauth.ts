@@ -55,7 +55,7 @@ async function json(url: string, init: RequestInit): Promise<Record<string, unkn
 
 const form = (o: Record<string, string>) => ({ method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(o).toString() });
 
-const emailOf = (raw: unknown) => (typeof raw === 'string' && EMAIL_RE.test(raw.trim()) && raw.length <= 200 ? raw.trim() : '');
+const emailOf = (raw: unknown) => (typeof raw === 'string' && raw.length <= 200 && EMAIL_RE.test(raw.trim()) ? raw.trim() : '');
 
 const fullName = (...parts: unknown[]) => parts.filter(x => typeof x === 'string' && x.trim()).join(' ').trim().slice(0, 80);
 

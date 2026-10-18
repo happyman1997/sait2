@@ -31,7 +31,8 @@ export function parseNum(raw: string): number {
   return Number(raw);
 }
 
-const JSON_LIMIT = 256 * 1024;
+// Самая большая форма (заказ с описанием на 2000 знаков) — меньше 20 КБ; разбор лишнего — нагрузка на сервер.
+const JSON_LIMIT = 64 * 1024;
 
 export async function readJson(req: Request): Promise<Record<string, unknown>> {
   const ct = req.headers.get('content-type') || '';

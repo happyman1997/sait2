@@ -40,3 +40,13 @@ describe('подсказки городов', () => {
     expect(cityPoint('')).toBeNull();
   });
 });
+
+describe('города: длинный ввод', () => {
+  it('скобки без региона и мусор — без зависаний', () => {
+    expect(findCity(list, 'Химки ()')).toBeNull();
+    const t0 = performance.now();
+    searchCities(list, 'х' + ' '.repeat(50000) + '!');
+    findCity(list, ' '.repeat(50000) + 'x');
+    expect(performance.now() - t0).toBeLessThan(200);
+  });
+});

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { cleanDeep, cleanText, PERSON_NAME } from '@/lib/text';
+import { cleanDeep, cleanText, MAX_STRING, PERSON_NAME } from '@/lib/text';
 
 const ch = (...codes: number[]) => String.fromCharCode(...codes);
-const ZWSP = ch(0x200b), RLO = ch(0x202e), SHY = ch(0xad), ACUTE = ch(0x301), GRAVE = ch(0x300);
+const ZWSP = ch(0x200b), RLO = ch(0x202e), SHY = ch(0xad), ACUTE = ch(0x301), GRAVE = ch(0x300), NBSP = ch(0xa0);
+const ms = (f: () => unknown) => { const t0 = performance.now(); f(); return performance.now() - t0; };
 
 describe('очистка текста', () => {
   it('убирает невидимые и управляющие знаки', () => {
@@ -26,6 +27,36 @@ describe('очистка текста', () => {
   it('переводы строк: не больше двух подряд; полноширинные буквы — обычные', () => {
     expect(cleanText('раз\n\n\n\n\nдва')).toBe('раз\n\nдва');
     expect(cleanText(ch(0xff48, 0xff55, 0xff59))).toBe('huy');
+  });
+
+  it('пробелы в конце строк убирает', () => {
+    expect(cleanText('раз  ' + NBSP + '\nдва')).toBe('раз\nдва');
+  });
+
+  it('«__proto__» из JSON не подменяет прототип', () => {
+    const body = cleanDeep(JSON.parse('{"__proto__": {"role": "admin"}, "name": "Иван"}')) as Record<string, unknown>;
+    expect(body.role).toBeUndefined();
+    expect(Object.getPrototypeOf(body)).toBe(Object.prototype);
+  });
+
+  it('пропуск на объект («passWhom») — обычный текст, его чистим', () => {
+    expect(cleanDeep({ passWhom: 'Иван' + ZWSP })).toEqual({ passWhom: 'Иван' });
+  });
+
+  it('строки длиннее ' + MAX_STRING + ' знаков обрезает до проверок', () => {
+    expect((cleanDeep({ desc: 'абвгд'.repeat(50000) }) as { desc: string }).desc.length).toBe(MAX_STRING);
+  });
+
+  // Выражения, которые на особой строке думают за квадрат, подвешивают сервер одним запросом.
+  it.each([
+    ['пробел и неразрывный пробел', (' ' + NBSP).repeat(125000)],
+    ['пробелы без перевода строки', ' '.repeat(250000)],
+    ['диакритика', 'a' + ACUTE.repeat(250000)],
+    ['буква с диакритикой', ('a' + ACUTE).repeat(125000)],
+    ['переводы строк', ' \n'.repeat(125000)],
+    ['почти повтор', 'aaaaaaaaab'.repeat(25000)]
+  ])('быстро на тяжёлой строке: %s', (_, s) => {
+    expect(ms(() => cleanText(s))).toBeLessThan(200);
   });
 
   it('пароли и коды не трогает', () => {
