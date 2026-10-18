@@ -2,7 +2,7 @@
 # Проверка почты сайта по шагам: связь с почтовым сервером, вход в ящик, тестовое письмо — и что делать, если не вышло.
 # Запуск: bash deploy/mailcheck.sh ваш@адрес — на этот адрес придёт тестовое письмо (без адреса — только вход). Пароль не печатается.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 ENV=.env.production
 [ -f "$ENV" ] || { echo "Нет $ENV — сначала: bash deploy/setup.sh"; exit 1; }
 get() { grep -E "^$1=" "$ENV" | tail -1 | cut -d= -f2- || true; }

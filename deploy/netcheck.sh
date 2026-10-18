@@ -3,7 +3,7 @@
 # IPv6 и главное — доходят ли их запросы до сервера. Порядок: попросите человека с VPN открыть
 # https://ВАШ-ДОМЕН/?vpn-check, затем на сервере: bash deploy/netcheck.sh. Ничего не меняет, только показывает.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 ENV=.env.production
 [ -f "$ENV" ] || { echo "Нет $ENV — сначала: bash deploy/setup.sh"; exit 1; }
 get() { grep -E "^$1=" "$ENV" | tail -1 | cut -d= -f2- || true; }
