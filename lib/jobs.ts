@@ -359,9 +359,12 @@ export function jobStatus(j: Pick<JobSummary, 'status' | 'hired' | 'crew' | 'urg
   return { label: 'Открыт', cls: 'tag tag-outline' };
 }
 
-/** Автозаголовок: «Уборка снега — Москва, ул. Тверская». */
+/**
+ * Автозаголовок: «Уборка снега — Москва, ул. Тверская». Без дома, корпуса и квартиры (части адреса с цифрами,
+ * как в server/privacy.ts): заголовок видят все, а дом частного заказчика — только нанятый.
+ */
 export function autoTitle(typeLabel: string, address: string): string {
-  const head = String(address || '').split(',').map(p => p.trim()).filter(Boolean).slice(-2).join(', ');
+  const head = String(address || '').split(',').map(p => p.trim()).filter(p => p && !/\d/.test(p)).slice(-2).join(', ');
   const t = typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1);
   return (t + (head ? ' — ' + head : '')).slice(0, 160);
 }
