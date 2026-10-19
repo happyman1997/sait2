@@ -363,7 +363,7 @@ describe('чат', () => {
     await sh.staffAction(num, ids[0], 'hire', emp);
     await expectErr(sh.listMessages(num, fl.id, fl2), /после найма/);
     await expectErr(sh.listMessages(num, fl.id, emp2), /после найма/);
-    await expectErr(sh.sendMessage(num, fl.id, { text: 'оплата вперед' }, fl), undefined, 'text');
+    await expectErr(sh.sendMessage(num, fl.id, { text: 'внесите предоплату' }, fl), undefined, 'text');
     await expectErr(sh.sendMessage(num, fl.id, { text: '   ' }, fl), /Напишите/);
     await sh.sendMessage(num, fl.id, { text: 'Подтверждаю выход' }, fl);
     await sh.sendMessage(num, fl.id, { text: 'Буду в 8:00' }, fl);

@@ -15,6 +15,7 @@ import { DocLinks } from '@/components/DocLinks';
 import { useFlash } from '@/components/Toast';
 import { useNarrow } from '@/components/useNarrow';
 import { CityInput } from '@/components/CityInput';
+import { PasswordInput } from '@/components/PasswordInput';
 import sty from './AuthScreen.module.css';
 
 export type AuthMode = 'signup' | 'login' | 'recover';
@@ -110,6 +111,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
   const [gearDraft, setGearDraft] = useState('');
   const [workCities, setWorkCities] = useState<string[]>([]);
   const [cityDraft, setCityDraft] = useState('');
+  const [loginCyr, setLoginCyr] = useState(false);
   const [ownCar, setOwnCar] = useState(false);
 
   // Профиль работодателя
@@ -238,9 +240,10 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
     if (m === 'login') setRecoverStep(1);
   };
 
-  const signupPayload = () => ({
+  type Drafted = { customSkills: string[]; customGear: string[]; gear: string[]; workCities: string[] };
+  const signupPayload = (drafted?: Drafted) => ({
     role, name, login, password: oauth ? '' : pass, email, city, oauthTicket: oauth?.ticket,
-    freelancer: role === 'freelancer' ? { skills, customSkills, gear, customGear, ownCar, workCities } : undefined,
+    freelancer: role === 'freelancer' ? { skills, customSkills, gear, customGear, ownCar, workCities, ...drafted } : undefined,
     employer: role === 'employer' ? { orgType, orgName, objectKind, objectOther, access, tools, meetName, meetPhone, passMode, passWhom, safetyReq } : undefined
   });
 
@@ -275,13 +278,14 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
       return;
     }
     if (step === 3) {
-      const err = validateProfile(role, { freelancer: { skills, customSkills, workCities }, employer: { access, tools } });
+      const drafted = role === 'freelancer' ? flushDrafts() : undefined;
+      const err = validateProfile(role, { freelancer: { skills, customSkills: drafted?.customSkills, workCities: drafted?.workCities }, employer: { access, tools } });
       if (err) { flashFields([err.field], err.message); return; }
       // Почту уже подтвердил сервис — без кода, сразу к согласию.
       if (skipCode) { setStep(4); setStepError(''); return; }
       setBusy(true);
       try {
-        const c = await api<CodeSent>('/api/auth/signup/start', signupPayload());
+        const c = await api<CodeSent>('/api/auth/signup/start', signupPayload(drafted));
         startCodeTimer(c);
         setStep(4);
         setStepError('');
@@ -372,6 +376,18 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
     setWorkCities(c => c.concat([v]));
     setCityDraft('');
     setStepError('');
+  };
+
+  /** Вписанное в поля «свой навык», «свой инвентарь», «город», но не добавленное кнопкой, — не теряем: добавляем при «Далее». */
+  const flushDrafts = (): Drafted => {
+    const add = (list: string[], v: string, max: number) => (v && !list.some(x => x.toLowerCase() === v.toLowerCase()) ? list.concat([v]).slice(0, max) : list);
+    const sk = skillDraft.trim(), gr = gearDraft.trim(), ct = cityDraft.trim();
+    const out = { customSkills: add(customSkills, sk, 8), customGear: add(customGear, gr, 8), gear: gr && !gear.includes(gr) ? gear.concat([gr]) : gear, workCities: add(workCities, ct, 20) };
+    if (sk || gr || ct) {
+      setCustomSkills(out.customSkills); setCustomGear(out.customGear); setGear(out.gear); setWorkCities(out.workCities);
+      setSkillDraft(''); setGearDraft(''); setCityDraft('');
+    }
+    return out;
   };
 
   const onEnter = (fn: () => void) => (e: KeyboardEvent) => {
@@ -580,13 +596,17 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                       </div>
                       <div className="field">
                         <label htmlFor="su-login">Логин <span style={css(REQ)}>обязательно</span></label>
-                        <input id="su-login" className="input" value={login} onChange={e => { setLogin(e.target.value.replace(/[^a-zA-Z0-9._]/g, '').slice(0, 20)); setStepError(''); }} placeholder="daniyar_s" autoComplete="username" style={css(missStyle('login', true))} />
+                        <input id="su-login" className="input" value={login} autoCapitalize="none" autoCorrect="off" spellCheck={false}
+                          onChange={e => { const raw = e.target.value; setLogin(raw.replace(/[^a-zA-Z0-9._]/g, '').slice(0, 20)); setLoginCyr(/[а-яё]/i.test(raw)); setStepError(''); }}
+                          placeholder="daniyar_s" autoComplete="username" style={css(missStyle('login', true))} />
+                        {/* Русские буквы в логин не попадают — без подсказки кажется, что поле «не печатает». */}
+                        {loginCyr && <span role="status" style={css(HINT + '; color: var(--color-accent-700)')}>Русские буквы в логине нельзя — переключите клавиатуру на латиницу (EN).</span>}
                         <span style={css(HINT)}>Латиница, цифры, точка и подчёркивание, 3–20 символов. Нужен для входа; потом его не изменить.</span>
                       </div>
                       {!oauth && (
                         <div className="field">
                           <label htmlFor="su-pass">Пароль <span style={css(REQ)}>обязательно</span></label>
-                          <input id="su-pass" className="input" type="password" value={pass} onChange={e => { setPass(e.target.value); setStepError(''); }} placeholder="не короче 8 символов" autoComplete="new-password" style={css(missStyle('pass', true))} />
+                          <PasswordInput id="su-pass" className="input" value={pass} onChange={e => { setPass(e.target.value); setStepError(''); }} placeholder="не короче 8 символов" autoComplete="new-password" style={css(missStyle('pass', true))} />
                         </div>
                       )}
                       <div className="field">
@@ -738,7 +758,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                             (code.length === i ? 'var(--color-accent)' : 'var(--color-divider)') + '; color: ' + (code[i] ? 'var(--color-text)' : 'color-mix(in srgb, var(--color-text) 35%, transparent)'))}>{code[i] || '·'}</div>
                         ))}
                       </div>
-                      <input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={CODE_LEN} value={code} aria-label="Код подтверждения" autoFocus
+                      <input type="text" inputMode="numeric" autoComplete="one-time-code" value={code} aria-label="Код подтверждения" autoFocus
                         onChange={e => { if (attemptsLeft > 0) { setCode(e.target.value.replace(/\D/g, '').slice(0, CODE_LEN)); setCodeError(''); } }}
                         // eslint-disable-next-line react-hooks/refs -- onEnter возвращает обработчик события, ref читается только при нажатии
                         onKeyDown={onEnter(nextStep)}
@@ -790,7 +810,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                   </div>
                   <div className="field">
                     <label htmlFor="li-pass">Пароль</label>
-                    <input id="li-pass" className="input" type="password" value={pass} onChange={e => { setPass(e.target.value); setStepError(''); }} placeholder="••••••••" autoComplete="current-password" />
+                    <PasswordInput id="li-pass" className="input" value={pass} onChange={e => { setPass(e.target.value); setStepError(''); }} placeholder="••••••••" autoComplete="current-password" />
                     <button type="button" onClick={() => switchMode('recover')} style={css('justify-self: start; margin-top: 6px; ' + UNDERLINE_BTN)}>Забыли пароль?</button>
                   </div>
                 </div>
@@ -816,13 +836,13 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                 <div className={'field ' + sty.c6840f0a}>
                   <label htmlFor="rc-field">{recoverStep === 2 ? 'Код из письма' : recoverStep === 3 ? 'Новый пароль' : 'Почта или логин'}</label>
                   {recoverStep === 1 && <input id="rc-field" className="input" value={identifier} onChange={e => { setIdentifier(e.target.value); setStepError(''); }} onKeyDown={onEnter(recoverNext)} placeholder="name@mail.ru или daniyar_s" autoComplete="username" />}
-                  {recoverStep === 2 && <input id="rc-field" className={'input ' + 'fh ' + sty.ca9baefc} value={recoverCode} onChange={e => { setRecoverCode(e.target.value.replace(/\D/g, '').slice(0, CODE_LEN)); setStepError(''); }} onKeyDown={onEnter(recoverNext)} inputMode="numeric" autoComplete="one-time-code" maxLength={CODE_LEN} placeholder="000000" autoFocus />}
-                  {recoverStep === 3 && <input id="rc-field" className="input" type="password" value={recoverPass} onChange={e => { setRecoverPass(e.target.value); setStepError(''); }} placeholder="не короче 8 символов" autoComplete="new-password" autoFocus />}
+                  {recoverStep === 2 && <input id="rc-field" className={'input ' + 'fh ' + sty.ca9baefc} value={recoverCode} onChange={e => { setRecoverCode(e.target.value.replace(/\D/g, '').slice(0, CODE_LEN)); setStepError(''); }} onKeyDown={onEnter(recoverNext)} inputMode="numeric" autoComplete="one-time-code" placeholder="000000" autoFocus />}
+                  {recoverStep === 3 && <PasswordInput id="rc-field" className="input" value={recoverPass} onChange={e => { setRecoverPass(e.target.value); setStepError(''); }} placeholder="не короче 8 символов" autoComplete="new-password" autoFocus />}
                 </div>
                 {recoverStep === 3 && (
                   <div className={'field ' + sty.c691f5a5}>
                     <label htmlFor="rc-pass2">Повторите пароль</label>
-                    <input id="rc-pass2" className="input" type="password" value={recoverPass2} onChange={e => { setRecoverPass2(e.target.value); setStepError(''); }} onKeyDown={onEnter(recoverNext)} placeholder="ещё раз" autoComplete="new-password" />
+                    <PasswordInput id="rc-pass2" className="input" value={recoverPass2} onChange={e => { setRecoverPass2(e.target.value); setStepError(''); }} onKeyDown={onEnter(recoverNext)} placeholder="ещё раз" autoComplete="new-password" />
                   </div>
                 )}
                 {stepError && <div role="alert" style={{ ...css(ALERT), animation: stepErrAnim }}>{stepError}</div>}

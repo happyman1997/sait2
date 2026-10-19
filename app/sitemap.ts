@@ -7,11 +7,12 @@ export const dynamic = 'force-dynamic';
 
 const LEGAL = ['offer', 'rules', 'personal-data', 'consent'];
 
-/** Карта сайта для Яндекса и Google: главная, документы и заказы, которые сейчас в поиске. */
+/** Карта сайта для Яндекса и Google: главная, помощь, документы и заказы, которые сейчас в поиске. */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = config.publicUrl().replace(/\/$/, '');
   const fixed: MetadataRoute.Sitemap = [
     { url: base + '/', changeFrequency: 'hourly', priority: 1 },
+    { url: base + '/help', changeFrequency: 'monthly', priority: 0.3 },
     ...LEGAL.map(p => ({ url: base + '/legal/' + p, changeFrequency: 'monthly' as const, priority: 0.2 }))
   ];
   try {

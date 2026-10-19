@@ -13,6 +13,7 @@ import { disablePush } from '@/lib/push-client';
 import { dateLabel, money, plural } from '@/lib/jobs';
 import { normCity } from '@/lib/cities';
 import { CityInput } from '@/components/CityInput';
+import { PasswordInput } from '@/components/PasswordInput';
 import { DocLinks } from '@/components/DocLinks';
 import { useFlash } from '@/components/Toast';
 import { SELF_HOSTED_MAP } from '@/components/map/style';
@@ -360,7 +361,8 @@ function HeaderCard({ p, setP, patch, busy, err }: {
             {!isEmp && addingCity && (
               <CityInput autoFocus ariaLabel="Добавить город, где вы работаете" placeholder="город — начните вводить" value={cityDraft} onChange={setCityDraft}
                 onPick={addWorkCity} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addWorkCity(cityDraft); } if (e.key === 'Escape') setAddingCity(false); }}
-                onBlur={() => { setAddingCity(false); setCityDraft(''); }} wrapStyle={{ width: 'min(260px, 100%)' }} />
+                // Ушли из поля: известный город — добавляем, пустое — закрываем, остальное оставляем в поле (Enter добавит).
+                onBlur={(v, known) => { if (known) addWorkCity(v); else if (!v) setAddingCity(false); }} wrapStyle={{ width: 'min(260px, 100%)' }} />
             )}
             {!isEmp && adding && (
               <select className={'input ' + sty.c772d10c} autoFocus aria-label="Добавить навык" defaultValue="" onBlur={() => setAdding(false)}
@@ -512,7 +514,7 @@ function EmailChange({ current, onDone }: { current: string; onDone: () => void 
             </div>
             <div className="field">
               <label htmlFor="em-pass">Текущий пароль</label>
-              <input id="em-pass" className="input" type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" />
+              <PasswordInput id="em-pass" className="input" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" />
               {err?.field === 'password' && <div role="alert" style={css(FIELD_ERR)}>{err.message}</div>}
             </div>
           </div>
@@ -557,7 +559,7 @@ function PasswordChange({ onDone }: { onDone: () => void }) {
   const input = (k: keyof typeof f, label: string, ac: string) => (
     <div className="field">
       <label htmlFor={'pw-' + k}>{label}</label>
-      <input id={'pw-' + k} className="input" type="password" value={f[k]} onChange={e => setF({ ...f, [k]: e.target.value })} autoComplete={ac} />
+      <PasswordInput id={'pw-' + k} className="input" value={f[k]} onChange={e => setF({ ...f, [k]: e.target.value })} autoComplete={ac} />
       {err?.field === k && <div role="alert" style={css(FIELD_ERR)}>{err.message}</div>}
     </div>
   );
@@ -613,7 +615,7 @@ function DeleteAccount({ isEmp }: { isEmp: boolean }) {
       </div>
       <div className="field">
         <label htmlFor="del-pass">Пароль</label>
-        <input id="del-pass" className="input" type="password" autoComplete="current-password" value={f.password} onChange={e => setF({ ...f, password: e.target.value })} />
+        <PasswordInput id="del-pass" className="input" autoComplete="current-password" value={f.password} onChange={e => setF({ ...f, password: e.target.value })} />
         {err?.field === 'password' && <div role="alert" style={css(FIELD_ERR)}>{err.message}</div>}
         <NoPassword />
       </div>

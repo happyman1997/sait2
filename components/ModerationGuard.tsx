@@ -14,9 +14,10 @@ export function showModeration(where: string, category: BadCategory, text = '') 
   showExternal?.({ where, category, text, el: null });
 }
 
+// data-nomod — поле, которое не проверяем: показанный пароль (components/PasswordInput).
 const isText = (el: EventTarget | null): el is HTMLInputElement | HTMLTextAreaElement =>
   el instanceof HTMLTextAreaElement ||
-  (el instanceof HTMLInputElement && /^(text|search|email|tel|url|)$/i.test(el.getAttribute('type') || ''));
+  (el instanceof HTMLInputElement && /^(text|search|email|tel|url|)$/i.test(el.getAttribute('type') || '') && !el.hasAttribute('data-nomod'));
 
 function fieldName(el: HTMLElement): string {
   const f = el.closest('.field');

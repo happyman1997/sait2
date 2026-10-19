@@ -101,7 +101,7 @@ describe('публикация', () => {
   });
 
   it('модерация текста заказа на сервере', async () => {
-    const e = await expectErr(jobs.createJob(form({ desc: 'Оплата вперёд, потом выход' }), emp, today), 'desc');
+    const e = await expectErr(jobs.createJob(form({ desc: 'Внесите залог 2000, потом выход' }), emp, today), 'desc');
     expect(e.extra).toMatchObject({ moderation: { label: 'Что нужно сделать', category: 'признак мошенничества' } });
     await expectErr(jobs.createJob(form({ access: ['домофон', 'спросить у суки'] }), emp, today), 'access');
   });

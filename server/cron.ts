@@ -19,7 +19,8 @@ export async function runDueTasks(): Promise<{ skipped: boolean; autoAccepted: n
     const got = await c.query<{ ok: boolean }>('SELECT pg_try_advisory_lock($1) AS ok', [LOCK_KEY]);
     if (!got.rows[0].ok) return { skipped: true, autoAccepted: [], cleaned: 0 };
     try {
-      const autoAccepted = await autoAcceptDue();
+      // Сбой автоприёмки не должен останавливать очистку и рассылку.
+      const autoAccepted = await autoAcceptDue().catch(e => { console.error('[auto-accept]', (e as Error).message); return [] as number[]; });
       // Одно соединение — запросы строго по очереди.
       let cleaned = 0;
       for (const sql of [

@@ -17,8 +17,8 @@ export function CityInput({ id, value, onChange, onPick, onKeyDown, onBlur, plac
   onPick?: (v: string) => void;
   /** Клавиши, которые подсказки не забрали себе (например, Enter, когда список закрыт). */
   onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void;
-  /** Ушли из поля (выбор из подсказок фокус не снимает). */
-  onBlur?: () => void;
+  /** Ушли из поля (выбор из подсказок фокус не снимает): итоговое значение и известный ли это город. */
+  onBlur?: (value: string, known: boolean) => void;
   placeholder?: string;
   style?: CSSProperties;
   className?: string;
@@ -67,11 +67,12 @@ export function CityInput({ id, value, onChange, onPick, onKeyDown, onBlur, plac
   const blur = () => {
     setOpen(false);
     setActive(-1);
-    if (list && value.trim() && !done) {
+    let v = value.trim(), known = done;
+    if (list && v && !done) {
       const same = list.filter(c => normCity(c[0]) === normCity(value));
-      if (same.length === 1) onChange(cityValue(same[0], list));
+      if (same.length === 1) { v = cityValue(same[0], list); known = true; onChange(v); }
     }
-    onBlur?.();
+    onBlur?.(v, known);
   };
 
   return (

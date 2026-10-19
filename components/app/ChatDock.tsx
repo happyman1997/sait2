@@ -28,7 +28,11 @@ export function ChatDock({ place }: { place: 'map' | 'form' | 'page' }) {
   const { me, chats, unread, dock, setDock, reloadChats } = useLive();
   const narrow = useNarrow();
   const [thread, setThread] = useState<Thread | null>(null);
-  const [draft, setDraft] = useState('');
+  // Черновик — свой у каждого диалога: недописанное одному не уйдёт другому после переключения.
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const draftKey = dock.num + ':' + dock.thread;
+  const draft = drafts[draftKey] || '';
+  const setDraft = (v: string, k = draftKey) => setDrafts(d => ({ ...d, [k]: v }));
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
@@ -77,11 +81,12 @@ export function ChatDock({ place }: { place: 'map' | 'form' | 'page' }) {
   const send = async (quick?: string) => {
     const text = (quick ?? draft).trim();
     if (!text || sending || !dock.num || !dock.thread) return;
+    const k = draftKey;
     setSending(true);
     try {
       const r = await api<{ message: ChatMessage }>('/api/jobs/' + dock.num + '/chat/' + dock.thread, { text });
       setThread(t => (t ? { ...t, messages: t.messages.concat(r.message) } : t));
-      if (quick === undefined) setDraft('');
+      if (quick === undefined) setDraft('', k);
       setError('');
     } catch (e) {
       if (e instanceof ApiError && e.body.moderation) showModeration('Сообщение', e.body.moderation.category, text);
@@ -145,7 +150,7 @@ export function ChatDock({ place }: { place: 'map' | 'form' | 'page' }) {
                 <span className={'fh ' + sty.cb741258}>{thread?.initials || initialsOf(active?.who || '')}</span>
                 <div className={sty.c33f2a66}>
                   <div className={'fh ' + sty.c0b950a1}>{thread?.who || active?.who || ''}</div>
-                  <a href={'/?job=' + dock.num} className={sty.cef05be1}>Заказ {jobNum(dock.num!)} · {thread?.title || active?.title || ''}</a>
+                  <a href={'/?job=' + dock.num} className={sty.cef05be1} title={'Заказ ' + jobNum(dock.num!) + ' · ' + (thread?.title || active?.title || '')}>Заказ {jobNum(dock.num!)} · {thread?.title || active?.title || ''}</a>
                 </div>
               </div>
               <div ref={listRef} className={sty.c1c558ba}>

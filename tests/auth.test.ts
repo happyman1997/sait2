@@ -149,7 +149,7 @@ describe('регистрация', () => {
   it('модерация на сервере: ник, имя, свои навыки', async () => {
     const e = await expectErr(auth.checkContacts(freelancer({ login: 'Snow_huy' })), 'login');
     expect(e.extra).toMatchObject({ moderation: { label: 'Логин', category: 'нецензурная лексика' } });
-    await expectErr(auth.startSignup(freelancer({ freelancer: { skills: ['snow'], customSkills: ['оплата вперёд'], workCities: ['Москва'] } }), ctx), 'skills');
+    await expectErr(auth.startSignup(freelancer({ freelancer: { skills: ['snow'], customSkills: ['внесите залог'], workCities: ['Москва'] } }), ctx), 'skills');
     await expectErr(auth.checkContacts(freelancer({ name: 'Mr.Suka' })), 'name');
   });
 
