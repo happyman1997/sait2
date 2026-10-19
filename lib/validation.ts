@@ -1,6 +1,6 @@
 // Проверки полей регистрации/входа — общие для клиента и сервера. Тексты ошибок — из прототипа.
 import { passwordProblem } from './password-policy';
-import { ACCESS, GEAR, JOB_TYPE_IDS, OBJECT_KINDS, ORG_TYPES, PASS_MODES, SAFETY_REQ, TOOLS } from './catalog';
+import { ACCESS, GEAR, JOB_TYPE_IDS, OBJECT_KINDS, ORG_TYPES, PASS_MODES, SAFETY_REQ, TOOLS, tidyGear } from './catalog';
 import { PERSON_NAME } from './text';
 
 export type Role = 'freelancer' | 'employer';
@@ -134,7 +134,7 @@ export function sanitizeSignup(raw: unknown): SignupInput {
     out.freelancer = {
       skills: strList(f.skills, 30, 40).filter(s => JOB_TYPE_IDS.includes(s)),
       customSkills: strList(f.customSkills, 8, 60),
-      gear: strList(f.gear, 40, 60).filter(g => GEAR.includes(g) || customGear.includes(g)),
+      gear: tidyGear(strList(f.gear, 40, 60).filter(g => GEAR.includes(g) || customGear.includes(g))),
       customGear,
       ownCar: f.ownCar === true,
       workCities: strList(f.workCities, 20, 80)

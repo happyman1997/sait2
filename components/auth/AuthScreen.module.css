@@ -417,3 +417,22 @@
   padding: 10px 12px !important;
   background: color-mix(in srgb, var(--color-accent) 8%, transparent) !important;
 }
+
+/* Свёрнутый инвентарь на шаге «Профиль»: кнопка «+ Указать свой инвентарь». */
+.gearOpen { margin-top: 8px; }
+
+/* Телефон: кнопки шага закреплены внизу — не нужно листать до «Далее» через весь шаг. */
+@media (max-width: 719.98px) {
+  .stepNav {
+    /* Нижний отступ прокручиваемой панели (.c14294e2): прилипаем к самому краю экрана, а не над отступом. */
+    --pane-pad: max(clamp(12px, 3vw, 40px), env(safe-area-inset-bottom));
+    position: sticky;
+    bottom: calc(-1 * var(--pane-pad));
+    z-index: 5;
+    margin-left: calc(-1 * clamp(16px, 4vw, 50px));
+    margin-right: calc(-1 * clamp(16px, 4vw, 50px));
+    padding: 10px clamp(16px, 4vw, 50px) calc(10px + var(--pane-pad));
+    background: var(--color-bg);
+    border-top: 1px solid var(--color-divider);
+  }
+}

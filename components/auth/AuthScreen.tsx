@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { ApiError, api } from '@/lib/api';
-import { ACCESS, GEAR, JOB_TYPES, OBJECT_KINDS, ORG_TYPES, PASS_MODES, SAFETY_REQ, TOOLS } from '@/lib/catalog';
+import { ACCESS, GEAR, GEAR_FOR, JOB_TYPES, NO_GEAR, OBJECT_KINDS, ORG_TYPES, PASS_MODES, SAFETY_REQ, TOOLS } from '@/lib/catalog';
 import { css } from '@/lib/css';
 import { plural } from '@/lib/jobs';
 import { passwordProblem } from '@/lib/password-policy';
@@ -112,6 +112,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
   const [workCities, setWorkCities] = useState<string[]>([]);
   const [cityDraft, setCityDraft] = useState('');
   const [loginCyr, setLoginCyr] = useState(false);
+  const [gearOpen, setGearOpen] = useState(false);
   const [ownCar, setOwnCar] = useState(false);
 
   // Профиль работодателя
@@ -154,6 +155,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
   const [errTick, setErrTick] = useState(0);
   const [missFields, setMissFields] = useState<string[]>([]);
   const missTimer = useRef<number | undefined>(undefined);
+  const scroller = useRef<HTMLDivElement>(null);
 
   const isEmp = role === 'employer';
   const stepErrAnim = (errTick % 2 ? 'errBlinkA' : 'errBlinkB') + ' .7s ease-in-out 1';
@@ -164,6 +166,9 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
     const t = window.setTimeout(() => setResendIn(s => Math.max(0, s - 1)), 1000);
     return () => clearTimeout(t);
   }, [resendIn]);
+
+  // Новый шаг — с начала: иначе на телефоне он открывается там, куда долистали предыдущий (у кнопки «Далее»).
+  useEffect(() => { scroller.current?.scrollTo({ top: 0 }); }, [step, mode]);
 
   // Режим в адресной строке — чтобы «Назад» в браузере и ссылки работали.
   useEffect(() => {
@@ -362,7 +367,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
       setSkillDraft('');
     } else {
       setCustomGear(cur => (cur.includes(v) ? cur : cur.concat([v]).slice(0, 8)));
-      setGear(g => (g.includes(v) ? g : g.concat([v])));
+      setGear(g => (g.includes(v) ? g : g.filter(x => x !== NO_GEAR).concat([v])));
       setGearDraft('');
     }
     flash((kind === 'skill' ? 'Навык' : 'Инвентарь') + ' «' + v + '» добавлен в профиль');
@@ -382,7 +387,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
   const flushDrafts = (): Drafted => {
     const add = (list: string[], v: string, max: number) => (v && !list.some(x => x.toLowerCase() === v.toLowerCase()) ? list.concat([v]).slice(0, max) : list);
     const sk = skillDraft.trim(), gr = gearDraft.trim(), ct = cityDraft.trim();
-    const out = { customSkills: add(customSkills, sk, 8), customGear: add(customGear, gr, 8), gear: gr && !gear.includes(gr) ? gear.concat([gr]) : gear, workCities: add(workCities, ct, 20) };
+    const out = { customSkills: add(customSkills, sk, 8), customGear: add(customGear, gr, 8), gear: gr && !gear.includes(gr) ? gear.filter(x => x !== NO_GEAR).concat([gr]) : gear, workCities: add(workCities, ct, 20) };
     if (sk || gr || ct) {
       setCustomSkills(out.customSkills); setCustomGear(out.customGear); setGear(out.gear); setWorkCities(out.workCities);
       setSkillDraft(''); setGearDraft(''); setCityDraft('');
@@ -393,6 +398,16 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
   const onEnter = (fn: () => void) => (e: KeyboardEvent) => {
     if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); fn(); }
   };
+
+  // «Ничего нет» снимает отмеченный инвентарь, отмеченный инвентарь — «Ничего нет» (как в профиле).
+  const pickGear = (g: string) => {
+    if (g === NO_GEAR && !gear.includes(NO_GEAR)) { setGear([NO_GEAR]); setCustomGear([]); return; }
+    setGear(cur => (cur.includes(g) ? cur.filter(x => x !== g) : [...cur.filter(x => x !== NO_GEAR), g]));
+  };
+  // Сначала — то, что пригодится для отмеченных работ; «Ничего нет» — последним.
+  const gearFirst = [...new Set(skills.flatMap(s => GEAR_FOR[s] || []))];
+  const gearOrder = [...gearFirst, ...GEAR.filter(g => g !== NO_GEAR && !gearFirst.includes(g)), NO_GEAR];
+  const showGear = gearOpen || gear.length > 0 || customGear.length > 0 || !!gearDraft;
 
   const toggle = (list: string[], set: (v: string[]) => void, v: string) =>
     set(list.includes(v) ? list.filter(x => x !== v) : list.concat([v]));
@@ -525,7 +540,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
         </div>
 
         {/* Форма */}
-        <div className={sty.c14294e2}>
+        <div className={sty.c14294e2} ref={scroller}>
           <div className={sty.c4b23b76}>
             <Link href={pending ? '/?job=' + pending.num : '/'} className={'btn btn-secondary ' + sty.cf4851b4}>← Вернуться на карту</Link>
 
@@ -620,6 +635,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                 {step === 3 && !isEmp && (
                   <div>
                     <h3 style={css(H3)}>Профиль исполнителя</h3>
+                    <div style={css(NOTE + '; margin: -6px 0 16px')}>Всё это можно поменять потом в профиле.</div>
                     <div style={css(LABEL + '; margin-bottom: 8px')}>Что умеете</div>
                     <div style={css('display: flex; flex-wrap: wrap; gap: 6px; padding: 4px; ' + missStyle('skills', false))}>
                       {JOB_TYPES.map(t => <Chip key={t.id} active={skills.includes(t.id)} onClick={() => { toggle(skills, setSkills, t.id); setStepError(''); }}>{t.label}</Chip>)}
@@ -629,29 +645,45 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                       <input className="input" aria-label="Свой навык" value={skillDraft} onChange={e => setSkillDraft(e.target.value)} onKeyDown={onEnter(() => addCustom('skill'))} placeholder="свой навык — например, вывоз снега на прицепе" style={css(DRAFT_INPUT)} />
                       <button className={'btn btn-secondary ' + sty.c27fa87c} onClick={() => addCustom('skill')}>Добавить</button>
                     </div>
-                    <div style={css(LABEL + '; margin: 18px 0 8px')}>Свой инвентарь</div>
-                    <div className={sty.c2bf69bb}>
-                      {GEAR.map(g => <Chip key={g} active={gear.includes(g)} onClick={() => toggle(gear, setGear, g)}>{g}</Chip>)}
-                      {customGear.map(g => <Chip key={'c' + g} active onClick={() => { setCustomGear(s => s.filter(x => x !== g)); setGear(s => s.filter(x => x !== g)); }}>{g}</Chip>)}
+                    {/* Инвентарь — по желанию и свёрнут: шаг короче, а кому есть что указать — раскроет. */}
+                    <div className={sty.c6840f0a}>
+                      <div className={sty.cfd1ed7d}>
+                        <div style={css(LABEL)}>Инвентарь</div>
+                        <span className={sty.c347d421}>необязательно</span>
+                      </div>
+                      {!showGear ? (
+                        <>
+                          <button type="button" className={'btn btn-secondary ' + sty.c27fa87c + ' ' + sty.gearOpen} onClick={() => setGearOpen(true)}>+ Указать свой инвентарь</button>
+                          <div style={css(NOTE)}>Работодатель увидит в отклике, с чем вы придёте.</div>
+                        </>
+                      ) : (
+                        <>
+                          {gearFirst.length > 0 && <div style={css(NOTE + '; margin: 6px 0 8px')}>Сначала — то, что пригодится для отмеченных работ.</div>}
+                          <div className={sty.c2bf69bb} style={gearFirst.length ? undefined : { marginTop: 8 }}>
+                            {gearOrder.map(g => <Chip key={g} active={gear.includes(g)} onClick={() => pickGear(g)}>{g}</Chip>)}
+                            {customGear.map(g => <Chip key={'c' + g} active onClick={() => { setCustomGear(s => s.filter(x => x !== g)); setGear(s => s.filter(x => x !== g)); }}>{g}</Chip>)}
+                          </div>
+                          <div className={sty.cb724174}>
+                            <input className="input" aria-label="Свой инвентарь" value={gearDraft} onChange={e => setGearDraft(e.target.value)} onKeyDown={onEnter(() => addCustom('gear'))} placeholder="например, мотобур" style={css(DRAFT_INPUT)} />
+                            <button className={'btn btn-secondary ' + sty.c27fa87c} onClick={() => addCustom('gear')}>Добавить</button>
+                          </div>
+                          <div style={css(NOTE)}>Выбранное подсвечено — нажмите ещё раз, чтобы убрать.</div>
+                        </>
+                      )}
                     </div>
-                    <div className={sty.cb724174}>
-                      <input className="input" aria-label="Свой инвентарь" value={gearDraft} onChange={e => setGearDraft(e.target.value)} onKeyDown={onEnter(() => addCustom('gear'))} placeholder="свой инвентарь — например, мотоблок с щёткой" style={css(DRAFT_INPUT)} />
-                      <button className={'btn btn-secondary ' + sty.c27fa87c} onClick={() => addCustom('gear')}>Добавить</button>
-                    </div>
-                    <div style={css(NOTE)}>Свои пункты помечены как выбранные — клик по чипу удаляет их.</div>
                     <div className={sty.c6840f0a}>
                       <div className="field">
-                        <label htmlFor="su-cities">Города, где вы работаете</label>
+                        <label htmlFor="su-cities" style={css(LABEL + '; margin-bottom: 8px')}>Города, где вы работаете</label>
                         <div className={sty.caea80b7}>
                           <CityInput id="su-cities" wrapStyle={{ flex: 1, minWidth: 160 }} style={css('border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 8%, transparent); color: var(--color-accent-900); --placeholder-color: var(--color-accent-700); ' + missStyle('cities', false))}
-                            value={cityDraft} onChange={setCityDraft} onPick={addCity} onKeyDown={onEnter(() => addCity())} placeholder="Химки, Одинцово… — начните вводить" />
-                          <button className={'btn btn-secondary ' + sty.cec058aa} onClick={() => addCity()}>Добавить</button>
+                            value={cityDraft} onChange={setCityDraft} onPick={addCity} onKeyDown={onEnter(() => addCity())} placeholder="начните вводить город" />
+                          <button className={'btn btn-secondary ' + sty.c27fa87c + ' ' + sty.cec058aa} onClick={() => addCity()}>Добавить</button>
                         </div>
                       </div>
                       <div className={sty.ca8e3223}>
                         {workCities.map(label => <Chip key={label} active onClick={() => setWorkCities(c => c.filter(x => x !== label))}>{label}</Chip>)}
                       </div>
-                      <div style={css(NOTE)}>Клик по городу убирает его. Смены в этих городах будут в ленте и уведомлениях.</div>
+                      <div style={css(NOTE)}>Смены в этих городах будут в ленте и уведомлениях. Нажмите на город, чтобы убрать его.</div>
                     </div>
                     <label className={sty.c1200285}>
                       <input type="checkbox" checked={ownCar} onChange={e => setOwnCar(e.target.checked)} className={sty.ca42a1ef} />
@@ -663,6 +695,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                 {step === 3 && isEmp && (
                   <div>
                     <h3 style={css(H3)}>Профиль работодателя</h3>
+                    <div style={css(NOTE + '; margin: -6px 0 16px')}>Всё это можно поменять потом в профиле.</div>
                     <div style={css(LABEL + '; margin-bottom: 8px')}>Тип работодателя</div>
                     <select className={'input ' + sty.c66998fc} aria-label="Тип работодателя" value={orgType} onChange={e => setOrgType(e.target.value)}>
                       {ORG_TYPES.map(o => <option key={o} value={o}>{o}</option>)}
@@ -790,7 +823,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                 )}
 
                 {stepError && <div role="alert" style={{ ...css(ALERT), animation: stepErrAnim }}>{stepError}</div>}
-                <div className={sty.c115257a}>
+                <div className={sty.c115257a + ' ' + sty.stepNav}>
                   {step > 1 && <button className={'btn btn-secondary ' + sty.c61fef2d} onClick={() => { setStep(s => Math.max(1, s - 1)); setStepError(''); }}>Назад</button>}
                   <button className="btn btn-primary blueprint" onClick={nextStep} disabled={busy} style={css('flex: 1; ' + PRIMARY)}>
                     <Corners />{nextLabel}

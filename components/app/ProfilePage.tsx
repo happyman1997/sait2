@@ -144,7 +144,7 @@ export function ProfilePage() {
 
             {isEmp ? <Organization p={p} patch={patch} busy={busy} fieldErr={fieldErr} /> : (
               <>
-                <Section title="Свой инвентарь" note="Отмеченное видят работодатели — это поднимает отклик выше.">
+                <Section title="Инвентарь" note="Отмеченное видят работодатели — это поднимает отклик выше.">
                   <GearEditor gear={fp.gear || []} customGear={fp.customGear || []} ownCar={!!fp.ownCar} patch={patch} fieldErr={fieldErr} />
                 </Section>
                 <Section title="Самозанятость" note="Статус НПД проверяется по ИНН в открытом сервисе ФНС — справка не нужна.">
