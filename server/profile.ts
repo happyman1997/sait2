@@ -1,5 +1,6 @@
 // Профиль, база для поиска, настройки уведомлений, журнал событий.
 import { ACCESS, GEAR, JOB_TYPE_IDS, OBJECT_KINDS, ORG_TYPES, TOOLS, tidyGear } from '@/lib/catalog';
+import { liftSkills } from '@/lib/skills';
 import { findBadField } from '@/lib/moderation';
 import { loadProfile, publicUser } from './auth';
 import { one, query, tx } from './db';
@@ -112,9 +113,13 @@ export async function updateProfile(viewer: U | null, raw: unknown) {
   const f = (r.freelancer && typeof r.freelancer === 'object' ? r.freelancer : null) as Record<string, unknown> | null;
   const e = (r.employer && typeof r.employer === 'object' ? r.employer : null) as Record<string, unknown> | null;
   const customGear = f ? list(f.customGear, 8, 60) : undefined;
+  const skills = f ? list(f.skills, 30, 40)?.filter(s => JOB_TYPE_IDS.includes(s)) : undefined;
+  const customSkills = f ? list(f.customSkills, 8, 60) : undefined;
+  // Пришли оба списка — «грузчик» из своих навыков становится видом работ (lib/skills.ts).
+  const lifted = skills && customSkills ? liftSkills(skills, customSkills) : { skills, customSkills };
   const fp = f && u.role === 'freelancer' ? {
-    skills: list(f.skills, 30, 40)?.filter(s => JOB_TYPE_IDS.includes(s)),
-    customSkills: list(f.customSkills, 8, 60),
+    skills: lifted.skills,
+    customSkills: lifted.customSkills,
     customGear,
     gear: (g => g && tidyGear(g))(list(f.gear, 40, 60)?.filter(g => GEAR.includes(g) || (customGear ?? []).includes(g))),
     workCities: list(f.workCities, 20, 80),

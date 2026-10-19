@@ -13,6 +13,8 @@ import { disablePush } from '@/lib/push-client';
 import { dateLabel, money, plural } from '@/lib/jobs';
 import { normCity } from '@/lib/cities';
 import { CityInput } from '@/components/CityInput';
+import { SkillInput } from '@/components/SkillInput';
+import { matchSkill, parseSkills } from '@/lib/skills';
 import { PasswordInput } from '@/components/PasswordInput';
 import { DocLinks } from '@/components/DocLinks';
 import { useFlash } from '@/components/Toast';
@@ -254,6 +256,7 @@ function HeaderCard({ p, setP, patch, busy, err }: {
   const [first, setFirst] = useState('');
   const [last, setLast] = useState('');
   const [adding, setAdding] = useState(false);
+  const [skillDraft, setSkillDraft] = useState('');
   const [addingCity, setAddingCity] = useState(false);
   const [cityDraft, setCityDraft] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -298,7 +301,18 @@ function HeaderCard({ p, setP, patch, busy, err }: {
         ...(fp.customSkills || []).map(s => ({ label: s, onRemove: () => patch({ freelancer: { customSkills: (fp.customSkills || []).filter(x => x !== s) } }, 'Навык «' + s + '» убран из профиля') })),
         ...(fp.workCities || []).map(c => ({ label: c, onRemove: (fp.workCities || []).length > 1 ? () => patch({ freelancer: { workCities: (fp.workCities || []).filter(x => x !== c) } }) : undefined }))
       ];
-  const freeSkills = JOB_TYPES.filter(t => !(fp.skills || []).includes(t.id));
+  // Навык — своими словами, с подсказками видов работ (components/SkillInput); через запятую — несколько.
+  const addSkill = async ({ id, text }: { id?: string; text: string }) => {
+    const had = { skills: fp.skills || [], customSkills: fp.customSkills || [] };
+    const r = parseSkills(text, had);
+    if (id && !r.skills.includes(id)) r.skills.push(id);
+    setAdding(false);
+    setSkillDraft('');
+    const added = [...r.skills.filter(x => !had.skills.includes(x)).map(x => TYPE_LABEL[x] || x), ...r.customSkills.filter(x => !had.customSkills.includes(x))];
+    if (!added.length) return;
+    if (r.customSkills.length > 8) flash('Своих навыков — не больше восьми');
+    await patch({ freelancer: { skills: r.skills, customSkills: r.customSkills.slice(0, 8) } }, (added.length > 1 ? 'Навыки добавлены: ' : 'Навык добавлен: ') + added.join(', '));
+  };
   // Город работы — с подсказками (components/CityInput); не из списка (посёлок) — своим текстом по Enter.
   const addWorkCity = async (raw: string) => {
     const v = raw.trim();
@@ -352,7 +366,7 @@ function HeaderCard({ p, setP, patch, busy, err }: {
                 {t.onRemove && <button onClick={t.onRemove} title="Убрать тег" aria-label={'Убрать «' + t.label + '»'} style={css('all: unset; cursor: pointer; line-height: 1; font-size: 14px; padding: 9px 10px; margin: -9px -10px -9px -4px; ' + MUTED)}>×</button>}
               </span>
             ))}
-            {!isEmp && !adding && freeSkills.length > 0 && (
+            {!isEmp && !adding && (
               <button className={'tag tag-outline ' + sty.c86fd59c} onClick={() => setAdding(true)}>+ навык</button>
             )}
             {!isEmp && !addingCity && (fp.workCities || []).length < 20 && (
@@ -365,11 +379,11 @@ function HeaderCard({ p, setP, patch, busy, err }: {
                 onBlur={(v, known) => { if (known) addWorkCity(v); else if (!v) setAddingCity(false); }} wrapStyle={{ width: 'min(260px, 100%)' }} />
             )}
             {!isEmp && adding && (
-              <select className={'input ' + sty.c772d10c} autoFocus aria-label="Добавить навык" defaultValue="" onBlur={() => setAdding(false)}
-                onChange={e => { const id = e.target.value; setAdding(false); if (id) patch({ freelancer: { skills: [...(fp.skills || []), id] } }, 'Навык «' + TYPE_LABEL[id] + '» добавлен'); }}>
-                <option value="" disabled>выберите навык</option>
-                {freeSkills.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-              </select>
+              <SkillInput autoFocus ariaLabel="Добавить навык" placeholder="навык — начните вводить" value={skillDraft} onChange={setSkillDraft}
+                exclude={fp.skills || []} onAdd={addSkill} onKeyDown={e => { if (e.key === 'Escape') { setAdding(false); setSkillDraft(''); } }}
+                // Ушли из поля: вид работ целиком («грузчик») — добавляем, пустое — закрываем, остальное оставляем (Enter добавит).
+                onBlur={() => { if (!skillDraft.trim()) setAdding(false); else if (matchSkill(skillDraft)) addSkill({ text: skillDraft }); }}
+                wrapStyle={{ width: 'min(260px, 100%)' }} />
             )}
           </div>
         </div>

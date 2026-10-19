@@ -15,6 +15,8 @@ import { DocLinks } from '@/components/DocLinks';
 import { useFlash } from '@/components/Toast';
 import { useNarrow } from '@/components/useNarrow';
 import { CityInput } from '@/components/CityInput';
+import { SkillInput } from '@/components/SkillInput';
+import { parseSkills } from '@/lib/skills';
 import { PasswordInput } from '@/components/PasswordInput';
 import sty from './AuthScreen.module.css';
 
@@ -55,6 +57,8 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
       aria-pressed={active}>{children}</button>
   );
 }
+
+const TYPE_LABEL: Record<string, string> = Object.fromEntries(JOB_TYPES.map(t => [t.id, t.label]));
 
 const fmtNum = (v: number) => String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 /** С какого числа показывать счётчики людей на площадке. */
@@ -245,7 +249,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
     if (m === 'login') setRecoverStep(1);
   };
 
-  type Drafted = { customSkills: string[]; customGear: string[]; gear: string[]; workCities: string[] };
+  type Drafted = { skills: string[]; customSkills: string[]; customGear: string[]; gear: string[]; workCities: string[] };
   const signupPayload = (drafted?: Drafted) => ({
     role, name, login, password: oauth ? '' : pass, email, city, oauthTicket: oauth?.ticket,
     freelancer: role === 'freelancer' ? { skills, customSkills, gear, customGear, ownCar, workCities, ...drafted } : undefined,
@@ -284,7 +288,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
     }
     if (step === 3) {
       const drafted = role === 'freelancer' ? flushDrafts() : undefined;
-      const err = validateProfile(role, { freelancer: { skills, customSkills: drafted?.customSkills, workCities: drafted?.workCities }, employer: { access, tools } });
+      const err = validateProfile(role, { freelancer: { skills: drafted?.skills, customSkills: drafted?.customSkills, workCities: drafted?.workCities }, employer: { access, tools } });
       if (err) { flashFields([err.field], err.message); return; }
       // Почту уже подтвердил сервис — без кода, сразу к согласию.
       if (skipCode) { setStep(4); setStepError(''); return; }
@@ -359,18 +363,21 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
     setCodeError('');
   };
 
-  const addCustom = (kind: 'skill' | 'gear') => {
-    const v = (kind === 'skill' ? skillDraft : gearDraft).trim();
+  const addGear = () => {
+    const v = gearDraft.trim();
     if (!v) return;
-    if (kind === 'skill') {
-      setCustomSkills(cur => (cur.includes(v) ? cur : cur.concat([v]).slice(0, 8)));
-      setSkillDraft('');
-    } else {
-      setCustomGear(cur => (cur.includes(v) ? cur : cur.concat([v]).slice(0, 8)));
-      setGear(g => (g.includes(v) ? g : g.filter(x => x !== NO_GEAR).concat([v])));
-      setGearDraft('');
-    }
-    flash((kind === 'skill' ? 'Навык' : 'Инвентарь') + ' «' + v + '» добавлен в профиль');
+    setCustomGear(cur => (cur.includes(v) ? cur : cur.concat([v]).slice(0, 8)));
+    setGear(g => (g.includes(v) ? g : g.filter(x => x !== NO_GEAR).concat([v])));
+    setGearDraft('');
+    flash('Инвентарь «' + v + '» добавлен в профиль');
+  };
+
+  /** Навыки из поля: вид работ, выбранный в подсказках, и вписанное (через запятую — несколько). */
+  const addSkills = ({ id, text }: { id?: string; text: string }) => {
+    const r = parseSkills(text, { skills, customSkills });
+    if (id && !r.skills.includes(id)) r.skills.push(id);
+    if (r.customSkills.length > 8) flash('Своих навыков — не больше восьми');
+    setSkills(r.skills); setCustomSkills(r.customSkills.slice(0, 8)); setSkillDraft(''); setStepError('');
   };
 
   /** picked — город, выбранный в подсказках (черновик в этот момент ещё не обновился). */
@@ -387,9 +394,10 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
   const flushDrafts = (): Drafted => {
     const add = (list: string[], v: string, max: number) => (v && !list.some(x => x.toLowerCase() === v.toLowerCase()) ? list.concat([v]).slice(0, max) : list);
     const sk = skillDraft.trim(), gr = gearDraft.trim(), ct = cityDraft.trim();
-    const out = { customSkills: add(customSkills, sk, 8), customGear: add(customGear, gr, 8), gear: gr && !gear.includes(gr) ? gear.filter(x => x !== NO_GEAR).concat([gr]) : gear, workCities: add(workCities, ct, 20) };
+    const typed = parseSkills(sk, { skills, customSkills });
+    const out = { skills: typed.skills, customSkills: typed.customSkills.slice(0, 8), customGear: add(customGear, gr, 8), gear: gr && !gear.includes(gr) ? gear.filter(x => x !== NO_GEAR).concat([gr]) : gear, workCities: add(workCities, ct, 20) };
     if (sk || gr || ct) {
-      setCustomSkills(out.customSkills); setCustomGear(out.customGear); setGear(out.gear); setWorkCities(out.workCities);
+      setSkills(out.skills); setCustomSkills(out.customSkills); setCustomGear(out.customGear); setGear(out.gear); setWorkCities(out.workCities);
       setSkillDraft(''); setGearDraft(''); setCityDraft('');
     }
     return out;
@@ -636,15 +644,25 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                   <div>
                     <h3 style={css(H3)}>Профиль исполнителя</h3>
                     <div style={css(NOTE + '; margin: -6px 0 16px')}>Всё это можно поменять потом в профиле.</div>
-                    <div style={css(LABEL + '; margin-bottom: 8px')}>Что умеете</div>
-                    <div style={css('display: flex; flex-wrap: wrap; gap: 6px; padding: 4px; ' + missStyle('skills', false))}>
-                      {JOB_TYPES.map(t => <Chip key={t.id} active={skills.includes(t.id)} onClick={() => { toggle(skills, setSkills, t.id); setStepError(''); }}>{t.label}</Chip>)}
-                      {customSkills.map(label => <Chip key={'c' + label} active onClick={() => setCustomSkills(s => s.filter(x => x !== label))}>{label}</Chip>)}
+                    {/* Навыки — своими словами; подсказки — виды работ площадки (components/SkillInput, lib/skills.ts). */}
+                    <div className={sty.cfd1ed7d}>
+                      <label htmlFor="su-skills" style={css(LABEL)}>Что умеете</label>
+                      <span className={sty.c347d421}>обязательно</span>
                     </div>
                     <div className={sty.cb724174}>
-                      <input className="input" aria-label="Свой навык" value={skillDraft} onChange={e => setSkillDraft(e.target.value)} onKeyDown={onEnter(() => addCustom('skill'))} placeholder="свой навык — например, вывоз снега на прицепе" style={css(DRAFT_INPUT)} />
-                      <button className={'btn btn-secondary ' + sty.c27fa87c} onClick={() => addCustom('skill')}>Добавить</button>
+                      <SkillInput id="su-skills" wrapStyle={{ flex: 1, minWidth: 0 }} style={css(DRAFT_INPUT + '; ' + missStyle('skills', false))}
+                        value={skillDraft} onChange={v => { setSkillDraft(v); setStepError(''); }} onAdd={addSkills} exclude={skills}
+                        placeholder="например, грузчик" ariaLabel="Что умеете" />
+                      <button className={'btn btn-secondary ' + sty.c27fa87c} onClick={() => addSkills({ text: skillDraft })}>Добавить</button>
                     </div>
+                    {(skills.length > 0 || customSkills.length > 0) && (
+                      <div className={sty.ca8e3223}>
+                        {skills.map(id => <Chip key={id} active onClick={() => setSkills(s => s.filter(x => x !== id))}>{TYPE_LABEL[id] || id}</Chip>)}
+                        {customSkills.map(label => <Chip key={'c' + label} active onClick={() => setCustomSkills(s => s.filter(x => x !== label))}>{label}</Chip>)}
+                      </div>
+                    )}
+                    <div style={css(NOTE)}>Пишите своими словами, можно несколько через запятую. Нажмите на навык, чтобы убрать его.</div>
+
                     {/* Инвентарь — по желанию и свёрнут: шаг короче, а кому есть что указать — раскроет. */}
                     <div className={sty.c6840f0a}>
                       <div className={sty.cfd1ed7d}>
@@ -664,8 +682,8 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                             {customGear.map(g => <Chip key={'c' + g} active onClick={() => { setCustomGear(s => s.filter(x => x !== g)); setGear(s => s.filter(x => x !== g)); }}>{g}</Chip>)}
                           </div>
                           <div className={sty.cb724174}>
-                            <input className="input" aria-label="Свой инвентарь" value={gearDraft} onChange={e => setGearDraft(e.target.value)} onKeyDown={onEnter(() => addCustom('gear'))} placeholder="например, мотобур" style={css(DRAFT_INPUT)} />
-                            <button className={'btn btn-secondary ' + sty.c27fa87c} onClick={() => addCustom('gear')}>Добавить</button>
+                            <input className="input" aria-label="Свой инвентарь" value={gearDraft} onChange={e => setGearDraft(e.target.value)} onKeyDown={onEnter(addGear)} placeholder="например, мотобур" style={css(DRAFT_INPUT)} />
+                            <button className={'btn btn-secondary ' + sty.c27fa87c} onClick={addGear}>Добавить</button>
                           </div>
                           <div style={css(NOTE)}>Выбранное подсвечено — нажмите ещё раз, чтобы убрать.</div>
                         </>

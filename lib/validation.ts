@@ -1,6 +1,7 @@
 // Проверки полей регистрации/входа — общие для клиента и сервера. Тексты ошибок — из прототипа.
 import { passwordProblem } from './password-policy';
 import { ACCESS, GEAR, JOB_TYPE_IDS, OBJECT_KINDS, ORG_TYPES, PASS_MODES, SAFETY_REQ, TOOLS, tidyGear } from './catalog';
+import { liftSkills } from './skills';
 import { PERSON_NAME } from './text';
 
 export type Role = 'freelancer' | 'employer';
@@ -99,7 +100,7 @@ export function validateProfile(role: Role, p: { freelancer?: Partial<Freelancer
     return null;
   }
   const f = p.freelancer || {};
-  if (!(f.skills || []).length && !(f.customSkills || []).length) return { field: 'skills', message: 'Отметьте хотя бы один вид работ — по нему подбираются смены.' };
+  if (!(f.skills || []).length && !(f.customSkills || []).length) return { field: 'skills', message: 'Впишите, что умеете, — хотя бы один навык.' };
   if (!(f.workCities || []).length) return { field: 'cities', message: 'Добавьте хотя бы один город, где вы работаете.' };
   return null;
 }
@@ -131,9 +132,11 @@ export function sanitizeSignup(raw: unknown): SignupInput {
   if (role === 'freelancer') {
     const f = (r.freelancer && typeof r.freelancer === 'object' ? r.freelancer : {}) as Record<string, unknown>;
     const customGear = strList(f.customGear, 8, 60);
+    // «грузчик», вписанный своим навыком, — вид работ «Погрузка и разгрузка» (lib/skills.ts).
+    const sk = liftSkills(strList(f.skills, 30, 40).filter(s => JOB_TYPE_IDS.includes(s)), strList(f.customSkills, 8, 60));
     out.freelancer = {
-      skills: strList(f.skills, 30, 40).filter(s => JOB_TYPE_IDS.includes(s)),
-      customSkills: strList(f.customSkills, 8, 60),
+      skills: sk.skills,
+      customSkills: sk.customSkills,
       gear: tidyGear(strList(f.gear, 40, 60).filter(g => GEAR.includes(g) || customGear.includes(g))),
       customGear,
       ownCar: f.ownCar === true,
