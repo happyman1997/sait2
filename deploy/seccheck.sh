@@ -79,7 +79,7 @@ else
   else ok "последняя копия: $(basename "$last")"; fi
 fi
 if [ -n "$(get BACKUP_S3_BUCKET)$(get S3_BUCKET)" ]; then ok "копии уходят в хранилище — переживут потерю сервера"
-else wn "копии только на этом сервере — пропадут вместе с ним"; fix "задайте BACKUP_S3_BUCKET (DEPLOY.md, «Резервные копии»)"; fi
+else wn "копии только на этом сервере — пропадут вместе с ним"; fix "bash $(pwd)/deploy/backup-setup.sh — как создать бакет и ключ, DEPLOY.md, «Резервные копии»"; fi
 
 echo "== 8/8 Сайт снаружи: сертификат, заголовки, сотрудники"
 crt="/etc/letsencrypt/live/$domain/fullchain.pem"
