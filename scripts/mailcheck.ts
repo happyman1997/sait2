@@ -1,6 +1,7 @@
 // Проверка почты сайта: вход в ящик на SMTP-сервере и, если указан адрес, тестовое письмо. Пароль не печатается.
 // В образе: node scripts/mailcheck.mjs [адрес]; на сервере проще — bash deploy/mailcheck.sh [адрес].
 import { mailErrorText, smtpTransport } from '../server/mail';
+import { checkMailDns, senderDomain } from '../server/maildns';
 
 /** Что значит ответ почтового сервера и что сделать — простыми словами (ответы Яндекс 360 и типовые сетевые ошибки). */
 function advice(e: unknown): string {
@@ -53,6 +54,13 @@ async function main() {
   console.log(`Ящик: ${user}, сервер: ${host}:${port}, отправитель: ${from || '(не задан)'}`);
   console.log(`Пароль: ${pass}`);
 
+  // Записи домена: без них Gmail, Outlook и другие иностранные почты письма не принимают (на российские при этом доходит).
+  const domain = senderDomain(from, user);
+  console.log(`— записи домена ${domain || '?'} для доставки на иностранные почты (SPF, DKIM, DMARC)…`);
+  const records = await checkMailDns(domain, host);
+  for (const c of records) console.log(`  ${c.ok ? 'есть' : 'НЕТ '} ${c.name}: ${c.note}` + (c.fix ? `\n       что сделать: ${c.fix}` : ''));
+  const dnsBad = records.some(c => !c.ok && c.fix);
+
   const t = smtpTransport(url);
   try {
     console.log('— вход в ящик…');
@@ -62,8 +70,15 @@ async function main() {
       console.log(`— тестовое письмо на ${to}…`);
       await t.sendMail({ from, to, subject: 'Арена Работы: проверка почты', text: 'Это тестовое письмо с сайта. Если вы его видите — письма с кодами тоже дойдут.' });
       console.log('  отправлено. Проверьте «Входящие» и «Спам».');
+      console.log(`  Не пришло? Откройте ящик ${user} в браузере: через несколько минут там будет письмо «Недоставленное сообщение» с причиной — пришлите её текст.`);
     }
-    console.log('\nПочта работает.');
+    if (dnsBad) {
+      console.log('\nВход в почту работает, но письма на Gmail, Outlook и другие иностранные почты не дойдут, пока не добавите записи выше.');
+      console.log('Записи начинают действовать через 1–24 часа. Потом проверьте на иностранный адрес: bash deploy/mailcheck.sh ваш@gmail.com');
+      process.exitCode = 1;
+    } else {
+      console.log('\nПочта работает.');
+    }
   } catch (e) {
     console.log(`  ошибка: ${mailErrorText(e)}`);
     console.log('\nЧто сделать: ' + advice(e));

@@ -68,7 +68,7 @@ type OAuthProvider = 'yandex' | 'vk';
 const OAUTH_LABEL: Record<OAuthProvider, string> = { yandex: 'Войти через Яндекс ID', vk: 'Войти через VK ID' };
 
 /** «Войти через Яндекс ID / VK ID» — переход к сервису; вернёт в аккаунт или в анкету с готовыми данными. */
-function OAuthButtons({ providers, apply, lead }: { providers: OAuthProvider[]; apply?: number; lead: string }) {
+function OAuthButtons({ providers, apply, lead, orEmail = true }: { providers: OAuthProvider[]; apply?: number; lead: string; orEmail?: boolean }) {
   if (!providers.length) return null;
   return (
     <div style={css('margin: 4px 0 18px')}>
@@ -79,7 +79,7 @@ function OAuthButtons({ providers, apply, lead }: { providers: OAuthProvider[]; 
             style={css('height: 44px; display: grid; place-items: center; font-size: 14px; text-decoration: none')}>{OAUTH_LABEL[p]}</a>
         ))}
       </div>
-      <div style={css(HINT + '; margin-top: 12px; text-align: center')}>или по почте</div>
+      {orEmail && <div style={css(HINT + '; margin-top: 12px; text-align: center')}>или по почте</div>}
     </div>
   );
 }
@@ -800,7 +800,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                       <div className={sty.cd2d7539}>Почта подтверждена в {oauth?.providerName}. Осталось принять оферту и дать согласие на обработку данных — и аккаунт готов. Входить потом — той же кнопкой «{oauth?.providerName}».</div>
                     ) : (<>
                     <div className={sty.cd2d7539}>
-                      Код из шести цифр отправлен на <b>{sentTo}</b> · действует 10 минут. Письма нет — проверьте папку «Спам».
+                      Код из шести цифр отправлен на <b>{sentTo}</b> · действует 10 минут. Письма нет — проверьте «Спам» (в Gmail — ещё «Промоакции»).
                     </div>
                     <div className={sty.c318e55a}>
                       <div className={sty.cb9b7b53}>
@@ -826,6 +826,8 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                         {'Прислать код ещё раз' + (resendIn > 0 ? ' через ' + Math.floor(resendIn / 60) + ':' + String(resendIn % 60).padStart(2, '0') : '')}
                       </button>
                     </div>
+                    {/* Письмо так и не пришло (иностранная почта, фильтры) — регистрация без письма. */}
+                    <OAuthButtons providers={oauthProviders} apply={pending?.num} orEmail={false} lead="Письмо не приходит? Зарегистрируйтесь без него — через ваш аккаунт:" />
                     {challenge?.devCode && <div className={sty.cf8e1b45}>Режим разработки: код {challenge.devCode} (письма не отправляются, а пишутся в журнал)</div>}
                     </>)}
                     <label className={sty.c2ff6e93}>
