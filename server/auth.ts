@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import { findBadField } from '@/lib/moderation';
 import { cityPoint } from '@/lib/city-point';
 import {
-  EMAIL_RE, parseIdentifier, sanitizeSignup, signupTextFields, takenMessage,
+  EMAIL_RE, parseIdentifier, sanitizeSignup, signupTextFields, takenMessage, unreachableEmail, UNREACHABLE_EMAIL_MSG,
   validateContacts, validateProfile, type Role, type SignupInput
 } from '@/lib/validation';
 import { config } from './config';
@@ -380,6 +380,10 @@ export async function startRecover(identifier: unknown, ctx: Ctx): Promise<CodeS
   if (!raw) throw new AppError(422, 'Укажите почту или логин аккаунта — код придёт на почту аккаунта.', 'identifier');
   const id = parseIdentifier(raw);
   if (id.kind === 'invalid') throw new AppError(422, id.message, 'identifier');
+  // Код на Proton не дойдёт (lib/validation.ts) — сразу говорим, куда писать. Существует ли аккаунт, этим не раскрываем.
+  if (id.kind === 'email' && unreachableEmail(id.email)) {
+    throw new AppError(422, 'На почту Proton письма с кодом не доходят. Напишите в поддержку на ' + config.supportEmail() + ' — укажите логин, поможем войти.', 'identifier');
+  }
   if (ctx.ip) await limitOrThrow(`recover:ip:${ctx.ip}`, 20, 3600, 'Слишком много запросов — попробуйте позже.');
 
   const user = await one<{ id: string; email: string }>(
@@ -446,6 +450,7 @@ export async function startEmailChange(userId: string, raw: unknown, ctx: Ctx): 
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const email = typeof r.email === 'string' ? r.email.trim().slice(0, 200) : '';
   if (!EMAIL_RE.test(email)) throw new AppError(422, 'Проверьте e-mail — похоже, в адресе опечатка.', 'email');
+  if (unreachableEmail(email)) throw new AppError(422, UNREACHABLE_EMAIL_MSG, 'email');
   const me = await one<{ password_hash: string; email: string }>('SELECT password_hash, email FROM users WHERE id = $1', [userId]);
   if (!me) throw new AppError(401, 'Нужно войти в аккаунт.');
   if (me.email.toLowerCase() === email.toLowerCase()) throw new AppError(422, 'Это ваш текущий адрес.', 'email');

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GEAR, GEAR_FOR, JOB_TYPE_IDS, NO_GEAR } from '@/lib/catalog';
-import { EMAIL_RE, parseIdentifier, sanitizeSignup } from '@/lib/validation';
+import { contactsMessage, contactsMissing, EMAIL_RE, parseIdentifier, sanitizeSignup, unreachableEmail } from '@/lib/validation';
 
 describe('почта', () => {
   it.each(['ivan@mail.ru', 'ivan.petrov+work@yandex.ru', 'a@xn--80a1acny.xn--p1ai', 'a_b@sub.domain.co.uk'])('подходит: %s', e => {
@@ -33,5 +33,17 @@ describe('инвентарь', () => {
       expect(JOB_TYPE_IDS).toContain(skill);
       for (const g of gear) expect(GEAR).toContain(g);
     }
+  });
+});
+
+describe('почта, на которую письма не уходят', () => {
+  it.each(['ivan@proton.me', 'Ivan@ProtonMail.com', 'ivan@protonmail.ch', 'ivan@pm.me'])('Proton: %s', e => {
+    expect(unreachableEmail(e)).toBe(true);
+    expect(contactsMissing({ name: 'Иван Петров', email: e, login: 'ivan_p', password: 'Test-pass-123', city: 'Москва' })).toEqual(['email']);
+    expect(contactsMessage('email', e)).toMatch(/Proton/);
+  });
+
+  it.each(['ivan@gmail.com', 'ivan@mail.ru', 'ivan@proton.me.example.com', 'pm.me@gmail.com'])('остальные — можно: %s', e => {
+    expect(unreachableEmail(e)).toBe(false);
   });
 });

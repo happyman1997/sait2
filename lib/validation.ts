@@ -12,6 +12,14 @@ export const LOGIN_RE = /^[a-zA-Z0-9._]{3,20}$/;
 // на строке «a@a.a.a.…» думало секундами — один запрос на вход подвешивал сервер).
 export const EMAIL_RE = /^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$/;
 
+/**
+ * Почты, на которые наш почтовый сервер (Яндекс 360) письма не отправляет: отказ «550 5.1.1 Recipient address
+ * rejected: not allowed» ещё до доставки. Код подтверждения на них не придёт — такой адрес сразу не принимаем.
+ */
+const UNREACHABLE_EMAIL = /@(proton\.me|protonmail\.com|protonmail\.ch|pm\.me)$/i;
+export const unreachableEmail = (email: string) => UNREACHABLE_EMAIL.test(email.trim());
+export const UNREACHABLE_EMAIL_MSG = 'На почту Proton письма с кодом не доходят — наш почтовый сервер не может на неё отправлять. Укажите другую почту: Gmail, Яндекс, Mail.ru.';
+
 /** Почта или логин: есть «@» — почта, иначе логин. */
 export function parseIdentifier(raw: string): { kind: 'email'; email: string } | { kind: 'login'; login: string } | { kind: 'invalid'; message: string } {
   const t = String(raw || '').trim();
@@ -69,7 +77,8 @@ export function contactsMissing(c: Partial<Contacts>, opts: { requirePassword?: 
   const miss: string[] = [];
   const name = (c.name || '').trim();
   if (name.length < 2 || !PERSON_NAME.test(name)) miss.push('name');
-  if (!EMAIL_RE.test((c.email || '').trim())) miss.push('email');
+  const email = (c.email || '').trim();
+  if (!EMAIL_RE.test(email) || unreachableEmail(email)) miss.push('email');
   if (!LOGIN_RE.test((c.login || '').trim())) miss.push('login');
   if (opts.requirePassword !== false && passwordProblem(c.password || '', { login: c.login, email: c.email })) miss.push('password');
   if (!(c.city || '').trim()) miss.push('city');
@@ -81,7 +90,8 @@ export function contactsMessage(field: string, email: string, c: Partial<Contact
     case 'name': return (c.name || '').trim().length < 2 ? 'Укажите имя и фамилию — их видит вторая сторона в чате.' : NAME_RULE;
     case 'login': return 'Придумайте логин: 3–20 символов — латиница, цифры, точка или подчёркивание.';
     case 'password': return passwordProblem(c.password || '', { login: c.login, email: c.email }) || 'Придумайте пароль.';
-    case 'email': return email.trim() ? 'Проверьте e-mail — похоже, в адресе опечатка.' : 'Укажите e-mail — на него придёт код подтверждения, по нему же вход.';
+    case 'email': return !email.trim() ? 'Укажите e-mail — на него придёт код подтверждения, по нему же вход.'
+      : unreachableEmail(email) ? UNREACHABLE_EMAIL_MSG : 'Проверьте e-mail — похоже, в адресе опечатка.';
     default: return 'Укажите город — по нему подбираются смены рядом.';
   }
 }

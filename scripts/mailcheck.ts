@@ -27,6 +27,8 @@ function advice(e: unknown): string {
   if (/ETIMEDOUT|ECONNREFUSED|ECONNRESET|ESOCKET|ECONNECTION|EHOSTUNREACH|greeting|timeout/i.test(s))
     return 'Сайт не может связаться с почтовым сервером: похоже, хостинг закрывает исходящую почту. Напишите в поддержку хостинга: ' +
       '«Прошу открыть исходящие соединения на порт 465 (SMTP) к smtp.yandex.ru для сервера ' + (process.env.SERVER_IP || '<IP сервера>') + ' — сайт отправляет письма с кодами через свою почту».';
+  if (/not allowed/i.test(s))
+    return 'Почтовый сервер не отправляет письма на этот адрес (так у Яндекса с Proton) — сайт такие адреса уже не принимает. Проверьте на Gmail или Mail.ru.';
   if (/recipient|5\.1\.1|mailbox unavailable|no such user/i.test(s))
     return 'Почта отказалась принять письмо для этого адреса получателя — проверьте, что адрес набран без ошибок.';
   return 'Пришлите эти строки — разберёмся.';

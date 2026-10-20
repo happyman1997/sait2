@@ -79,6 +79,13 @@ afterAll(async () => {
 });
 
 describe('регистрация', () => {
+  it('почта Proton: Яндекс на неё не отправляет — адрес не принимаем и объясняем, а писем не шлём', async () => {
+    await expectErr(auth.startSignup(freelancer({ email: 'ivan@proton.me' }), ctx), 'email', /Proton/);
+    await expectErr(auth.checkContacts(freelancer({ email: 'ivan@PROTONMAIL.com' })), 'email', /Proton/);
+    await expectErr(auth.startRecover('ivan@pm.me', ctx), 'identifier', /поддержку/);
+    expect(mails).toEqual([]);
+  });
+
   it('полный цикл исполнителя: код в письме → аккаунт с подтверждённой почтой, профиль, сессия', async () => {
     const s = await auth.startSignup(freelancer(), ctx);
     expect(s.sentTo).toBe('d@mail.ru');
