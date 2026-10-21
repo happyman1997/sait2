@@ -1,4 +1,4 @@
-// Ежедневная сводка владельцу на почту (deploy/digest.sh → scripts/digest.ts): что было на площадке за сутки и что
+// Сводка владельцу по запросу (deploy/digest.sh → scripts/digest.ts): что было на площадке за сутки (или за N дней) и что
 // требует внимания — жалобы и споры без решения, недоставленные письма, а от сервера — копии, место на диске,
 // сертификат, ответ сайта. Сервер присылает свои проверки строками «ключ=значение» на stdin (parseHostFacts).
 import { plural } from '@/lib/jobs';
@@ -59,9 +59,9 @@ export type DigestStats = {
   mailFailed: number; stuck: number; staff: number;
 };
 
-/** Цифры площадки за сутки до `now` и на сейчас. */
-export async function collectStats(now = new Date(), db: Db = pool()): Promise<DigestStats> {
-  const since = new Date(now.getTime() - 86400_000);
+/** Цифры площадки за `period` дней до `now` и на сейчас. */
+export async function collectStats(now = new Date(), period = 1, db: Db = pool()): Promise<DigestStats> {
+  const since = new Date(now.getTime() - period * 86400_000);
   const r = await one<Omit<DigestStats, 'overdueComplaints' | 'overdueDisputes'> & { complaintDates: Date[]; disputeDates: Date[] }>(
     `SELECT
        (SELECT count(*) FROM users WHERE created_at >= $1 AND role = 'freelancer')::int AS "newFl",
@@ -106,8 +106,8 @@ const age = (from: Date, now: Date) => {
   return n < 1 ? 'меньше суток' : days(n);
 };
 
-/** Письмо: тема, текст и сколько пунктов требует внимания (0 — всё в порядке). */
-export function composeDigest(s: DigestStats, host: HostFacts | null, now = new Date()) {
+/** Сводка: заголовок, текст и сколько пунктов требует внимания (0 — всё в порядке). period — дней, 1 — сутки. */
+export function composeDigest(s: DigestStats, host: HostFacts | null, now = new Date(), period = 1) {
   const dir = host?.dir || '/opt/arena';
   const site = config.publicUrl().replace(/\/$/, '');
   const urgent: string[] = [];
@@ -140,12 +140,13 @@ export function composeDigest(s: DigestStats, host: HostFacts | null, now = new 
   }
 
   const lines: string[] = [];
-  const since = new Date(now.getTime() - 86400_000);
-  lines.push(`Сводка «Арены Работ» за сутки: с ${dayMonth(since)} ${hm(since)} по ${dayMonth(now)} ${hm(now)} (${config.timeZone() === 'Europe/Moscow' ? 'время московское' : config.timeZone()}).`, '');
+  const since = new Date(now.getTime() - period * 86400_000);
+  const span = period === 1 ? 'сутки' : days(period);
+  lines.push(`Сводка «Арены Работ» за ${span}: с ${dayMonth(since)} ${hm(since)} по ${dayMonth(now)} ${hm(now)} (${config.timeZone() === 'Europe/Moscow' ? 'время московское' : config.timeZone()}).`, '');
   lines.push('ТРЕБУЕТ ВНИМАНИЯ');
   if (urgent.length) urgent.forEach(u => lines.push('• ' + u));
   else lines.push('Ничего — всё в порядке.');
-  lines.push('', 'ЗА СУТКИ');
+  lines.push('', 'ЗА ' + span.toUpperCase());
   lines.push(`Регистраций: ${s.newFl + s.newEmp}` + (s.newFl + s.newEmp ? ` — исполнителей ${s.newFl}, работодателей ${s.newEmp}` : ''));
   lines.push(`Новых заказов: ${s.newJobs}`);
   lines.push(`Откликов: ${s.apps}, наймов: ${s.hires}`);
@@ -165,17 +166,14 @@ export function composeDigest(s: DigestStats, host: HostFacts | null, now = new 
     if (host.updates) lines.push(`Обновления безопасности: ждут установки ${host.updates} (ставятся автоматически)`);
   }
   if (notes.length) { lines.push('', 'НЕ СРОЧНО'); notes.forEach(n => lines.push('• ' + n)); }
-  lines.push('', '—',
-    'Сводка приходит каждый день в 9 утра. Не пришла — значит, не работает сайт или его почта: зайдите на сервер и запустите',
-    `cd ${dir} && bash deploy/launch.sh`,
-    'Отключить сводку: строка DIGEST_EMAIL=off в .env.production.');
+  lines.push('', '—', `Ещё раз: bash ${dir}/deploy/digest.sh · за неделю: … digest.sh 7 · на почту: … digest.sh --mail`);
 
-  const subject = `Арена Работ: сводка за ${dayMonth(now)} — ` + (urgent.length ? `требует внимания (${urgent.length})` : 'всё в порядке');
+  const subject = `Арена Работ: сводка ${period === 1 ? 'за ' + dayMonth(now) : 'за ' + span + ' по ' + dayMonth(now)} — ` +
+    (urgent.length ? `требует внимания (${urgent.length})` : 'всё в порядке');
   return { subject, text: lines.join('\n'), attention: urgent.length };
 }
 
-/** Кому слать: DIGEST_EMAIL, иначе почта владельца из реквизитов (OPERATOR_EMAIL). off — не слать. */
+/** Куда отправить по --mail: DIGEST_EMAIL, иначе почта владельца из реквизитов (OPERATOR_EMAIL). */
 export function digestRecipient(): string | null {
-  const to = (process.env.DIGEST_EMAIL || process.env.OPERATOR_EMAIL || '').trim();
-  return !to || to.toLowerCase() === 'off' ? null : to;
+  return (process.env.DIGEST_EMAIL || process.env.OPERATOR_EMAIL || '').trim() || null;
 }

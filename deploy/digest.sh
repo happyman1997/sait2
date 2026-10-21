@@ -1,25 +1,15 @@
 #!/usr/bin/env bash
-# Ежедневная сводка владельцу на почту: что было на площадке за сутки и что требует внимания (server/digest.ts).
+# Сводка владельцу по запросу: что было на площадке и что требует внимания (server/digest.ts).
 # Сервер добавляет свои проверки: резервная копия, место на диске, сертификат, ответ сайта, обновления системы.
-#   Отправить сейчас:          bash /opt/arena/deploy/digest.sh
-#   Показать, не отправляя:    bash /opt/arena/deploy/digest.sh --print
-# Cron (ставит deploy/launch.sh) запускает его каждый час с --cron: письмо уходит один раз — в 9 утра по времени
-# площадки (APP_TIME_ZONE, по умолчанию московское; другой час — DIGEST_HOUR=08). Кому — DIGEST_EMAIL, иначе
-# OPERATOR_EMAIL; DIGEST_EMAIL=off — не присылать.
+#   За сутки, на экран:        bash /opt/arena/deploy/digest.sh
+#   За 7 дней:                 bash /opt/arena/deploy/digest.sh 7
+#   И ещё письмом себе:        bash /opt/arena/deploy/digest.sh --mail   (на OPERATOR_EMAIL или DIGEST_EMAIL)
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 ENV=.env.production
 [ -f "$ENV" ] || { echo "Нет $ENV — сначала: bash deploy/setup.sh"; exit 1; }
 get() { grep -E "^$1=" "$ENV" | tail -1 | cut -d= -f2- || true; }
 dc() { docker compose -f docker-compose.prod.yml --env-file "$ENV" "$@"; }
-
-if [ "${1:-}" = --cron ]; then
-  shift
-  [ "$(get DIGEST_EMAIL)" = off ] && exit 0
-  tz=$(get APP_TIME_ZONE); hour=$(get DIGEST_HOUR)
-  [[ "$hour" =~ ^[0-9]{1,2}$ ]] || hour=9
-  [ "$(TZ=${tz:-Europe/Moscow} date +%-H)" = "$((10#$hour))" ] || exit 0
-fi
 domain=$(get SERVER_NAME)
 
 facts() {
@@ -50,4 +40,5 @@ facts() {
   if [ -f /var/run/reboot-required ]; then echo "reboot=1"; fi
 }
 
+[ -n "$(dc ps -q app 2>/dev/null)" ] || { echo "Сайт не запущен — сводку не собрать. Запустите: cd $(pwd) && bash deploy/launch.sh"; exit 1; }
 facts | dc exec -T app node scripts/digest.mjs "$@"

@@ -1,4 +1,4 @@
-// Ежедневная сводка владельцу: проверки сервера, текст письма, цифры из базы (настоящий Postgres).
+// Сводка владельцу по запросу: проверки сервера, текст, цифры из базы (настоящий Postgres).
 import { beforeAll, describe, expect, it } from 'vitest';
 
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL || 'postgres://arena:arena@localhost:5432/arena_test';
@@ -71,14 +71,21 @@ describe('сводка: письмо', () => {
     expect(d.attention).toBe(1);
   });
 
-  it('кому: DIGEST_EMAIL, иначе OPERATOR_EMAIL; off — никому', () => {
+  it('за неделю — в заголовке, разделе и теме', () => {
+    const d = composeDigest(calm, okHost, NOW, 7);
+    expect(d.subject).toBe('Арена Работ: сводка за 7 дней по 22 октября — всё в порядке');
+    expect(d.text).toContain('Сводка «Арены Работ» за 7 дней: с 15 октября 09:07 по 22 октября 09:07');
+    expect(d.text).toContain('\nЗА 7 ДНЕЙ\n');
+  });
+
+  it('кому по --mail: DIGEST_EMAIL, иначе OPERATOR_EMAIL', () => {
     const keep = { d: process.env.DIGEST_EMAIL, o: process.env.OPERATOR_EMAIL };
     try {
       process.env.OPERATOR_EMAIL = 'owner@x.ru'; delete process.env.DIGEST_EMAIL;
       expect(digestRecipient()).toBe('owner@x.ru');
       process.env.DIGEST_EMAIL = 'me@y.ru';
       expect(digestRecipient()).toBe('me@y.ru');
-      process.env.DIGEST_EMAIL = 'OFF';
+      delete process.env.DIGEST_EMAIL; delete process.env.OPERATOR_EMAIL;
       expect(digestRecipient()).toBeNull();
     } finally {
       for (const [k, v] of [['DIGEST_EMAIL', keep.d], ['OPERATOR_EMAIL', keep.o]] as const) { if (v == null) delete process.env[k]; else process.env[k] = v; }
