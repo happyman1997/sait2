@@ -9,6 +9,8 @@ cd "$(dirname "$0")/.."
 mkdir -p deploy/backups
 dc() { docker compose -f docker-compose.prod.yml --env-file "${ENV_FILE:-.env.production}" "$@"; }
 stamp=$(date +%Y%m%d-%H%M)
+# Заголовок запуска в журнале: по нему deploy/digest.sh находит ошибки последней копии.
+echo "== $(date '+%Y-%m-%d %H:%M') резервная копия"
 
 # В хранилище; код 3 — хранилище не настроено (предупреждаем, но копия на сервере есть).
 offsite() {

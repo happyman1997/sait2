@@ -106,12 +106,14 @@ if [ "$st" != healthy ]; then
   exit 1
 fi
 
-echo "== 5/5 Ежедневные задачи: продление сертификата, резервная копия"
+echo "== 5/5 Ежедневные задачи: продление сертификата, резервная копия, сводка на почту"
+mkdir -p deploy/backups
 cat > /etc/cron.d/arena <<CRON
 SHELL=/bin/sh
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 15 4 * * * root docker run --rm -v /etc/letsencrypt:/etc/letsencrypt -v $vol:/var/www/certbot certbot/certbot renew --webroot -w /var/www/certbot -q && cd $DIR && docker compose -f docker-compose.prod.yml --env-file $ENV exec -T nginx nginx -s reload
 30 3 * * * root cd $DIR && sh deploy/backup.sh >> deploy/backups/backup.log 2>&1
+7 * * * * root cd $DIR && bash deploy/digest.sh --cron >> deploy/backups/digest.log 2>&1
 CRON
 chmod 644 /etc/cron.d/arena
 
