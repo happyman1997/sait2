@@ -42,6 +42,8 @@ describe('сводка: письмо', () => {
     expect(d.text).toContain('Сертификат: действует ещё 61 день');
     expect(d.text).toContain('Последняя копия: arena-20261022-0330.dump (1.2M), 6 ч назад, есть в хранилище');
     expect(d.text).not.toContain('НЕ СРОЧНО');
+    const fresh = composeDigest({ ...calm, openComplaints: 1, oldestComplaint: new Date(NOW.getTime() - 5 * 3600_000) }, okHost, NOW);
+    expect(fresh.text).toContain('Ждут решения: жалоб 1; самому старому — меньше суток.');
   });
 
   it('проблемы сервера и площадки — в «Требует внимания», с командами', () => {

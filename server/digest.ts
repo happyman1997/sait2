@@ -101,7 +101,10 @@ const dayMonth = (d: Date) => new Intl.DateTimeFormat('ru-RU', { timeZone: confi
 const hm = (d: Date) => new Intl.DateTimeFormat('ru-RU', { timeZone: config.timeZone(), hour: '2-digit', minute: '2-digit' }).format(d);
 const days = (n: number) => n + ' ' + plural(n, 'день', 'дня', 'дней');
 const ago = (h: number) => (h < 48 ? Math.round(h) + ' ч назад' : days(Math.floor(h / 24)) + ' назад');
-const age = (from: Date, now: Date) => days(Math.max(0, Math.floor((now.getTime() - new Date(from).getTime()) / 86400_000)));
+const age = (from: Date, now: Date) => {
+  const n = Math.floor((now.getTime() - new Date(from).getTime()) / 86400_000);
+  return n < 1 ? 'меньше суток' : days(n);
+};
 
 /** Письмо: тема, текст и сколько пунктов требует внимания (0 — всё в порядке). */
 export function composeDigest(s: DigestStats, host: HostFacts | null, now = new Date()) {
