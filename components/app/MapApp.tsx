@@ -116,6 +116,8 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
   // ─── Выбранный заказ ───
   const [selected, setSelected] = useState<number | null>(initialJob);
   const [detail, setDetail] = useState<JobDetail | null>(null);
+  // Только что опубликованный заказ — в карточке сразу «Поделиться»: разослать по чатам дома и района.
+  const [fresh, setFresh] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [hover, setHover] = useState<number | null>(null);
   const [stackPick, setStackPick] = useState<number[] | null>(null);
@@ -415,7 +417,7 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
 
   const finishPublish = (j: JobDetail, wasEdit: boolean) => {
     flash(wasEdit ? 'Изменения сохранены — откликнувшимся ушло уведомление' : 'Заказ опубликован — № ' + jobNum(j.num));
-    if (!wasEdit) { writeLS(DRAFT_KEY, null); setKept(null); }
+    if (!wasEdit) { writeLS(DRAFT_KEY, null); setKept(null); setFresh(j.num); }
     setFormState(null); setEditing(null); setFormErrs({}); setFormError(''); setFormStep(1); setAddrNote('');
     setSelected(j.num);
     setDetail(j);
@@ -636,7 +638,8 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
 
           {showDetail && (
             <JobDetailPanel key={detail!.num} job={detail!} role={role} others={jobs} busy={busy}
-              onClose={() => setSelected(null)} onApply={apply} onWithdraw={withdraw} onCancel={cancelJob} onEdit={startEdit} onOpenJob={select}
+              openShare={detail!.num === fresh}
+              onClose={() => { setSelected(null); setFresh(null); }} onApply={apply} onWithdraw={withdraw} onCancel={cancelJob} onEdit={startEdit} onOpenJob={select}
               act={act} onChat={thread => live.openChat(detail!.num, thread)}
               onReview={(t) => live.openReview({ ...t, num: detail!.num, title: detail!.title + ' · ' + dateLabel(detail!.date), onSaved: patchJob })} />
           )}

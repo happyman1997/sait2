@@ -239,6 +239,20 @@ describe('карточка и отклик', () => {
     expect([og.address, og.addressHidden, og.employer.name]).toEqual(['Москва, ул. Тверская, 18', false, 'УК «Тверская»']);
   });
 
+  it('картинка-превью ссылки — по гостевой карточке: у частного заказчика без дома', async () => {
+    const { GET } = await import('@/app/api/og/job/[num]/route');
+    const { jobOgData } = await import('@/server/og');
+    const priv = await mkUser('employer', 'ivan_og', '9170000002', 'Иван Петров');
+    await query(`UPDATE employer_profiles SET org_type = 'частное лицо', org_name = NULL WHERE user_id = $1`, [priv.id]);
+    const j = await jobs.createJob(form({ address: 'Москва, ул. Тверская, 18, кв. 5' }), priv, today);
+    expect(jobOgData(await jobs.getJob(j.num, null)).place).toBe('Москва, ул. Тверская');
+    const get = (num: string) => GET(new Request('http://localhost/api/og/job/' + num), { params: Promise.resolve({ num }) });
+    const res = await get(String(j.num));
+    expect([res.status, res.headers.get('content-type')]).toEqual([200, 'image/png']);
+    expect((await get('999999')).status).toBe(404);
+    expect((await get('abc')).status).toBe(404);
+  });
+
   it('отклик: работодателю нельзя, повторно нельзя, отзыв и повторный отклик можно', async () => {
     const j = await jobs.createJob(form(), emp, today);
     await expectErr(jobs.applyToJob(j.num, {}, emp2, today), undefined, /только исполнитель/);

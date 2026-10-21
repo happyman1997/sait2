@@ -19,6 +19,10 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // Docker-образ: минимальный сервер с только нужными модулями (Dockerfile задаёт NEXT_OUTPUT=standalone).
   output: process.env.NEXT_OUTPUT === 'standalone' ? 'standalone' : undefined,
+  // Шрифт картинок-превью (server/og.tsx) читается с диска — в образ его нужно взять явно.
+  outputFileTracingIncludes: {
+    '/api/og/**': ['./node_modules/@fontsource/golos-text/files/golos-text-{cyrillic,latin,latin-ext}-{500,700}-normal.woff']
+  },
   async headers() {
     return [{ source: '/:path*', headers: SECURITY_HEADERS }];
   }

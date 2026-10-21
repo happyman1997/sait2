@@ -4,6 +4,7 @@ import { dateLabel, money } from '@/lib/jobs';
 import { currentUser } from '@/server/http';
 import { getJob } from '@/server/jobs';
 import { meOf } from '@/server/me';
+import { jobOgData, OG_SIZE, ogVersion } from '@/server/og';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,10 +28,13 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
     const about = (j.repeat ? 'Серия выходов с ' : 'Выход ') + dateLabel(j.date) + '. ' + j.description.replace(/\s+/g, ' ').trim();
     const description = about.length > 200 ? about.slice(0, 197).replace(/\s+\S*$/, '') + '…' : about;
     const closed = j.status !== 'open' && j.status !== 'staffed';
+    // Картинка-превью: оплата, вид работ, место, дата. Версия в адресе меняется вместе с условиями заказа.
+    const images = [{ url: '/api/og/job/' + num + '?v=' + ogVersion(jobOgData(j)), ...OG_SIZE, alt: title }];
     return {
       title, description,
       alternates: { canonical: '/?job=' + num },
-      openGraph: { title, description, type: 'website', locale: 'ru_RU', siteName: 'Арена Работы' },
+      openGraph: { title, description, type: 'website', locale: 'ru_RU', siteName: 'Арена Работы', url: '/?job=' + num, images },
+      twitter: { card: 'summary_large_image', title, description, images },
       // Закрытые и отменённые заказы поисковикам не нужны.
       robots: closed ? { index: false, follow: true } : undefined
     };

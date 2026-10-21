@@ -1,0 +1,12 @@
+.panel { margin-top: 14px; padding: 12px 14px 14px; }
+.head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.close { height: 28px; font-size: 13px; }
+.hint { font-size: 13.5px; line-height: 1.45; margin-top: 4px; color: color-mix(in srgb, var(--color-text) 72%, transparent); }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+/* Самые узкие телефоны: «Скопировать ссылку» в пол-ширины не помещается. */
+@media (max-width: 359px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.item { min-height: 44px; justify-content: flex-start; padding: 6px 12px; text-align: left; }
+.wide { grid-column: 1 / -1; justify-content: center; }
+.dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.manual { margin-top: 10px; }
+.manual .hint { margin-bottom: 6px; }

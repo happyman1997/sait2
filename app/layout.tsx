@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { ModerationGuard } from '@/components/ModerationGuard';
 import { ToastProvider } from '@/components/Toast';
 import { config } from '@/server/config';
+import { OG_SIZE } from '@/server/og';
 // Шрифт Golos Text — со своего сервера (раньше — Google Fonts: IP посетителя уходил за рубеж).
 import '@fontsource/golos-text/400.css';
 import '@fontsource/golos-text/500.css';
@@ -16,7 +17,10 @@ export function generateMetadata(): Metadata {
   return {
     metadataBase: new URL(config.publicUrl()),
     title: 'Арена Работы — сезонные смены на карте',
-    description: 'Уборка снега, покос, благоустройство, стройка: работодатели публикуют смены точкой на карте, исполнители откликаются рядом с домом.'
+    description: 'Уборка снега, покос, благоустройство, стройка: работодатели публикуют смены точкой на карте, исполнители откликаются рядом с домом.',
+    // Превью ссылки в мессенджерах: картинка сайта; заголовок и описание — свои у каждой страницы (<title>).
+    openGraph: { type: 'website', locale: 'ru_RU', siteName: 'Арена Работы', images: [{ url: '/api/og/site', ...OG_SIZE, alt: 'Арена Работы — сезонные смены на карте' }] },
+    twitter: { card: 'summary_large_image' }
   };
 }
 

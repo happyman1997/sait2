@@ -124,3 +124,7 @@
   :where(.c6261e49) { width: 34px !important; height: 34px !important; }
   :where(.c298aaa6) { font-size: 20px !important; letter-spacing: .08em !important; }
 }
+/* Самые узкие телефоны (320 px): название мельче — иначе наезжает на «Войти». */
+@media (max-width: 359.98px) {
+  :where(.c298aaa6) { font-size: 16px !important; letter-spacing: .04em !important; }
+}

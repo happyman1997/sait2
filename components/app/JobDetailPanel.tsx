@@ -7,6 +7,7 @@ import { css } from '@/lib/css';
 import { crewOf, dateLabel, jobNum, jobStatus, localISO, money, type JobDetail, type JobSummary } from '@/lib/jobs';
 import { ApplicantsBlock, LeaveShiftForm, MoveDateForm, reveal, ShiftBlock, type Act, type ReviewOpen } from './ShiftBlock';
 import { SeriesBlock } from './SeriesBlock';
+import { ShareJob } from './ShareJob';
 import { useLive } from './Live';
 import { Corners, LABEL } from './ui';
 import sty from './JobDetailPanel.module.css';
@@ -38,7 +39,7 @@ function brief(j: JobDetail) {
   ];
 }
 
-export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw, onCancel, onEdit, onOpenJob, busy, act, onChat, onReview }: {
+export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw, onCancel, onEdit, onOpenJob, busy, act, onChat, onReview, openShare = false }: {
   job: JobDetail;
   role: Role;
   others: JobSummary[];
@@ -52,8 +53,13 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
   act: Act;
   onChat: (thread: string) => void;
   onReview: ReviewOpen;
+  /** Только что опубликованный заказ: «Поделиться» сразу открыт. */
+  openShare?: boolean;
 }) {
   const [reqOk, setReqOk] = useState(false);
+  // Делиться есть смысл, пока идёт набор.
+  const shareable = job.status === 'open';
+  const [share, setShare] = useState(openShare && shareable);
   const [more, setMore] = useState(false);
   const [person, setPerson] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -127,7 +133,10 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
     <div>
       <div className={sty.cf5c1e62}>
         <div style={css(LABEL)}>Заказ {jobNum(job.num)}{job.district ? ' · ' + job.district : ''}</div>
-        <button className={'btn btn-ghost ' + sty.c4b8d758} onClick={onClose}>Закрыть</button>
+        <span className={sty.headBtns}>
+          {shareable && <button className={'btn btn-ghost ' + sty.c4b8d758} onClick={() => setShare(v => !v)} aria-expanded={share}>Поделиться</button>}
+          <button className={'btn btn-ghost ' + sty.c4b8d758} onClick={onClose}>Закрыть</button>
+        </span>
       </div>
       <h3 className={sty.ce5f1500}>{job.title}</h3>
       <div className={sty.cf74fada}>
@@ -135,6 +144,7 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
         <span className={s.cls}>{s.label}</span>
         {job.mine && <span className="tag tag-neutral">ваш заказ</span>}
       </div>
+      {share && shareable && <ShareJob job={job} onClose={() => setShare(false)} />}
 
       {!job.mine && (
         <div className={'blueprint ' + sty.c19ead0a}>
