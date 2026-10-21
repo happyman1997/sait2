@@ -24,7 +24,7 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
   if (!num) return { alternates: { canonical: '/' } };
   try {
     const j = await getJob(num, null);
-    const title = j.title + ' — ' + money(j.pay, j.unit) + ' · ' + j.address + ' — Арена Работы';
+    const title = j.title + ' — ' + money(j.pay, j.unit) + ' · ' + j.address + ' — Арена Работ';
     const about = (j.repeat ? 'Серия выходов с ' : 'Выход ') + dateLabel(j.date) + '. ' + j.description.replace(/\s+/g, ' ').trim();
     const description = about.length > 200 ? about.slice(0, 197).replace(/\s+\S*$/, '') + '…' : about;
     const closed = j.status !== 'open' && j.status !== 'staffed';
@@ -33,7 +33,7 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
     return {
       title, description,
       alternates: { canonical: '/?job=' + num },
-      openGraph: { title, description, type: 'website', locale: 'ru_RU', siteName: 'Арена Работы', url: '/?job=' + num, images },
+      openGraph: { title, description, type: 'website', locale: 'ru_RU', siteName: 'Арена Работ', url: '/?job=' + num, images },
       twitter: { card: 'summary_large_image', title, description, images },
       // Закрытые и отменённые заказы поисковикам не нужны.
       robots: closed ? { index: false, follow: true } : undefined

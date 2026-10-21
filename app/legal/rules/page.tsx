@@ -3,7 +3,7 @@ import { REVIEW_EDIT_MIN } from '@/lib/jobs';
 import { operator } from '@/server/operator';
 import sty from '@/components/LegalPage.module.css';
 
-export const metadata = { title: 'Правила площадки — Арена Работы' };
+export const metadata = { title: 'Правила площадки — Арена Работ' };
 export const dynamic = 'force-dynamic';
 
 const MARKS: [string, string, string, string][] = [

@@ -17,6 +17,7 @@ import { useNarrow } from '@/components/useNarrow';
 import { CityInput } from '@/components/CityInput';
 import { SkillInput } from '@/components/SkillInput';
 import { parseSkills } from '@/lib/skills';
+import { BrandLogo } from '@/components/BrandLogo';
 import { PasswordInput } from '@/components/PasswordInput';
 import sty from './AuthScreen.module.css';
 
@@ -514,7 +515,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
         <div style={css('overflow: hidden; padding: clamp(24px, 4vh, 46px) clamp(24px, 3.4vw, 48px); display: ' + (narrow ? 'none' : 'flex') + '; flex-direction: column; justify-content: space-between; gap: 40px; min-width: 0; box-sizing: border-box; background: var(--ink); color: #f4f2ef')}>
           <div>
             <div className={sty.cd90b459}>
-              <div className={'fh ' + sty.c5f5a148}>Арена Работы</div>
+              <BrandLogo width={104} />
               <div className={sty.c191c80f}>каждая точка — работа</div>
             </div>
             <div className={sty.cc7dbe43} />

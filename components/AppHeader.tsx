@@ -31,12 +31,12 @@ export function AppHeader({ me, onHome, unread = 0, onChat, chatActive = false, 
   return (
     // На карте шапка — во всю ширину, как карта и левая панель под ней; на остальных страницах — по колонке текста.
     <div className={('nav dark-bar' + (wideOnly ? ' only-wide' : '')) + ' ' + sty.c8d4eda9 + (path === '/' ? ' ' + sty.full : '')}>
-      <Link href="/" onClick={onHome} title="На главную" aria-label="Арена Работы — на главную" className={sty.ca4a0310}>
+      <Link href="/" onClick={onHome} title="На главную" aria-label="Арена Работ — на главную" className={sty.ca4a0310}>
         {/* Знак площадки — тот же, что в иконке сайта (lib/brand.ts, design/logo/). */}
         <span aria-hidden="true" className={sty.c6261e49}>
           <BrandMark width="66%" />
         </span>
-        <span className={'fh ' + sty.c298aaa6}>Арена Работы</span>
+        <span className={'fh ' + sty.c298aaa6}>Арена Работ</span>
       </Link>
 
       {/* На телефоне «Создать профиль» — в строке под шапкой карты, шапка остаётся в одну строку. */}

@@ -209,7 +209,7 @@ export function ProfilePage() {
           </div>
 
           <div style={css('border-top: 1px solid var(--color-divider); padding-top: 18px; font-size: 12.5px; line-height: 1.55; max-width: 720px; ' + MUTED)}>
-            Арена Работы — платформа сезонных работ. Площадка — посредник: договор и оплату стороны оформляют между собой. Картография: {SELF_HOSTED_MAP ? <>тайлы © <a href="https://openmaptiles.org" target="_blank" rel="noreferrer">OpenMapTiles</a></> : <>тайлы <a href="https://openfreemap.org" target="_blank" rel="noreferrer">OpenFreeMap</a></>}, данные © участники <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>, ODbL.
+            Арена Работ — платформа сезонных работ. Площадка — посредник: договор и оплату стороны оформляют между собой. Картография: {SELF_HOSTED_MAP ? <>тайлы © <a href="https://openmaptiles.org" target="_blank" rel="noreferrer">OpenMapTiles</a></> : <>тайлы <a href="https://openfreemap.org" target="_blank" rel="noreferrer">OpenFreeMap</a></>}, данные © участники <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>, ODbL.
             <DocLinks style="margin-top: 8px" />
           </div>
         </div>

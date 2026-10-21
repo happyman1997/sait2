@@ -85,7 +85,7 @@ cur_from=info@$DOMAIN
 read -r -p "Ящик [${cur_from:-info@$DOMAIN}]: " box || box=''
 box=$(trim "${box:-${cur_from:-info@$DOMAIN}}")
 if ! [[ "$box" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]]; then echo "  Это не адрес почты — запустите скрипт ещё раз."; exit 1; fi
-set_kv EMAIL_FROM "Арена Работы <$box>"
+set_kv EMAIL_FROM "Арена Работ <$box>"
 # Пароль приложения Яндекса — 16 латинских букв. Пробелы (если скопировался группами) убираем; другое — переспрашиваем:
 # частая причина «Invalid user or password» — вставилось не то. Тот же ввод второй раз принимается как есть.
 bad=''

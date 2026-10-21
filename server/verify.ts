@@ -30,9 +30,9 @@ export async function sendEmailVerification(viewer: U | null, db: Db = pool()) {
   const link = config.publicUrl() + '/api/me/email/confirm?t=' + token;
   await query(
     `INSERT INTO notification_outbox (user_id, channel, to_addr, subject, body) VALUES ($1, 'email', $2, $3, $4)`,
-    [u.id, me.email, 'Арена Работы: подтвердите e-mail',
+    [u.id, me.email, 'Арена Работ: подтвердите e-mail',
       'Чтобы получать уведомления о сменах на эту почту, подтвердите адрес:\n' + link +
-      '\n\nСсылка действует ' + EMAIL_TOKEN_HOURS + ' часа. Если вы не указывали этот адрес на «Арене Работы», просто удалите письмо.'], db);
+      '\n\nСсылка действует ' + EMAIL_TOKEN_HOURS + ' часа. Если вы не указывали этот адрес на «Арене Работ», просто удалите письмо.'], db);
   return { sent: true, verified: false };
 }
 

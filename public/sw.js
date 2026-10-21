@@ -1,9 +1,9 @@
-// Service Worker «Арены Работы»: только веб-пуш (без кэширования страниц).
+// Service Worker «Арены Работ»: только веб-пуш (без кэширования страниц).
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 
 self.addEventListener('push', (e) => {
-  let m = { title: 'Арена Работы', body: '', url: '/' };
+  let m = { title: 'Арена Работ', body: '', url: '/' };
   try { m = Object.assign(m, e.data ? e.data.json() : {}); } catch (_) { /* пустой или не JSON */ }
   e.waitUntil(self.registration.showNotification(m.title, {
     body: m.body, icon: '/icon-192.png', badge: '/badge-96.png', tag: m.url, renotify: true, data: { url: m.url }

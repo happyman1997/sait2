@@ -20,7 +20,7 @@ function provider(smtpHost: string): { name: string; spf: string; dkim: string; 
   return null;
 }
 
-/** Домен из «Арена Работы <info@arenarabot.ru>» или из логина ящика. */
+/** Домен из «Арена Работ <info@arenarabot.ru>» или из логина ящика. */
 export function senderDomain(emailFrom: string, smtpUser = ''): string {
   const m = /@([^\s>]+)>?\s*$/.exec(emailFrom.trim()) || /@(.+)$/.exec(smtpUser.trim());
   return m ? m[1].toLowerCase() : '';

@@ -1,4 +1,4 @@
-# Развёртывание «Арены Работы»
+# Развёртывание «Арены Работ»
 
 Три контейнера: **Postgres 16**, **приложение** (Next.js в режиме standalone, ~440 МБ с базовым образом Node) и **nginx** (HTTPS, лимит загрузки 10 МБ, поток живых событий без буферизации). Миграции применяются при каждом старте приложения под блокировкой — несколько экземпляров стартуют безопасно.
 
@@ -216,7 +216,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --no-
 
 **Яндекс ID**
 1. Войдите на https://oauth.yandex.ru → «Создать приложение».
-2. Название — «Арена Работы», платформа — «Веб-сервисы».
+2. Название — «Арена Работ», платформа — «Веб-сервисы».
 3. Redirect URI: `https://arenarabot.ru/api/auth/oauth/yandex/callback`. Suggest Hostname: `https://arenarabot.ru`.
 4. Доступы: «Доступ к логину, имени и фамилии, полу» и «Доступ к адресу электронной почты». Доступ к телефону не нужен.
 5. Скопируйте ClientID в `YANDEX_CLIENT_ID`, Client secret — в `YANDEX_CLIENT_SECRET` (`.env.production`).

@@ -27,7 +27,7 @@ export const config = {
   // Почта: console (в лог) | smtp (SMTP_URL, например smtps://user:pass@smtp.yandex.ru:465).
   emailProvider: () => env('EMAIL_PROVIDER', isProd ? undefined : 'console') as 'console' | 'smtp',
   smtpUrl: () => env('SMTP_URL'),
-  emailFrom: () => env('EMAIL_FROM', 'Арена Работы <no-reply@arenarabot.ru>'),
+  emailFrom: () => env('EMAIL_FROM', 'Арена Работ <no-reply@arenarabot.ru>'),
   supportEmail: () => env('SUPPORT_EMAIL', 'support@arenarabot.ru'),
   // Часовой пояс для тихих часов и суточного лимита уведомлений.
   timeZone: () => env('APP_TIME_ZONE', 'Europe/Moscow'),

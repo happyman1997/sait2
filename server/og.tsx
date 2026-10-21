@@ -88,7 +88,7 @@ function Frame({ right, footer, children }: { right?: ReactNode; footer: string;
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <svg width={54} height={46} viewBox={MARK_VIEWBOX}><path fill={C.text} d={MARK_PATH} /></svg>
-          <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: 5, textTransform: 'uppercase' }}>Арена Работы</div>
+          <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: 5, textTransform: 'uppercase' }}>Арена Работ</div>
         </div>
         {right}
       </div>

@@ -26,16 +26,16 @@ export function codeMatches(challengeId: string, code: string, stored: string | 
 }
 
 const LETTER: Record<CodePurpose, { subject: string; why: string }> = {
-  signup: { subject: 'код подтверждения', why: 'Вы регистрируетесь на «Арене Работы».' },
-  recover: { subject: 'код для восстановления пароля', why: 'Кто-то (надеемся, вы) восстанавливает пароль от аккаунта на «Арене Работы».' },
-  email: { subject: 'код для смены почты', why: 'В аккаунте на «Арене Работы» меняют адрес почты на этот.' }
+  signup: { subject: 'код подтверждения', why: 'Вы регистрируетесь на «Арене Работ».' },
+  recover: { subject: 'код для восстановления пароля', why: 'Кто-то (надеемся, вы) восстанавливает пароль от аккаунта на «Арене Работ».' },
+  email: { subject: 'код для смены почты', why: 'В аккаунте на «Арене Работ» меняют адрес почты на этот.' }
 };
 
 /** Письмо с кодом — сразу, не через очередь уведомлений: человек ждёт его на экране. */
 export async function sendCodeEmail(to: string, purpose: CodePurpose, code: string, ttlMin: number) {
   const l = LETTER[purpose];
   try {
-    await getMailer().send(to, 'Арена Работы: ' + l.subject + ' ' + code,
+    await getMailer().send(to, 'Арена Работ: ' + l.subject + ' ' + code,
       l.why + '\n\nКод: ' + code + '\n\nДействует ' + ttlMin + ' минут. Никому его не сообщайте — сотрудники площадки код не спрашивают.\n' +
       'Если это были не вы, просто удалите письмо.');
   } catch (e) {

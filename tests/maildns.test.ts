@@ -10,7 +10,7 @@ const byName = (r: Awaited<ReturnType<typeof checkMailDns>>) => Object.fromEntri
 
 describe('записи домена для почты', () => {
   it('домен отправителя — из EMAIL_FROM или логина ящика', () => {
-    expect(senderDomain('Арена Работы <info@arenarabot.ru>')).toBe('arenarabot.ru');
+    expect(senderDomain('Арена Работ <info@arenarabot.ru>')).toBe('arenarabot.ru');
     expect(senderDomain('info@Arenarabot.ru')).toBe('arenarabot.ru');
     expect(senderDomain('', 'info@arenarabot.ru')).toBe('arenarabot.ru');
   });

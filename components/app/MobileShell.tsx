@@ -22,7 +22,7 @@ export function MobileBar() {
   return (
     <div className={'only-narrow ' + sty.cd052a46}>
       <Link href="/" onClick={() => window.dispatchEvent(new Event('arena:home'))} className={'fh ' + sty.c03ad802}
-        aria-label="Арена Работы — на главную"><BrandMark width={23} height={19} /><span className={sty.brandText}>Арена Работы</span></Link>
+        aria-label="Арена Работ — на главную"><BrandMark width={23} height={19} /><span className={sty.brandText}>Арена Работ</span></Link>
       <span className={sty.cee04050}>{heading}</span>
       <span style={{ flex: 1 }} />
       <button onClick={() => setRail('journal')} aria-label={'Журнал' + (journal ? ', новых: ' + journal : '')}

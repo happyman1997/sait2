@@ -16,10 +16,10 @@ import './globals.css';
 export function generateMetadata(): Metadata {
   return {
     metadataBase: new URL(config.publicUrl()),
-    title: 'Арена Работы — сезонные смены на карте',
+    title: 'Арена Работ — сезонные смены на карте',
     description: 'Уборка снега, покос, благоустройство, стройка: работодатели публикуют смены точкой на карте, исполнители откликаются рядом с домом.',
     // Превью ссылки в мессенджерах: картинка сайта; заголовок и описание — свои у каждой страницы (<title>).
-    openGraph: { type: 'website', locale: 'ru_RU', siteName: 'Арена Работы', images: [{ url: '/api/og/site', ...OG_SIZE, alt: 'Арена Работы — сезонные смены на карте' }] },
+    openGraph: { type: 'website', locale: 'ru_RU', siteName: 'Арена Работ', images: [{ url: '/api/og/site', ...OG_SIZE, alt: 'Арена Работ — сезонные смены на карте' }] },
     twitter: { card: 'summary_large_image' }
   };
 }

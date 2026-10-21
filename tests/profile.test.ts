@@ -157,7 +157,7 @@ describe('журнал и доставка', () => {
     expect(near.rows.map(r => r.user_id)).toEqual([fl.id]);
     expect((await ev.processOutbox()).sent).toBe(1);
     expect(mails[0].to).toBe(fl.email);
-    expect(mails[0].subject).toMatch(/^Арена Работы: /);
+    expect(mails[0].subject).toMatch(/^Арена Работ: /);
     expect(await one(`SELECT 1 FROM notification_outbox WHERE channel = 'sms'`)).toBeNull();
     // Свои действия работодателя — в журнале, но прочитаны и без доставки.
     const mine = await prof.listEvents(emp);

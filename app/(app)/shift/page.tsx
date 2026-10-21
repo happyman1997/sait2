@@ -3,7 +3,7 @@ import { ShiftScreen } from '@/components/app/ShiftScreen';
 import { currentUser } from '@/server/http';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Смена — Арена Работы' };
+export const metadata = { title: 'Смена — Арена Работ' };
 
 type Props = { searchParams: Promise<Record<string, string | undefined>> };
 

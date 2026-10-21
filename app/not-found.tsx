@@ -3,7 +3,7 @@ import { LegalPage } from '@/components/LegalPage';
 import sty from './not-found.module.css';
 
 // Своя страница 404: встроенная страница Next.js вставляет тег <style> без nonce — строгая CSP его не пропустит.
-export const metadata = { title: 'Страница не найдена — Арена Работы' };
+export const metadata = { title: 'Страница не найдена — Арена Работ' };
 
 export default function NotFound() {
   return (

@@ -2,7 +2,7 @@
   "name": "arena-raboty",
   "version": "0.1.0",
   "private": true,
-  "description": "Арена Работы — платформа сезонных смен на карте",
+  "description": "Арена Работ — платформа сезонных смен на карте",
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build --webpack",

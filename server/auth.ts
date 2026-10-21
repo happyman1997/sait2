@@ -485,7 +485,7 @@ export async function verifyEmailChange(userId: string, challengeId: unknown, co
     await query(`INSERT INTO events (user_id, kind, text, read_at) VALUES ($1, 'account', $2, now())`, [userId, 'Почта аккаунта изменена на ' + next], db);
     if (old?.email) {
       await query(`INSERT INTO notification_outbox (user_id, channel, to_addr, subject, body) VALUES ($1, 'email', $2, $3, $4)`, [
-        userId, old.email, 'Арена Работы: почта аккаунта изменена',
+        userId, old.email, 'Арена Работ: почта аккаунта изменена',
         'Адрес почты в вашем аккаунте изменён на ' + next + '. Входить и восстанавливать пароль теперь нужно по новому адресу.\n\n' +
           'Если это сделали не вы — сразу напишите в поддержку: ' + config.supportEmail() + '.'
       ], db);

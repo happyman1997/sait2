@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Образ «Арены Работы»: Next.js в режиме standalone (только нужные модули) + собранные служебные скрипты.
+# Образ «Арены Работ»: Next.js в режиме standalone (только нужные модули) + собранные служебные скрипты.
 # Postgres и nginx — в docker-compose.prod.yml; подробности — DEPLOY.md.
 
 FROM node:22-bookworm-slim AS build

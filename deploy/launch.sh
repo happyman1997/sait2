@@ -36,6 +36,12 @@ if grep -qE '^NEXT_PUBLIC_MAP_STYLE_URL=https://tiles\.openfreemap\.org/styles/l
   echo "Карта: теперь через ваш сервер (/ofm/…) — браузер посетителя не обращается к зарубежным серверам."
 fi
 
+# Площадка переименована в «Арена Работ» — имя отправителя в письмах тоже.
+if grep -q '^EMAIL_FROM=Арена Работы <' "$ENV"; then
+  sed -i 's/^EMAIL_FROM=Арена Работы </EMAIL_FROM=Арена Работ </' "$ENV"
+  echo "Почта: имя отправителя писем — «Арена Работ»."
+fi
+
 echo "== 2/5 Домен $DOMAIN"
 me=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1)}')
 resolve() { getent ahostsv4 "$1" 2>/dev/null | awk 'NR == 1 {print $1}' || true; }

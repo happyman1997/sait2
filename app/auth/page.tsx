@@ -6,7 +6,7 @@ import { currentUser } from '@/server/http';
 import { enabledProviders } from '@/server/oauth';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Вход и регистрация — Арена Работы' };
+export const metadata = { title: 'Вход и регистрация — Арена Работ' };
 
 export default async function AuthPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;

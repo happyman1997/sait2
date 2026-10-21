@@ -11,14 +11,8 @@
 }
 :where(.cd90b459) {
   display: flex !important;
-  align-items: baseline !important;
-  gap: 12px !important;
-}
-:where(.c5f5a148) {
-  font-family: var(--font-heading) !important;
-  font-size: 28px !important;
-  letter-spacing: .14em !important;
-  text-transform: uppercase !important;
+  align-items: flex-end !important;
+  gap: 18px !important;
 }
 :where(.c191c80f) {
   font-size: 12.5px !important;

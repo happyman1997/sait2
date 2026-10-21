@@ -68,7 +68,7 @@ async function enqueue(rows: { id: string; userId: string; text: string; num: nu
          FROM s WHERE nth <= daily_cap
      )
      INSERT INTO notification_outbox (user_id, event_id, channel, to_addr, subject, body, next_try_at)
-     SELECT user_id, id, 'email', addr, 'Арена Работы: ' || left(text, 80),
+     SELECT user_id, id, 'email', addr, 'Арена Работ: ' || left(text, 80),
             text || CASE WHEN link IS NULL THEN '' ELSE E'\n' || $8 || link END || E'\n\nНастроить уведомления: ' || $8 || '/profile', at
        FROM ok WHERE email AND addr <> ''
      UNION ALL
@@ -109,8 +109,8 @@ export async function processOutbox(limit = 50): Promise<{ sent: number; failed:
   let sent = 0, failed = 0;
   for (const m of due.rows) {
     try {
-      if (m.channel === 'push') await deliverPush(m.user_id!, { title: 'Арена Работы', body: m.body, url: m.subject || '/' });
-      else await getMailer().send(m.to_addr, m.subject || 'Арена Работы', m.body);
+      if (m.channel === 'push') await deliverPush(m.user_id!, { title: 'Арена Работ', body: m.body, url: m.subject || '/' });
+      else await getMailer().send(m.to_addr, m.subject || 'Арена Работ', m.body);
       await query(`UPDATE notification_outbox SET status = 'sent', sent_at = now(), attempts = attempts + 1, error = NULL WHERE id = $1`, [m.id]);
       sent++;
     } catch (e) {
