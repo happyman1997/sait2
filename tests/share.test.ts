@@ -64,3 +64,16 @@ describe('картинка-превью ссылки', () => {
     expect((await jobOgImage(job({ title: 'После очереди' }))).status).toBe(200);
   });
 });
+
+describe('окно «Поделиться» после публикации', () => {
+  it('само — пока работодатель не пропустил его дважды подряд; поделился — снова', async () => {
+    const store = new Map<string, string>();
+    globalThis.localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v); } } as Storage;
+    const { autoShare, shareUsed } = await import('@/lib/share');
+    expect([autoShare(), autoShare(), autoShare(), autoShare()]).toEqual([true, true, false, false]);
+    shareUsed();
+    expect([autoShare(), autoShare(), autoShare()]).toEqual([true, true, false]);
+    store.set('arena.shareSkips', 'мусор');
+    expect(autoShare()).toBe(true);
+  });
+});

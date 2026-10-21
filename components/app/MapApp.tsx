@@ -12,6 +12,7 @@ import {
 import { showModeration } from '@/components/ModerationGuard';
 import { useFlash } from '@/components/Toast';
 import { navigatingByLink, popOwnEntry, useBackClose } from '@/lib/backstack';
+import { autoShare } from '@/lib/share';
 import { useNarrow } from '@/components/useNarrow';
 import { SeasonMap, type SeasonMapHandle } from '@/components/map/SeasonMap';
 import type { LatLng, Pin } from '@/components/map/mapView';
@@ -116,7 +117,7 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
   // ─── Выбранный заказ ───
   const [selected, setSelected] = useState<number | null>(initialJob);
   const [detail, setDetail] = useState<JobDetail | null>(null);
-  // Только что опубликованный заказ — в карточке сразу «Поделиться»: разослать по чатам дома и района.
+  // Только что опубликованный заказ — в карточке сразу «Поделиться»: разослать по чатам дома и района (lib/share.ts).
   const [fresh, setFresh] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [hover, setHover] = useState<number | null>(null);
@@ -417,7 +418,7 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
 
   const finishPublish = (j: JobDetail, wasEdit: boolean) => {
     flash(wasEdit ? 'Изменения сохранены — откликнувшимся ушло уведомление' : 'Заказ опубликован — № ' + jobNum(j.num));
-    if (!wasEdit) { writeLS(DRAFT_KEY, null); setKept(null); setFresh(j.num); }
+    if (!wasEdit) { writeLS(DRAFT_KEY, null); setKept(null); if (autoShare()) setFresh(j.num); }
     setFormState(null); setEditing(null); setFormErrs({}); setFormError(''); setFormStep(1); setAddrNote('');
     setSelected(j.num);
     setDetail(j);

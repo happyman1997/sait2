@@ -115,6 +115,16 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
 
   const lateNow = notice === 'меньше суток' && job.hired > 0;
 
+  // «Поделиться» — отдельной кнопкой под оплатой (у своего заказа — под заголовком), не рядом с «Закрыть».
+  const shareSlot = !shareable ? null : share ? <ShareJob job={job} onClose={() => setShare(false)} /> : (
+    <button className={'btn btn-secondary btn-block ' + sty.shareBtn} onClick={() => setShare(true)}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M12 3v12M7 8l5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
+      </svg>
+      Поделиться заказом
+    </button>
+  );
+
   // Телефон: главное действие закреплено внизу карточки — не нужно искать кнопку, листая. В рабочем режиме
   // такую кнопку показывает сама карта (крупнее), здесь не дублируем.
   const { workMode } = useLive();
@@ -133,10 +143,7 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
     <div>
       <div className={sty.cf5c1e62}>
         <div style={css(LABEL)}>Заказ {jobNum(job.num)}{job.district ? ' · ' + job.district : ''}</div>
-        <span className={sty.headBtns}>
-          {shareable && <button className={'btn btn-ghost ' + sty.c4b8d758} onClick={() => setShare(v => !v)} aria-expanded={share}>Поделиться</button>}
-          <button className={'btn btn-ghost ' + sty.c4b8d758} onClick={onClose}>Закрыть</button>
-        </span>
+        <button className={'btn btn-ghost ' + sty.c4b8d758} onClick={onClose}>Закрыть</button>
       </div>
       <h3 className={sty.ce5f1500}>{job.title}</h3>
       <div className={sty.cf74fada}>
@@ -144,7 +151,7 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
         <span className={s.cls}>{s.label}</span>
         {job.mine && <span className="tag tag-neutral">ваш заказ</span>}
       </div>
-      {share && shareable && <ShareJob job={job} onClose={() => setShare(false)} />}
+      {job.mine && shareSlot}
 
       {!job.mine && (
         <div className={'blueprint ' + sty.c19ead0a}>
@@ -176,6 +183,8 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
           )}
         </div>
       )}
+
+      {!job.mine && shareSlot}
 
       {job.cancellation && (
         <div className={sty.caabaa43}>

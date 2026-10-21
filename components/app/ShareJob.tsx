@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { useFlash } from '@/components/Toast';
 import { css } from '@/lib/css';
 import type { JobDetail } from '@/lib/jobs';
-import { shareLinks, shareText } from '@/lib/share';
+import { shareLinks, shareText, shareUsed } from '@/lib/share';
 import { Corners, LABEL } from './ui';
 import sty from './ShareJob.module.css';
 
@@ -24,6 +24,7 @@ export function ShareJob({ job, onClose }: { job: JobDetail; onClose: () => void
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(url);
+      shareUsed();
       setCopied(true); setManual(false);
       flash('Ссылка скопирована');
       window.setTimeout(() => setCopied(false), 2500);
@@ -32,7 +33,7 @@ export function ShareJob({ job, onClose }: { job: JobDetail; onClose: () => void
     }
   };
 
-  const more = () => navigator.share({ title: job.title, text, url }).catch(() => {});
+  const more = () => navigator.share({ title: job.title, text, url }).then(shareUsed, () => {});
 
   return (
     <div className={'blueprint ' + sty.panel}>
@@ -47,7 +48,7 @@ export function ShareJob({ job, onClose }: { job: JobDetail; onClose: () => void
       </div>
       <div className={sty.grid}>
         {shareLinks(url, text).map(l => (
-          <a key={l.id} href={l.href} target="_blank" rel="noopener noreferrer" className={'btn btn-secondary ' + sty.item}>
+          <a key={l.id} href={l.href} target="_blank" rel="noopener noreferrer" onClick={shareUsed} className={'btn btn-secondary ' + sty.item}>
             <span className={sty.dot} style={{ background: COLORS[l.id] }} aria-hidden="true" />{l.label}
           </a>
         ))}
