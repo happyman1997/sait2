@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRef, useState } from 'react';
 import { css } from '@/lib/css';
 import { crewOf, dateLabel, jobNum, jobStatus, localISO, money, type JobDetail, type JobSummary } from '@/lib/jobs';
-import { ApplicantsBlock, LeaveShiftForm, MoveDateForm, ShiftBlock, type Act, type ReviewOpen } from './ShiftBlock';
+import { ApplicantsBlock, LeaveShiftForm, MoveDateForm, reveal, ShiftBlock, type Act, type ReviewOpen } from './ShiftBlock';
 import { SeriesBlock } from './SeriesBlock';
 import { useLive } from './Live';
 import { Corners, LABEL } from './ui';
@@ -272,7 +272,7 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
       {moveOpen && !cancelOpen && <MoveDateForm job={job} act={act} busy={busy} onClose={() => setMoveOpen(false)} />}
 
       {cancelOpen && (
-        <div className={'blueprint ' + sty.c0a5aa83}>
+        <div ref={reveal} className={'blueprint ' + sty.c0a5aa83}>
           <Corners />
           <div style={css(LABEL)}>Отмена смены</div>
           <div className={'field ' + sty.ce5a6d3c}>

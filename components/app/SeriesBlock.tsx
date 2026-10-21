@@ -92,7 +92,7 @@ export function SeriesBlock({ job, act, busy, onReview }: { job: JobDetail; act:
                     <button className={'btn btn-primary ' + sty.c93052a5} disabled={busy} onClick={() => act('series/day', { day: d.date, action: 'accept' }, 'День принят')}>Принять день</button>
                   )}
                   {w.canPay && (
-                    <button className={'btn btn-secondary ' + sty.c93052a5} disabled={busy} onClick={() => act('series/day', { day: d.date, action: 'paid' }, job.mine ? 'Отмечено: оплата за день передана' : 'Отмечено: деньги за день получены')}>{job.mine ? 'Оплата передана' : 'Деньги получены'}</button>
+                    <button className={'btn btn-secondary ' + sty.c93052a5} disabled={busy} onClick={() => act('series/day', { day: d.date, action: 'paid' }, job.mine ? 'Отмечено: оплата за день передана' : 'Отмечено: деньги за день получены')}>{job.mine ? 'Отметить: оплата передана' : 'Отметить: деньги получены'}</button>
                   )}
                   {w.reportedAt && w.autoAcceptAt && job.mine && (
                     <span className={sty.ceb5d71b}>

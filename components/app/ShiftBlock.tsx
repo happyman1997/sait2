@@ -16,6 +16,12 @@ export type ReviewOpen = (t: { target: string; name: string; rating?: number; te
 const MUTED = 'color: color-mix(in srgb, var(--color-text) 66%, transparent)';
 const BTN = 'height: 42px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase';
 
+/**
+ * Ref раскрывающейся формы (отказ, отмена, перенос, жалоба, спор): на телефоне она открывается ниже края экрана —
+ * без прокрутки кажется, что кнопка не сработала. Функция одна на модуль: React вызывает её только при появлении формы.
+ */
+export const reveal = (el: HTMLElement | null) => { el?.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+
 const daysLeft = (iso: string) => Math.max(0, Math.ceil((Date.parse(iso) - Date.now()) / 86400000));
 
 /** Отклики владельцу: Нанять / Отказ / Сделать старшим / Не вышел / Чат, «Отказать остальным». */
@@ -222,7 +228,7 @@ export function ComplaintForm({ role, targets, act, busy, onClose, title = 'Жа
   const [target, setTarget] = useState(targets[0]?.id ?? '');
   const id = useId();
   return (
-    <div className={'blueprint ' + sty.c0a5aa83}>
+    <div ref={reveal} className={'blueprint ' + sty.c0a5aa83}>
       <Corners />
       <div style={css(LABEL)}>{title}</div>
       {targets.length > 1 && (
@@ -257,7 +263,7 @@ export function LeaveShiftForm({ job, act, busy, onClose }: { job: JobDetail; ac
   const [notice, setNotice] = useState(dayOf ? 'меньше суток' : 'больше суток');
   const late = notice !== 'больше суток';
   return (
-    <div className={'blueprint ' + sty.c0a5aa83}>
+    <div ref={reveal} className={'blueprint ' + sty.c0a5aa83}>
       <Corners />
       <div style={css(LABEL)}>Отказ от смены</div>
       <div className={'field ' + sty.ce5a6d3c}>
@@ -283,7 +289,7 @@ export function LeaveShiftForm({ job, act, busy, onClose }: { job: JobDetail; ac
 export function MoveDateForm({ job, act, busy, onClose }: { job: JobDetail; act: Act; busy: boolean; onClose: () => void }) {
   const [date, setDate] = useState(job.date >= localISO() ? job.date : localISO());
   return (
-    <div className={'blueprint ' + sty.c0a5aa83}>
+    <div ref={reveal} className={'blueprint ' + sty.c0a5aa83}>
       <Corners />
       <div style={css(LABEL)}>Перенос даты</div>
       <div className={'field ' + sty.ce5a6d3c}>
@@ -437,7 +443,7 @@ function Disputes({ job, isOwner, act, busy }: { job: JobDetail; isOwner: boolea
         </button>
       )}
       {open && (
-        <div className={'blueprint ' + sty.c687fe46}>
+        <div ref={reveal} className={'blueprint ' + sty.c687fe46}>
           <Corners />
           <div style={css(LABEL)}>Спор об оплате</div>
           {isOwner && free.length > 1 && (
