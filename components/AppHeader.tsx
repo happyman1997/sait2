@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { css } from '@/lib/css';
 import { initialsOf } from './app/ui';
+import { BrandMark } from './BrandMark';
 import sty from './AppHeader.module.css';
 
 export type HeaderUser = { name: string; role: 'freelancer' | 'employer'; city: string; avatarUrl?: string | null; isStaff?: boolean } | null;
@@ -31,9 +32,9 @@ export function AppHeader({ me, onHome, unread = 0, onChat, chatActive = false, 
     // На карте шапка — во всю ширину, как карта и левая панель под ней; на остальных страницах — по колонке текста.
     <div className={('nav dark-bar' + (wideOnly ? ' only-wide' : '')) + ' ' + sty.c8d4eda9 + (path === '/' ? ' ' + sty.full : '')}>
       <Link href="/" onClick={onHome} title="На главную" aria-label="Арена Работы — на главную" className={sty.ca4a0310}>
-        {/* Знак площадки — та же метка на карте, что в иконке сайта (app/icon.svg). */}
+        {/* Знак площадки — тот же, что в иконке сайта (lib/brand.ts, design/logo/). */}
         <span aria-hidden="true" className={sty.c6261e49}>
-          <svg viewBox="0 0 32 32" width="58%" height="58%"><path fill="currentColor" d="M16 6c-3.9 0-7 3-7 6.9C9 18 16 26 16 26s7-8 7-13.1C23 9 19.9 6 16 6zm0 9.5a2.6 2.6 0 1 1 0-5.2 2.6 2.6 0 0 1 0 5.2z" /></svg>
+          <BrandMark width="66%" />
         </span>
         <span className={'fh ' + sty.c298aaa6}>Арена Работы</span>
       </Link>

@@ -11,11 +11,14 @@
   font-family: var(--font-heading) !important;
   font-weight: 600 !important;
   font-size: 18px !important;
-  letter-spacing: .14em !important;
+  letter-spacing: .08em !important;
   text-transform: uppercase !important;
   color: inherit !important;
   text-decoration: none !important;
   white-space: nowrap !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
 }
 :where(.cee04050) {
   font-size: 12px !important;
@@ -75,3 +78,5 @@
   line-height: 16px !important;
   text-align: center !important;
 }
+/* Узкий телефон: вместо надписи — только знак, чтобы название раздела («мои заказы») помещалось целиком. */
+@media (max-width: 379.98px) { .brandText { display: none; } }

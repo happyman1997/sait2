@@ -6,7 +6,7 @@ self.addEventListener('push', (e) => {
   let m = { title: 'Арена Работы', body: '', url: '/' };
   try { m = Object.assign(m, e.data ? e.data.json() : {}); } catch (_) { /* пустой или не JSON */ }
   e.waitUntil(self.registration.showNotification(m.title, {
-    body: m.body, icon: '/icon.svg', badge: '/icon.svg', tag: m.url, renotify: true, data: { url: m.url }
+    body: m.body, icon: '/icon-192.png', badge: '/badge-96.png', tag: m.url, renotify: true, data: { url: m.url }
   }));
 });
 

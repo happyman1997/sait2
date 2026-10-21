@@ -6,6 +6,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { css } from '@/lib/css';
+import { BrandMark } from '@/components/BrandMark';
 import { useLive } from './Live';
 import sty from './MobileShell.module.css';
 
@@ -20,7 +21,8 @@ export function MobileBar() {
   const heading = path === '/mine' && me.role === 'employer' ? 'мои заказы' : HEADING[path] || '';
   return (
     <div className={'only-narrow ' + sty.cd052a46}>
-      <Link href="/" onClick={() => window.dispatchEvent(new Event('arena:home'))} className={'fh ' + sty.c03ad802}>Арена Работы</Link>
+      <Link href="/" onClick={() => window.dispatchEvent(new Event('arena:home'))} className={'fh ' + sty.c03ad802}
+        aria-label="Арена Работы — на главную"><BrandMark width={23} height={19} /><span className={sty.brandText}>Арена Работы</span></Link>
       <span className={sty.cee04050}>{heading}</span>
       <span style={{ flex: 1 }} />
       <button onClick={() => setRail('journal')} aria-label={'Журнал' + (journal ? ', новых: ' + journal : '')}

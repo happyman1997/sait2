@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { ImageResponse } from 'next/og';
 import { NextResponse } from 'next/server';
 import type { ReactElement, ReactNode } from 'react';
+import { MARK_PATH, MARK_VIEWBOX } from '@/lib/brand';
 import { crewOf, dateLabel, money, type JobDetail } from '@/lib/jobs';
 import { TtlCache } from './cache';
 import { config } from './config';
@@ -85,8 +86,8 @@ function Frame({ right, footer, children }: { right?: ReactNode; footer: string;
       <div style={corner({ bottom: 24, left: 24 }, 'Bottom Left')} />
       <div style={corner({ bottom: 24, right: 24 }, 'Bottom Right')} />
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Pin size={46} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <svg width={54} height={46} viewBox={MARK_VIEWBOX}><path fill={C.text} d={MARK_PATH} /></svg>
           <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: 5, textTransform: 'uppercase' }}>Арена Работы</div>
         </div>
         {right}

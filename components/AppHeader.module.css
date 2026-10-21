@@ -27,7 +27,7 @@
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  color: var(--color-accent) !important;
+  color: #fff !important;
 }
 :where(.c298aaa6) {
   font-family: var(--font-heading) !important;
