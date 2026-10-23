@@ -181,4 +181,11 @@
 /* Телефон: крестик «убрать фильтр» — зона касания больше значка. */
 @media (max-width: 719.98px) {
   :where(.c3846a47) { padding: 8px 9px !important; margin: -8px -9px -8px 0 !important; }
+  /* Телефон: шторка снизу во всю ширину, поверх вкладок, фон затемнён. */
+  :where(.c0a107c1) { background: rgba(24, 30, 36, .35) !important; }
+  :where(.c5995b2e) {
+    left: 0 !important; right: 0 !important; bottom: 0 !important; width: auto !important; max-width: none !important;
+    max-height: calc(100dvh - 64px) !important; border: 0 !important; border-radius: 18px 18px 0 0 !important;
+  }
+  :where(.c79f2e99) { padding-bottom: calc(10px + env(safe-area-inset-bottom)) !important; }
 }

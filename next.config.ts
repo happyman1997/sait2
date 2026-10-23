@@ -17,6 +17,9 @@ const nextConfig: NextConfig = {
   agentRules: false,
   serverExternalPackages: ['pg'],
   poweredByHeader: false,
+  // next/image на сайте не используется — встроенный обработчик /_next/image выключен (отвечает 404):
+  // сервер не пережимает чужие запросы на картинки, меньше открытых точек.
+  images: { unoptimized: true },
   // Docker-образ: минимальный сервер с только нужными модулями (Dockerfile задаёт NEXT_OUTPUT=standalone).
   output: process.env.NEXT_OUTPUT === 'standalone' ? 'standalone' : undefined,
   // Шрифт картинок-превью (server/og.tsx) читается с диска — в образ его нужно взять явно.

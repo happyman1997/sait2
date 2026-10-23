@@ -135,3 +135,7 @@
   margin-top: 12px !important;
   color: color-mix(in srgb, var(--color-text) 66%, transparent) !important;
 }
+/* Телефон: список — во всю ширину, как экран поиска в приложении. */
+@media (max-width: 719.98px) {
+  :where(.cc2d836c) { width: 100% !important; border-right: 0 !important; padding: 16px 16px 24px !important; }
+}
