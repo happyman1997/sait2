@@ -33,7 +33,8 @@ export const config = {
   timeZone: () => env('APP_TIME_ZONE', 'Europe/Moscow'),
   publicUrl: () => env('PUBLIC_URL', 'http://localhost:3000'),
   // Коды подтверждения прав на сайт в Яндекс.Вебмастере и Google Search Console (мета-тег; это не секрет).
-  yandexVerification: () => env('YANDEX_VERIFICATION', ''),
+  // По умолчанию — код arenarabot.ru из Вебмастера; другой сайт задаёт свой (или пустой — без тега).
+  yandexVerification: () => env('YANDEX_VERIFICATION', 'b91c308724c2c0a7'),
   googleVerification: () => env('GOOGLE_SITE_VERIFICATION', ''),
   uploadDir: () => env('UPLOAD_DIR', isProd ? undefined : './data/uploads'),
   // Веб-пуш: ключи VAPID (npx web-push generate-vapid-keys). Без них пуш в браузер выключен.

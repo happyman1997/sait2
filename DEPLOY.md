@@ -238,7 +238,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --no-
 **Яндекс.Вебмастер**
 1. https://webmaster.yandex.ru → «Добавить сайт» → `https://arenarabot.ru`.
 2. Способ подтверждения — «Мета-тег». Из тега `<meta name="yandex-verification" content="…">` скопируйте только код в кавычках после `content=`.
-3. В `.env.production` добавьте строку `YANDEX_VERIFICATION=код`, перезапустите приложение (раздел 5) и нажмите «Проверить».
+3. Для arenarabot.ru код уже встроен в сайт — после обновления (раздел 5) просто нажмите «Проверить». Для другого адреса — строка `YANDEX_VERIFICATION=код` в `.env.production` и перезапуск.
 4. Индексирование → Файлы Sitemap → добавьте `https://arenarabot.ru/sitemap.xml`.
 5. Информация о сайте → Регион: Москва (или ваш основной город).
 
