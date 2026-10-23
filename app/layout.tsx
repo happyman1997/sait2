@@ -16,8 +16,13 @@ import './globals.css';
 export function generateMetadata(): Metadata {
   return {
     metadataBase: new URL(config.publicUrl()),
-    title: 'Арена Работ — сезонные смены на карте',
-    description: 'Уборка снега, покос, благоустройство, стройка: работодатели публикуют смены точкой на карте, исполнители откликаются рядом с домом.',
+    title: 'Подработка рядом с домом: разовые смены на карте — Арена Работ',
+    description: 'Сезонная подработка и разовые смены: уборка снега, покос травы, благоустройство, погрузка. Ставка, дата и место видны сразу, отклик без резюме.',
+    // Коды Яндекс.Вебмастера и Google Search Console — из окружения сервера (пустые — тегов нет).
+    verification: {
+      ...(config.yandexVerification() ? { yandex: config.yandexVerification() } : {}),
+      ...(config.googleVerification() ? { google: config.googleVerification() } : {})
+    },
     // Превью ссылки в мессенджерах: картинка сайта; заголовок и описание — свои у каждой страницы (<title>).
     openGraph: { type: 'website', locale: 'ru_RU', siteName: 'Арена Работ', images: [{ url: '/api/og/site', ...OG_SIZE, alt: 'Арена Работ — сезонные смены на карте' }] },
     twitter: { card: 'summary_large_image' }

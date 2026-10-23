@@ -1,10 +1,10 @@
 import type { Metadata } from 'next';
 import { MapApp } from '@/components/app/MapApp';
-import { dateLabel, money } from '@/lib/jobs';
 import { currentUser } from '@/server/http';
 import { getJob } from '@/server/jobs';
 import { meOf } from '@/server/me';
-import { jobOgData, OG_SIZE, ogVersion } from '@/server/og';
+import { JsonLd } from '@/components/seo/Seo';
+import { jobMetadata, siteLd } from '@/server/seo';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,28 +16,14 @@ const jobOf = (raw: string | undefined) => {
 };
 
 /**
- * Ссылка на заказ (/?job=N) — со своим заголовком и описанием: их показывают поисковики и мессенджеры.
- * Берётся гостевая карточка: у частного заказчика — без дома и имени, как на карте.
+ * Ссылка на заказ на карте (/?job=N) — со своим заголовком, описанием и превью (их показывают мессенджеры);
+ * canonical — страница заказа /zakaz/N, где все условия текстом: в поиске она, а не карта.
  */
 export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
   const num = jobOf((await searchParams).job);
   if (!num) return { alternates: { canonical: '/' } };
   try {
-    const j = await getJob(num, null);
-    const title = j.title + ' — ' + money(j.pay, j.unit) + ' · ' + j.address + ' — Арена Работ';
-    const about = (j.repeat ? 'Серия выходов с ' : 'Выход ') + dateLabel(j.date) + '. ' + j.description.replace(/\s+/g, ' ').trim();
-    const description = about.length > 200 ? about.slice(0, 197).replace(/\s+\S*$/, '') + '…' : about;
-    const closed = j.status !== 'open' && j.status !== 'staffed';
-    // Картинка-превью: оплата, вид работ, место, дата. Версия в адресе меняется вместе с условиями заказа.
-    const images = [{ url: '/api/og/job/' + num + '?v=' + ogVersion(jobOgData(j)), ...OG_SIZE, alt: title }];
-    return {
-      title, description,
-      alternates: { canonical: '/?job=' + num },
-      openGraph: { title, description, type: 'website', locale: 'ru_RU', siteName: 'Арена Работ', url: '/?job=' + num, images },
-      twitter: { card: 'summary_large_image', title, description, images },
-      // Закрытые и отменённые заказы поисковикам не нужны.
-      robots: closed ? { index: false, follow: true } : undefined
-    };
+    return jobMetadata(await getJob(num, null));
   } catch {
     return { robots: { index: false, follow: true } };
   }
@@ -47,13 +33,19 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
 export default async function Home({ searchParams }: Props) {
   const u = await currentUser();
   const sp = await searchParams;
+  const num = jobOf(sp.job);
   return (
-    <MapApp
-      me={meOf(u)}
-      initialJob={jobOf(sp.job)}
-      autoApply={sp.apply === '1'}
-      openList={sp.list === '1'}
-      startNew={sp.new === '1'}
-    />
+    <>
+      {/* Заголовок карты для поисковиков и экранных дикторов; разметка сайта — только на самой главной. */}
+      <h1 className="sr-only">Подработка и разовые смены рядом с домом — карта заказов</h1>
+      {!num && <JsonLd data={siteLd()} />}
+      <MapApp
+        me={meOf(u)}
+        initialJob={num}
+        autoApply={sp.apply === '1'}
+        openList={sp.list === '1'}
+        startNew={sp.new === '1'}
+      />
+    </>
   );
 }

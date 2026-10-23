@@ -4,6 +4,7 @@
 import Link from 'next/link';
 import { useState, useSyncExternalStore, type KeyboardEvent } from 'react';
 import { css } from '@/lib/css';
+import { WORK_PAGES } from '@/lib/seo';
 import { Corners, LABEL } from './ui';
 import sty from './RailSummary.module.css';
 
@@ -68,6 +69,17 @@ export function GuestGuide() {
         <Link href={'/auth?role=' + who} className={'btn btn-secondary btn-block ' + sty.cd488481}>{g.cta}</Link>
       </div>
     </div>
+  );
+}
+
+/** Гостю под картой: виды подработки ссылками на их страницы — и людям, и поисковикам путь к каталогу. */
+export function WorkLinks() {
+  return (
+    <nav aria-label="Виды подработки" className={sty.workLinks}>
+      <div style={css(LABEL)}>Подработка по видам работ</div>
+      <p>{WORK_PAGES.map((w, i) => <span key={w.id}>{i > 0 && ' · '}<Link href={'/raboty/' + w.slug}>{w.label}</Link></span>)}</p>
+      <Link href="/raboty" className={sty.workAll}>Все виды работ и города →</Link>
+    </nav>
   );
 }
 

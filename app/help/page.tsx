@@ -3,7 +3,10 @@ import { LegalPage } from '@/components/LegalPage';
 import { AUTO_ACCEPT_DAYS } from '@/lib/jobs';
 import { config } from '@/server/config';
 
-export const metadata = { title: 'Помощь — Арена Работ' };
+export const metadata = {
+  title: 'Помощь — Арена Работ',
+  description: 'Ответы на частые вопросы: код из письма, пароль, проблема на смене, спор по расчёту, удаление аккаунта и связь с поддержкой.'
+};
 // Адрес поддержки — из окружения сервера.
 export const dynamic = 'force-dynamic';
 

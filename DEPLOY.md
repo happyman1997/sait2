@@ -231,6 +231,21 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --no-
 
 После правки `.env.production` перезапустите приложение (раздел 5). Проверка: откройте /auth?mode=login — должны появиться кнопки; войдите своим аккаунтом Яндекса или VK.
 
+## 13. Поисковики: Яндекс.Вебмастер и Google Search Console
+
+Для поиска сайт уже отдаёт: страницу каждого открытого заказа (`/zakaz/N` — условия текстом и разметка вакансии), страницы видов работ (`/raboty/uborka-snega` и др.), городов с 3+ заказами (`/gorod/moskva`), каталог `/raboty`, `robots.txt` и `sitemap.xml`. Осталось подтвердить сайт в кабинетах поисковиков:
+
+**Яндекс.Вебмастер**
+1. https://webmaster.yandex.ru → «Добавить сайт» → `https://arenarabot.ru`.
+2. Способ подтверждения — «Мета-тег». Из тега `<meta name="yandex-verification" content="…">` скопируйте только код в кавычках после `content=`.
+3. В `.env.production` добавьте строку `YANDEX_VERIFICATION=код`, перезапустите приложение (раздел 5) и нажмите «Проверить».
+4. Индексирование → Файлы Sitemap → добавьте `https://arenarabot.ru/sitemap.xml`.
+5. Информация о сайте → Регион: Москва (или ваш основной город).
+
+**Google Search Console** — https://search.google.com/search-console → ресурс «Префикс URL» `https://arenarabot.ru` → «Тег HTML» → код из `content="…"` в `GOOGLE_SITE_VERIFICATION=код`, перезапуск, «Подтвердить»; затем «Файлы Sitemap» → `sitemap.xml`.
+
+Коды подтверждения — не секрет (они видны в коде страницы любому).
+
 ## Перед публичным запуском
 
 - Оферта, политика, согласие и правила (/legal/*) — утвердить юристом (сейчас черновики); реквизиты — `OPERATOR_*`, `PROCESSOR_*` в `.env.production`.

@@ -140,6 +140,48 @@ export async function listJobs(p: ListParams, viewer: Viewer, db: Db = pool()) {
   return { jobs: hit.rows.map(x => toSummary(own ? { ...x, my_status: own.get(x.id) ?? null } : x, viewer, qBase)), base: b };
 }
 
+// ───────────────────────── Страницы для поисковиков ─────────────────────────
+
+/** Заказ сейчас в поиске — как в выдаче на карте; $n — параметр с сегодняшней датой. */
+const openNow = (n: number) => `j.status IN ('open', 'staffed')
+          AND (j.date >= $${n}::date OR (j.repeat IS NOT NULL AND (j.series_end IS NULL OR j.series_end >= $${n}::date)))`;
+// Страницы видов работ и городов открывают и роботы — одинаковые выборки не чаще раза в минуту.
+const seoCache = new TtlCache<unknown>(60_000, 300);
+
+/**
+ * Открытые заказы глазами гостя (у частного заказчика — адрес без дома): списки на страницах видов работ, городов
+ * и «похожие» на странице заказа. Порядок — как в списке на карте: срочные, затем по дате.
+ */
+export async function publicJobs(f: { typeId?: string; city?: string; notNum?: number; limit: number }, today: string, db: Db = pool()) {
+  const key = JSON.stringify(['jobs', f.typeId ?? null, f.city ?? null, f.notNum ?? null, f.limit, today]);
+  return seoCache.get(key, async () => {
+    // $1–$3 — зритель и база из SUMMARY_COLS: гость, база по умолчанию (расстояние на этих страницах не показывается).
+    const r = await query<SummaryRow>(
+      `SELECT ${SUMMARY_COLS}
+         FROM jobs j JOIN job_types t ON t.id = j.type_id
+        WHERE ${openNow(4)}
+          AND ($5::text IS NULL OR j.type_id = $5)
+          AND ($6::text IS NULL OR lower(j.district) = lower($6))
+          AND ($7::bigint IS NULL OR j.num <> $7)
+        ORDER BY j.urgent DESC, j.date, j.created_at DESC
+        LIMIT $8`,
+      [null, DEFAULT_BASE.lat, DEFAULT_BASE.lng, today, f.typeId ?? null, f.city ?? null, f.notNum ?? null, Math.min(Math.max(f.limit, 1), 100)],
+      db
+    );
+    return r.rows.map(x => toSummary(x, null));
+  }) as Promise<JobSummary[]>;
+}
+
+/** Сколько открытых заказов по видам работ и городам — для каталога, страниц городов и карты сайта. */
+export async function openJobCounts(today: string, db: Db = pool()) {
+  return seoCache.get(JSON.stringify(['counts', today]), async () => {
+    const r = await query<{ type_id: string; city: string | null; n: number }>(
+      `SELECT j.type_id, nullif(btrim(j.district), '') AS city, count(*)::int AS n
+         FROM jobs j WHERE ${openNow(1)} GROUP BY 1, 2`, [today], db);
+    return r.rows;
+  }) as Promise<{ type_id: string; city: string | null; n: number }[]>;
+}
+
 async function searchJobs(p: ListParams, viewer: Viewer, db: Db) {
   const r = await searchRows(p, viewer, db);
   return { jobs: r.rows.map(x => toSummary(x, viewer, r.base)), base: r.base };

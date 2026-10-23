@@ -239,6 +239,26 @@ describe('карточка и отклик', () => {
     expect([og.address, og.addressHidden, og.employer.name]).toEqual(['Москва, ул. Тверская, 18', false, 'УК «Тверская»']);
   });
 
+  it('страницы для поисковиков — по гостевой карточке: у частного заказчика без дома и имени', async () => {
+    const { jobMetadata, jobPostingLd } = await import('@/server/seo');
+    const priv = await mkUser('employer', 'ivan_seo', '9170000003', 'Иван Петров');
+    await query(`UPDATE employer_profiles SET org_type = 'частное лицо', org_name = NULL WHERE user_id = $1`, [priv.id]);
+    const j = await jobs.createJob(form({ address: 'Москва, ул. Тверская, 18, кв. 5' }), priv, today);
+    // Список на страницах видов работ и городов.
+    const listed = (await jobs.publicJobs({ typeId: j.typeId, limit: 77 }, today)).find(x => x.num === j.num)!;
+    expect([listed.address, listed.addressHidden]).toEqual(['Москва, ул. Тверская', true]);
+    // Страница заказа: разметка вакансии и заголовок — без дома, квартиры и имени.
+    const card = await jobs.getJob(j.num, null);
+    const ld = JSON.stringify(jobPostingLd(card));
+    for (const leak of ['Тверская, 18', 'кв. 5', 'Иван']) expect(ld).not.toContain(leak);
+    expect(ld).toContain('Частный заказчик');
+    const meta = jobMetadata(card);
+    expect(String(meta.title)).not.toContain('18');
+    expect(meta.alternates?.canonical).toBe('/zakaz/' + j.num);
+    // Счётчики каталога видят открытый заказ.
+    expect((await jobs.openJobCounts(today)).some(r => r.type_id === j.typeId && r.n > 0)).toBe(true);
+  });
+
   it('картинка-превью ссылки — по гостевой карточке: у частного заказчика без дома', async () => {
     const { GET } = await import('@/app/api/og/job/[num]/route');
     const { jobOgData } = await import('@/server/og');

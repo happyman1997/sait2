@@ -7,10 +7,12 @@ export const LEGAL_DOCS = [
   ['/legal/personal-data', 'Политика обработки персональных данных'], ['/legal/consent', 'Согласие на обработку данных']
 ] as const;
 
-/** Строка «Помощь и поддержка · Документы: Оферта · Правила · Политика · Согласие». newTab — чтобы не терять заполненную форму. */
+/** Строка «Виды подработки · Помощь и поддержка · Документы: Оферта · Правила · Политика · Согласие». newTab — чтобы не терять заполненную форму. */
 export function DocLinks({ style = '', newTab = false }: { style?: string; newTab?: boolean }) {
   return (
     <nav aria-label="Документы" style={css('font-size: 12.5px; line-height: 1.7; color: color-mix(in srgb, var(--color-text) 64%, transparent); ' + style)}>
+      <Link href="/raboty" {...(newTab ? { target: '_blank' } : {})} style={{ color: 'var(--color-accent-700)' }}>Виды подработки</Link>
+      {' · '}
       <Link href="/help" {...(newTab ? { target: '_blank' } : {})} style={{ color: 'var(--color-accent-700)' }}>Помощь и поддержка</Link>
       {' · '}Документы:{' '}
       {LEGAL_DOCS.map(([href, label], i) => (

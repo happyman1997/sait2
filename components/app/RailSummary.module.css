@@ -153,3 +153,10 @@
 @media (max-width: 719.98px) {
   .cc1bc816, .ce15ec2e { text-transform: none !important; letter-spacing: normal !important; }
 }
+/* Гостю под картой — ссылки на страницы видов работ. */
+.workLinks { margin-top: 24px; }
+.workLinks p { margin: 8px 0 6px; font-size: 13.5px; line-height: 1.75; color: color-mix(in srgb, var(--color-text) 60%, transparent); }
+.workLinks a { color: var(--color-accent-700); text-decoration: none; }
+.workLinks a:hover { text-decoration: underline; }
+.workAll { display: inline-flex; align-items: center; min-height: 36px; font-size: 14px; font-weight: 600; }
+
