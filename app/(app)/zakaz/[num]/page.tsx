@@ -8,7 +8,7 @@ import { WORK_INFO, workById } from '@/lib/seo';
 import { AppError } from '@/server/errors';
 import { currentUser } from '@/server/http';
 import { getJob, publicJobs } from '@/server/jobs';
-import { breadcrumbsLd, isOpenJob, jobMetadata, jobPostingLd, todayLocal } from '@/server/seo';
+import { breadcrumbsLd, isOpenJob, jobMetadata, jobPostingLd, todayLocal, workPath } from '@/server/seo';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,8 +64,10 @@ export default async function JobPage({ params }: Props) {
     ['Заказчик', j.employer.name + (j.employer.jobs > 1 ? ' · заказов на площадке: ' + j.employer.jobs : '')],
     ['Опубликован', dateLabel(j.createdAt.slice(0, 10))]
   ];
+  // Вид работ в крошках — и справочный, и свой (у своего тоже есть страница).
+  const typePath = await workPath(j.typeId);
   const crumbs: [string, string][] = [['Главная', '/'], ['Подработка', '/raboty'],
-    ...(work ? [[work.label, '/raboty/' + work.slug] as [string, string]] : []), ['Заказ ' + jobNum(j.num), '/zakaz/' + j.num]];
+    ...(typePath ? [[j.typeLabel, typePath] as [string, string]] : []), ['Заказ ' + jobNum(j.num), '/zakaz/' + j.num]];
 
   return (
     <SeoPage>

@@ -2,7 +2,7 @@ import type { MetadataRoute } from 'next';
 import { WORK_PAGES } from '@/lib/seo';
 import { config } from '@/server/config';
 import { query } from '@/server/db';
-import { CITY_MIN_JOBS, seoCatalog } from '@/server/seo';
+import { CITY_MIN_JOBS, CUSTOM_MIN_JOBS, seoCatalog } from '@/server/seo';
 
 // Список заказов меняется постоянно и берётся из базы — собирается при запросе (а не при сборке, где базы нет).
 export const dynamic = 'force-dynamic';
@@ -34,7 +34,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ]);
     const cities = cat.cities.filter(c => c.count >= CITY_MIN_JOBS)
       .map(c => ({ url: base + '/gorod/' + c.slug, changeFrequency: 'daily' as const, priority: 0.6 }));
-    return [...fixed, ...cities,
+    // Свои виды работ — те, что в индексе (2+ открытых заказа).
+    const customs = cat.customs.filter(w => w.count >= CUSTOM_MIN_JOBS)
+      .map(w => ({ url: base + '/raboty/' + w.slug, changeFrequency: 'daily' as const, priority: 0.5 }));
+    return [...fixed, ...customs, ...cities,
       ...jobs.rows.map(j => ({ url: base + '/zakaz/' + j.num, lastModified: j.updated_at, changeFrequency: 'daily' as const, priority: 0.6 }))];
   } catch (e) {
     console.error('[sitemap]', (e as Error).message);

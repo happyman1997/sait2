@@ -3,8 +3,9 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Crumbs, JobCards, JsonLd, LinkChips, SeoPage } from '@/components/seo/Seo';
 import sty from '@/components/seo/Seo.module.css';
+import { WorkSearch } from '@/components/seo/WorkSearch';
 import { plural } from '@/lib/jobs';
-import { cityPhrase, inCity, WORK_PAGES } from '@/lib/seo';
+import { cityPhrase, inCity } from '@/lib/seo';
 import { publicJobs } from '@/server/jobs';
 import { breadcrumbsLd, CITY_MIN_JOBS, seoCatalog, SITE_NAME, todayLocal } from '@/server/seo';
 
@@ -39,7 +40,7 @@ export default async function CityPage(props: Props) {
   const jobs = await publicJobs({ city: c.name, limit: 40 }, todayLocal());
   const types = new Map<string, number>();
   for (const r of cat.rows) if (r.city && r.city.toLowerCase() === c.name.toLowerCase()) types.set(r.type_id, (types.get(r.type_id) || 0) + r.n);
-  const works = WORK_PAGES.filter(w => types.has(w.id)).map(w => ({ href: '/raboty/' + w.slug, label: w.label, count: types.get(w.id) }));
+  const works = [...cat.works, ...cat.customs].filter(w => types.has(w.id)).map(w => ({ href: '/raboty/' + w.slug, label: w.label, count: types.get(w.id) }));
   const crumbs: [string, string][] = [['Главная', '/'], ['Подработка', '/raboty'], [c.name, '/gorod/' + c.slug]];
   return (
     <SeoPage>
@@ -50,6 +51,7 @@ export default async function CityPage(props: Props) {
         Разовые смены и сезонная работа {inCity(c.name) || '— ' + c.name}: заказчики ставят их точкой на карте, исполнители
         откликаются рядом с домом. Сейчас открыто {ordersWord(c.count)}.
       </p>
+      <WorkSearch customs={cat.customs.map(w => ({ label: w.label, slug: w.slug }))} />
       {works.length > 0 && (
         <>
           <h2 className={sty.h2}>Виды работ</h2>

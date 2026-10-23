@@ -6,6 +6,7 @@ import {
   isOnCall, jobNum, MAX_CALLS, payNumber, seriesDates, seriesDayLabel, SERIES_STEP, AUTO_ACCEPT_DAYS, type AppStatus, type Applicant, type JobDetail, type JobForm, type JobStatus, type JobSummary, type SeriesInfo, type ShiftInfo
 } from '@/lib/jobs';
 import { badWordIn, findBadField } from '@/lib/moderation';
+import { searchSkills } from '@/lib/skills';
 import { afterCommit, one, pool, query, tx, type Db } from './db';
 import { AppError, ModerationError } from './errors';
 import { addEvents, localClock } from './events';
@@ -106,7 +107,8 @@ type Search = { rows: SummaryRow[]; base: Base; guest?: { jobs: JobSummary[]; ba
 // 200 записей по ≤500 строк — потолок памяти кэша; просроченные убираются при каждой вставке.
 const guestSearch = new TtlCache<Search>(20_000, 200);
 const VIEWER_MAX_AGE = 5_000;
-export function invalidateSearch() { afterCommit(() => { guestSearch.clear(); guestCard.clear(); }); }
+// Страницы каталога (seoCache) — тоже: новый заказ или свой вид работ виден в каталоге сразу.
+export function invalidateSearch() { afterCommit(() => { guestSearch.clear(); guestCard.clear(); seoCache.clear(); }); }
 
 export async function listJobs(p: ListParams, viewer: Viewer, db: Db = pool()) {
   if (db !== pool()) return searchJobs(p, viewer, db);
@@ -152,8 +154,9 @@ const seoCache = new TtlCache<unknown>(60_000, 300);
  * Открытые заказы глазами гостя (у частного заказчика — адрес без дома): списки на страницах видов работ, городов
  * и «похожие» на странице заказа. Порядок — как в списке на карте: срочные, затем по дате.
  */
-export async function publicJobs(f: { typeId?: string; city?: string; notNum?: number; limit: number }, today: string, db: Db = pool()) {
-  const key = JSON.stringify(['jobs', f.typeId ?? null, f.city ?? null, f.notNum ?? null, f.limit, today]);
+export async function publicJobs(f: { typeId?: string; city?: string; notNum?: number; q?: string; limit: number }, today: string, db: Db = pool()) {
+  const { like, typeIds } = searchTerms(f.q);
+  const key = JSON.stringify(['jobs', f.typeId ?? null, f.city ?? null, f.notNum ?? null, like, f.limit, today]);
   return seoCache.get(key, async () => {
     // $1–$3 — зритель и база из SUMMARY_COLS: гость, база по умолчанию (расстояние на этих страницах не показывается).
     const r = await query<SummaryRow>(
@@ -163,9 +166,10 @@ export async function publicJobs(f: { typeId?: string; city?: string; notNum?: n
           AND ($5::text IS NULL OR j.type_id = $5)
           AND ($6::text IS NULL OR lower(j.district) = lower($6))
           AND ($7::bigint IS NULL OR j.num <> $7)
+          AND ${SEARCH_SQL(9, 10)}
         ORDER BY j.urgent DESC, j.date, j.created_at DESC
         LIMIT $8`,
-      [null, DEFAULT_BASE.lat, DEFAULT_BASE.lng, today, f.typeId ?? null, f.city ?? null, f.notNum ?? null, Math.min(Math.max(f.limit, 1), 100)],
+      [null, DEFAULT_BASE.lat, DEFAULT_BASE.lng, today, f.typeId ?? null, f.city ?? null, f.notNum ?? null, Math.min(Math.max(f.limit, 1), 100), like, typeIds],
       db
     );
     return r.rows.map(x => toSummary(x, null));
@@ -173,13 +177,22 @@ export async function publicJobs(f: { typeId?: string; city?: string; notNum?: n
 }
 
 /** Сколько открытых заказов по видам работ и городам — для каталога, страниц городов и карты сайта. */
+export type OpenCount = { type_id: string; label: string; custom: boolean; city: string | null; n: number };
 export async function openJobCounts(today: string, db: Db = pool()) {
   return seoCache.get(JSON.stringify(['counts', today]), async () => {
-    const r = await query<{ type_id: string; city: string | null; n: number }>(
-      `SELECT j.type_id, nullif(btrim(j.district), '') AS city, count(*)::int AS n
-         FROM jobs j WHERE ${openNow(1)} GROUP BY 1, 2`, [today], db);
+    const r = await query<OpenCount>(
+      `SELECT j.type_id, t.label, t.is_custom AS custom, nullif(btrim(j.district), '') AS city, count(*)::int AS n
+         FROM jobs j JOIN job_types t ON t.id = j.type_id
+        WHERE ${openNow(1)} GROUP BY 1, 2, 3, 4`, [today], db);
     return r.rows;
-  }) as Promise<{ type_id: string; city: string | null; n: number }[]>;
+  }) as Promise<OpenCount[]>;
+}
+
+/** Свои виды работ (вписанные работодателями) — в порядке появления: от него зависит адрес страницы при совпадении. */
+export async function customTypes(db: Db = pool()) {
+  return seoCache.get('custom-types', async () =>
+    (await query<{ id: string; label: string }>(`SELECT id, label FROM job_types WHERE is_custom ORDER BY created_at, id`, [], db)).rows
+  ) as Promise<{ id: string; label: string }[]>;
 }
 
 async function searchJobs(p: ListParams, viewer: Viewer, db: Db) {
@@ -187,17 +200,27 @@ async function searchJobs(p: ListParams, viewer: Viewer, db: Db) {
   return { jobs: r.rows.map(x => toSummary(x, viewer, r.base)), base: r.base };
 }
 
+/**
+ * Строка поиска → шаблон LIKE (по названию, улице без дома и городу — jobs.search) и виды работ, которые
+ * так называют: «грузчик» → «Погрузка и разгрузка», «снег» → «Уборка снега» (синонимы — lib/skills.ts).
+ */
+function searchTerms(raw: string | undefined): { like: string | null; typeIds: string[] } {
+  const q = (raw || '').trim().slice(0, 100);
+  if (!q) return { like: null, typeIds: [] };
+  const cat = badWordIn(q);
+  if (cat) throw new ModerationError('q', 'Поиск', cat);
+  return { like: '%' + q.toLowerCase().replace(/[\\%_]/g, m => '\\' + m) + '%', typeIds: searchSkills(q, [], 50).map(t => t.id) };
+}
+const SEARCH_SQL = (like: number, ids: number) =>
+  `($${like}::text IS NULL OR j.search LIKE $${like} OR j.type_id = ANY($${ids}::text[])
+     OR j.type_id IN (SELECT id FROM job_types WHERE lower(label) LIKE $${like}))`;
+
 async function searchRows(p: ListParams, viewer: Viewer, db: Db) {
   const base = baseOf(viewer, p.lat, p.lng);
-  const q = (p.q || '').trim().slice(0, 100);
-  if (q) {
-    const cat = badWordIn(q);
-    if (cat) throw new ModerationError('q', 'Поиск', cat);
-  }
+  const { like, typeIds } = searchTerms(p.q);
   const types = (p.types || []).filter(t => /^[a-z0-9_]{1,40}$/.test(t)).slice(0, 50);
   const km = p.km && p.km > 0 ? Math.min(p.km, 20000) : null;
-  const like = q ? '%' + q.toLowerCase().replace(/[\\%_]/g, m => '\\' + m) + '%' : null;
-  const params: unknown[] = [viewer?.id ?? null, base.lat, base.lng, p.today, types.length ? types : null, Math.max(0, p.minPay || 0), km, p.when === 'soon', like];
+  const params: unknown[] = [viewer?.id ?? null, base.lat, base.lng, p.today, types.length ? types : null, Math.max(0, p.minPay || 0), km, p.when === 'soon', like, typeIds];
   // Внутри — 500 ближайших к базе подходящих заказов: KNN по GiST-индексу jobs_pt_idx останавливается на 500-м.
   // Радиус — снаружи: всё, что внутри радиуса, ближе всего, что за ним, поэтому отбор среди 500 ближайших точен,
   // а индекс не приходится проходить по всему кругу (на плотной карте это в разы быстрее).
@@ -212,7 +235,7 @@ async function searchRows(p: ListParams, viewer: Viewer, db: Db) {
           AND ($5::text[] IS NULL OR j.type_id = ANY($5))
           AND j.pay >= $6
           AND (NOT $8 OR j.date BETWEEN $4::date AND $4::date + 1)
-          AND ($9::text IS NULL OR j.search LIKE $9 OR j.type_id IN (SELECT id FROM job_types WHERE lower(label) LIKE $9))
+          AND ${SEARCH_SQL(9, 10)}
         ORDER BY j.pt <-> ll_to_earth($2, $3)
         LIMIT 500
      )

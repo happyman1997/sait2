@@ -151,6 +151,24 @@ describe('поиск', () => {
     expect((await jobs.listJobs({ today, km: 10, ...SPB }, null)).jobs.map(j => j.typeId)).toEqual(['grass']);
   });
 
+  it('поиск понимает, как называют работу: «грузчик», «дворник», «снег»', async () => {
+    expect((await jobs.listJobs({ today, q: 'грузчик' }, fl)).jobs.map(j => j.typeId)).toEqual(['load']);
+    expect((await jobs.listJobs({ today, q: 'Снег' }, fl)).jobs.map(j => j.typeId)).toEqual(['snow']);
+    expect((await jobs.listJobs({ today, q: 'покос' }, fl)).jobs.map(j => j.typeId)).toEqual(['grass']);
+    // То же — в каталоге для поисковиков (гостевая выдача).
+    expect((await jobs.publicJobs({ q: 'грузчик', limit: 10 }, today)).map(j => j.typeId)).toEqual(['load']);
+  });
+
+  it('по номеру дома частного заказчика заказ не находится — дом не угадать перебором', async () => {
+    const priv = await mkUser('employer', 'ivan_q', '9170000009', 'Иван Петров');
+    await query(`UPDATE employer_profiles SET org_type = 'частное лицо', org_name = NULL WHERE user_id = $1`, [priv.id]);
+    const j = await jobs.createJob(form({ address: 'Москва, ул. Садовая, 18, кв. 5' }), priv, today);
+    const found = async (q: string) => (await jobs.listJobs({ today, q }, null)).jobs.some(x => x.num === j.num);
+    expect(await found('садовая')).toBe(true);
+    for (const q of ['садовая, 18', 'Садовая, 18, кв. 5', ', 18', 'кв. 5']) expect(await found(q)).toBe(false);
+    expect((await jobs.publicJobs({ q: 'садовая, 18', limit: 10 }, today)).some(x => x.num === j.num)).toBe(false);
+  });
+
   it('поиск с матом отклоняется', async () => {
     await expectErr(jobs.listJobs({ today, q: 'сука' }, fl), 'q');
   });
@@ -257,6 +275,24 @@ describe('карточка и отклик', () => {
     expect(meta.alternates?.canonical).toBe('/zakaz/' + j.num);
     // Счётчики каталога видят открытый заказ.
     expect((await jobs.openJobCounts(today)).some(r => r.type_id === j.typeId && r.n > 0)).toBe(true);
+  });
+
+  it('свои виды работ — со своей страницей в каталоге и в поиске', async () => {
+    const seo = await import('@/server/seo');
+    const own = await jobs.createJob(form({ type: '', typeOther: 'Колка дров' }), emp, today);
+    // Своё название, совпавшее по адресу со справочным («Уборка снега»), получает адрес с хвостом из id.
+    await jobs.createJob(form({ type: '', typeOther: 'Уборка снега!' }), emp, today);
+    const cat = await seo.seoCatalog(today);
+    const kolka = cat.customs.find(w => w.label === 'Колка дров')!;
+    expect([kolka.slug, kolka.count]).toEqual(['kolka-drov', 1]);
+    const twin = cat.customs.find(w => w.label === 'Уборка снега!')!;
+    expect(twin.slug).toMatch(/^uborka-snega-[0-9a-f]+$/);
+    expect((await seo.workForSlug('uborka-snega'))?.custom).toBe(false);
+    expect((await seo.workForSlug(twin.slug))?.label).toBe('Уборка снега!');
+    expect(await seo.workPath(own.typeId)).toBe('/raboty/kolka-drov');
+    // «Колка» — и свой вид, и синоним справочного («колка льда» → «Удаление наледи»).
+    expect((await seo.worksFor('колка')).map(w => w.label)).toEqual(['Удаление наледи', 'Колка дров']);
+    expect((await jobs.publicJobs({ q: 'колка', limit: 5 }, today)).map(j => j.num)).toEqual([own.num]);
   });
 
   it('картинка-превью ссылки — по гостевой карточке: у частного заказчика без дома', async () => {

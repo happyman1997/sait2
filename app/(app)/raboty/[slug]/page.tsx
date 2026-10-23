@@ -3,28 +3,32 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Crumbs, JobCards, JsonLd, LinkChips, SeoPage } from '@/components/seo/Seo';
 import sty from '@/components/seo/Seo.module.css';
+import { WorkSearch } from '@/components/seo/WorkSearch';
 import { plural } from '@/lib/jobs';
-import { slugify, WORK_INFO, WORK_PAGES, workBySlug } from '@/lib/seo';
+import { slugify, WORK_INFO, WORK_PAGES } from '@/lib/seo';
 import { publicJobs } from '@/server/jobs';
-import { breadcrumbsLd, CITY_MIN_JOBS, citiesFor, seoCatalog, SITE_NAME, todayLocal } from '@/server/seo';
+import { breadcrumbsLd, CITY_MIN_JOBS, citiesFor, CUSTOM_MIN_JOBS, seoCatalog, SITE_NAME, todayLocal, workForSlug } from '@/server/seo';
 
 export const dynamic = 'force-dynamic';
 
 type Props = { params: Promise<{ slug: string }> };
 
-const work = async (props: Props) => workBySlug((await props.params).slug) ?? notFound();
+// Вид из справочника или свой (вписанный работодателем); нет такого — 404.
+const work = async (props: Props) => (await workForSlug((await props.params).slug)) ?? notFound();
 const ordersWord = (n: number) => n + ' ' + plural(n, 'заказ', 'заказа', 'заказов');
 
 export async function generateMetadata(props: Props): Promise<Metadata> {
   const w = await work(props);
   const info = WORK_INFO[w.id];
-  const { works } = await seoCatalog();
-  const n = works.find(x => x.id === w.id)?.count || 0;
-  const first = info.about.split(/(?<=\.)\s/)[0];
+  const { works, customs } = await seoCatalog();
+  const n = (w.custom ? customs : works).find(x => x.id === w.id)?.count || 0;
+  const first = info ? info.about.split(/(?<=\.)\s/)[0] : 'Заказы «' + w.label + '»: разовые смены от работодателей рядом с домом.';
   return {
     title: w.label + ': подработка и разовые смены — ' + SITE_NAME,
     description: first + (n ? ' Сейчас открыто ' + ordersWord(n) + '.' : '') + ' Ставка и дата видны сразу, отклик без резюме.',
-    alternates: { canonical: '/raboty/' + w.slug }
+    alternates: { canonical: '/raboty/' + w.slug },
+    // Свой вид с одним заказом — тонкая страница: ссылки пусть работают, в индекс — не нужно.
+    robots: w.custom && n < CUSTOM_MIN_JOBS ? { index: false, follow: true } : undefined
   };
 }
 
@@ -34,7 +38,7 @@ export default async function WorkPage(props: Props) {
   const info = WORK_INFO[w.id];
   const today = todayLocal();
   const [jobs, cat] = await Promise.all([publicJobs({ typeId: w.id, limit: 30 }, today), seoCatalog(today)]);
-  const n = cat.works.find(x => x.id === w.id)?.count || 0;
+  const n = (w.custom ? cat.customs : cat.works).find(x => x.id === w.id)?.count || 0;
   const cities = citiesFor(w.id, cat.rows);
   // Город со своей страницей (3+ заказов) — ссылкой, остальные — просто списком.
   const cityPages = new Set(cat.cities.filter(c => c.count >= CITY_MIN_JOBS).map(c => c.slug));
@@ -48,10 +52,13 @@ export default async function WorkPage(props: Props) {
       <JsonLd data={breadcrumbsLd(crumbs)} />
       <Crumbs items={[crumbs[0], crumbs[1], [w.label]]} />
       <h1 className={sty.h1}>{w.label}: подработка и разовые смены</h1>
-      <p className={sty.lead}>{info.about}</p>
-      <p className={sty.muted} style={{ marginTop: 8 }}>
-        Сезон: {info.season}. {n ? 'Сейчас открыто ' + ordersWord(n) + '.' : 'Сейчас открытых заказов нет.'}
+      <p className={sty.lead}>
+        {info ? info.about : 'Этот вид работ вписали сами работодатели — заказы «' + w.label + '» публикуются точкой на карте, исполнители откликаются рядом с домом.'}
       </p>
+      <p className={sty.muted} style={{ marginTop: 8 }}>
+        {info ? 'Сезон: ' + info.season + '. ' : ''}{n ? 'Сейчас открыто ' + ordersWord(n) + '.' : 'Сейчас открытых заказов нет.'}
+      </p>
+      <WorkSearch customs={cat.customs.map(c => ({ label: c.label, slug: c.slug }))} />
 
       <h2 className={sty.h2}>{n ? 'Заказы сейчас' : 'Заказов пока нет'}</h2>
       {jobs.length > 0 ? (
@@ -61,8 +68,8 @@ export default async function WorkPage(props: Props) {
         </>
       ) : (
         <p className={sty.text}>
-          Новые заказы на {lower} появляются в сезон, часто — за день до выхода. Создайте профиль исполнителя
-          и укажите район: о новых заказах рядом придёт уведомление.
+          {info ? 'Новые заказы на ' + lower + ' появляются в сезон, часто — за день до выхода.' : 'Новые заказы появляются каждый день.'} Создайте
+          профиль исполнителя и укажите район: о новых заказах рядом придёт уведомление.
         </p>
       )}
       <div className={sty.actions}>
@@ -70,11 +77,15 @@ export default async function WorkPage(props: Props) {
         <Link href="/auth?role=freelancer" className="btn btn-secondary">Создать профиль исполнителя</Link>
       </div>
 
-      <h2 className={sty.h2}>Что обычно нужно сделать</h2>
-      <ul className={sty.list}>{info.tasks.map(t => <li key={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</li>)}</ul>
-      <h2 className={sty.h2}>Что взять с собой</h2>
-      <p className={sty.text}>{info.bring.charAt(0).toUpperCase() + info.bring.slice(1)}.</p>
-      <p className={sty.text}>
+      {info && (
+        <>
+          <h2 className={sty.h2}>Что обычно нужно сделать</h2>
+          <ul className={sty.list}>{info.tasks.map(t => <li key={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</li>)}</ul>
+          <h2 className={sty.h2}>Что взять с собой</h2>
+          <p className={sty.text}>{info.bring.charAt(0).toUpperCase() + info.bring.slice(1)}.</p>
+        </>
+      )}
+      <p className={sty.text} style={info ? undefined : { marginTop: 24 }}>
         Ставка, дата, объём и способ оплаты видны в карточке заказа сразу — до отклика. Профиль спрашиваем только при отклике,
         после найма откроются чат с заказчиком и телефон встречающего.
       </p>
@@ -94,7 +105,10 @@ export default async function WorkPage(props: Props) {
       </div>
 
       <h2 className={sty.h2}>Другие виды подработки</h2>
-      <LinkChips items={WORK_PAGES.filter(x => x.id !== w.id).map(x => ({ href: '/raboty/' + x.slug, label: x.label, count: cat.works.find(c => c.id === x.id)?.count }))} />
+      <LinkChips items={[
+        ...WORK_PAGES.filter(x => x.id !== w.id).map(x => ({ href: '/raboty/' + x.slug, label: x.label, count: cat.works.find(c => c.id === x.id)?.count })),
+        ...cat.customs.filter(x => x.id !== w.id).map(x => ({ href: '/raboty/' + x.slug, label: x.label, count: x.count }))
+      ]} />
     </SeoPage>
   );
 }
