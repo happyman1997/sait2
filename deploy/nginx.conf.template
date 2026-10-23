@@ -6,6 +6,8 @@ server_tokens off;
 # фильтр от перебора и флуда, с запасом на мобильный NAT, где за одним адресом много людей.
 limit_req_zone $binary_remote_addr zone=auth:10m rate=30r/m;
 limit_req_zone $binary_remote_addr zone=api:20m rate=30r/s;
+# Страницы (карта, заказы, каталог с поиском /raboty?q=…) тоже ходят в базу — тот же грубый потолок, что у API.
+limit_req_zone $binary_remote_addr zone=pages:20m rate=30r/s;
 limit_req_status 429;
 limit_conn_zone $binary_remote_addr zone=conn:10m;
 limit_conn_status 429;
@@ -150,6 +152,7 @@ server {
   }
 
   location / {
+    limit_req zone=pages burst=60 nodelay;
     proxy_pass http://app:3000;
     proxy_read_timeout 60s;
   }

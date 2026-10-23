@@ -19,9 +19,9 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
   return {
     title: q ? 'Поиск подработки: «' + q + '» — ' + SITE_NAME : 'Подработка и разовые смены: все виды работ — ' + SITE_NAME,
     description: 'Сезонная подработка рядом с домом: уборка снега, покос травы, уборка листвы, погрузка, вывоз мусора и другие разовые смены. Ставка и дата видны сразу, отклик без резюме.',
-    alternates: { canonical: '/raboty' },
-    // Страницы результатов поиска поисковикам не нужны — в индексе сам каталог.
-    robots: q ? { index: false, follow: true } : undefined
+    // Страницы результатов поиска поисковикам не нужны — в индексе сам каталог (у них — только noindex, без canonical:
+    // вместе эти сигналы противоречат друг другу).
+    ...(q ? { robots: { index: false, follow: true } } : { alternates: { canonical: '/raboty' } })
   };
 }
 

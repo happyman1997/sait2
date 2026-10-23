@@ -10,8 +10,10 @@ import { jobOgData, OG_SIZE, ogVersion } from './og';
 export const SITE_NAME = 'Арена Работ';
 export const siteUrl = () => config.publicUrl().replace(/\/$/, '');
 
+/** Дата YYYY-MM-DD по часовому поясу сервиса: опубликованное в 01:00 по Москве — сегодняшним числом, а не вчерашним. */
+export const localDate = (at: string | Date = new Date()) => new Date(at).toLocaleDateString('sv-SE', { timeZone: config.timeZone() });
 /** Сегодня по часовому поясу сервиса (как дата «сегодня» у пользователей). */
-export const todayLocal = () => new Date().toLocaleDateString('sv-SE', { timeZone: config.timeZone() });
+export const todayLocal = () => localDate();
 
 export const jobPath = (num: number) => '/zakaz/' + num;
 export const isOpenJob = (j: Pick<JobSummary, 'status'>) => j.status === 'open' || j.status === 'staffed';

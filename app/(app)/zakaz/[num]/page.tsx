@@ -8,7 +8,7 @@ import { WORK_INFO, workById } from '@/lib/seo';
 import { AppError } from '@/server/errors';
 import { currentUser } from '@/server/http';
 import { getJob, publicJobs } from '@/server/jobs';
-import { breadcrumbsLd, isOpenJob, jobMetadata, jobPostingLd, todayLocal, workPath } from '@/server/seo';
+import { breadcrumbsLd, isOpenJob, jobMetadata, jobPostingLd, localDate, todayLocal, workPath } from '@/server/seo';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,8 +48,10 @@ export default async function JobPage({ params }: Props) {
     similar = [...similar, ...near.filter(x => !similar.some(y => y.num === x.num))].slice(0, 6);
   }
 
-  // Гость — регистрация с откликом на этот заказ; исполнитель — сразу отклик в карточке; работодатель — карточка.
-  const applyHref = !u ? '/auth?apply=' + j.num : u.role === 'freelancer' ? '/?job=' + j.num + '&apply=1' : '/?job=' + j.num;
+  // Гость — регистрация с откликом на этот заказ; исполнитель — сразу отклик в карточке; работодателю откликаться
+  // не на что — у него только «Показать на карте».
+  const applyHref = !u ? '/auth?apply=' + j.num : u.role === 'freelancer' ? '/?job=' + j.num + '&apply=1' : null;
+  const hiring = open && !full;
   const when = j.repeat ? 'с ' + dateLabel(j.date) : dateLabel(j.date);
   const specs: [string, string][] = [
     ['Адрес', j.addressHidden ? j.address + ' (частный заказчик: дом и точная метка — после найма)' : j.address],
@@ -62,7 +64,7 @@ export default async function JobPage({ params }: Props) {
     ...(j.requirement ? [['Условие работодателя', j.requirement] as [string, string]] : []),
     ['Инвентарь', j.tools || 'уточняется у работодателя'],
     ['Заказчик', j.employer.name + (j.employer.jobs > 1 ? ' · заказов на площадке: ' + j.employer.jobs : '')],
-    ['Опубликован', dateLabel(j.createdAt.slice(0, 10))]
+    ['Опубликован', dateLabel(localDate(j.createdAt))]
   ];
   // Вид работ в крошках — и справочный, и свой (у своего тоже есть страница).
   const typePath = await workPath(j.typeId);
@@ -71,7 +73,8 @@ export default async function JobPage({ params }: Props) {
 
   return (
     <SeoPage>
-      {open && <JsonLd data={jobPostingLd(j)} />}
+      {/* Вакансия в разметке — только пока идёт набор: закрытые и набранные Google просит не размечать. */}
+      {hiring && <JsonLd data={jobPostingLd(j)} />}
       <JsonLd data={breadcrumbsLd(crumbs)} />
       <Crumbs items={crumbs.map(([l, h], i) => [l, i < crumbs.length - 1 ? h : undefined])} />
 
@@ -90,7 +93,7 @@ export default async function JobPage({ params }: Props) {
         <div className={sty.payNote}>{(j.repeat ? 'Серия выходов ' : 'Выход ') + when}{j.payType ? ' · ' + j.payType : ''}</div>
       </div>
       <div className={sty.actions}>
-        {open && !full && <Link href={applyHref} className="btn btn-primary">Откликнуться</Link>}
+        {hiring && applyHref && <Link href={applyHref} className="btn btn-primary">Откликнуться</Link>}
         <Link href={'/?job=' + j.num} className="btn btn-secondary">Показать на карте</Link>
       </div>
 
