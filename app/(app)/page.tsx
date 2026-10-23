@@ -52,6 +52,8 @@ export default async function Home({ searchParams }: Props) {
       me={meOf(u)}
       initialJob={jobOf(sp.job)}
       autoApply={sp.apply === '1'}
+      openList={sp.list === '1'}
+      startNew={sp.new === '1'}
     />
   );
 }

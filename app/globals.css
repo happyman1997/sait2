@@ -359,6 +359,12 @@ button:not(:disabled):active { transform: translateY(1px); }
 @media (max-width: 719.98px) {
   .only-wide { display: none !important; }
   .only-narrow { display: flex !important; }
+  /* Метки «чертежа» по углам рамок на телефоне — лишний шум. */
+  .blueprint > .corner { display: none; }
+  /* Телефон — мягкие формы, как в мобильных приложениях. */
+  .btn, .input, .seg { border-radius: 10px; }
+  .tag { border-radius: 8px; }
+  .card, .dialog, .blueprint { border-radius: 14px; }
 }
 
 /* Рабочий режим: крупные цели касания и текст */

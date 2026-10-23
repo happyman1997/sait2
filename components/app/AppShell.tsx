@@ -18,7 +18,7 @@ function Inner({ children }: { children: ReactNode }) {
   return (
     <div className={sty.cfa14b4e}>
       <MobileBar />
-      <AppHeader wideOnly={!!me} me={me && { name: me.name, role: me.role, city: me.city, avatarUrl: me.avatarUrl, isStaff: me.isStaff }} unread={unread}
+      <AppHeader wideOnly me={me && { name: me.name, role: me.role, city: me.city, avatarUrl: me.avatarUrl, isStaff: me.isStaff }} unread={unread}
         chatActive={dock.open} onChat={() => setDock({ open: !dock.open, view: dock.view })}
         onHome={() => window.dispatchEvent(new Event('arena:home'))} />
       <div className={sty.c5e48755}>{children}</div>

@@ -51,6 +51,9 @@ type Ctx = {
   /** Рабочий режим: крупные кнопки и строки — удобно в перчатках на объекте. */
   workMode: boolean;
   setWorkMode: (on: boolean) => void;
+  /** Список заказов поверх карты открыт — на телефоне его открывает вкладка «Поиск». */
+  mapList: boolean;
+  setMapList: (open: boolean) => void;
 };
 
 export type Rail = 'journal' | 'settings' | null;
@@ -81,6 +84,7 @@ export function LiveProvider({ me, children }: { me: Me; children: ReactNode }) 
   const toasts = useRef(true);
   const setToasts = useCallback((on: boolean) => { toasts.current = on; }, []);
   const [rail, setRail] = useState<Rail>(null);
+  const [mapList, setMapList] = useState(false);
   const [workMode, setWorkModeState] = useState(false);
   useEffect(() => {
     try { if (localStorage.getItem('arena:work') === '1') setWorkModeState(true); } catch { /* приватный режим */ }
@@ -148,8 +152,8 @@ export function LiveProvider({ me, children }: { me: Me; children: ReactNode }) 
 
   const value = useMemo<Ctx>(() => ({
     me, chats, unread: chats.reduce((n, c) => n + c.unread, 0), reloadChats, dock, setDock, openChat, onLive, review, openReview: setReview, place, setPlace,
-    journal, setJournal, setToasts, rail, setRail, workMode, setWorkMode
-  }), [setToasts, me, chats, reloadChats, dock, setDock, openChat, onLive, review, place, journal, rail, workMode, setWorkMode]);
+    journal, setJournal, setToasts, rail, setRail, workMode, setWorkMode, mapList, setMapList
+  }), [setToasts, me, chats, reloadChats, dock, setDock, openChat, onLive, review, place, journal, rail, workMode, setWorkMode, mapList]);
 
   return <LiveCtx.Provider value={value}>{children}</LiveCtx.Provider>;
 }

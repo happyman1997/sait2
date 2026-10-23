@@ -45,7 +45,7 @@ function track(j: MyJob, emp: boolean) {
   const stages = emp
     ? [
       { label: 'Отклики', ok: j.applicants > 0 || j.hired > 0 || accepted },
-      { label: 'Нанят исполнитель', ok: j.hired > 0 || accepted },
+      { label: 'Найм', ok: j.hired > 0 || accepted },
       { label: j.autoAccepted ? 'Закрыта автоматически' : 'Работа принята', ok: accepted }
     ]
     : [
@@ -104,7 +104,7 @@ export function MyJobsPage({ role }: { role: 'freelancer' | 'employer' }) {
 
   return (
     <div className={sty.c04b825c}>
-      <h2 className={sty.c197cab9}>{emp ? 'Мои заказы' : 'Мои смены'}</h2>
+      <h2 className={'only-wide ' + sty.c197cab9}>{emp ? 'Мои заказы' : 'Мои смены'}</h2>
       {!jobs && <div className={sty.c816d564}>Загружаем…</div>}
       <div className={sty.c82a9418}>
         {jobs?.map(j => {

@@ -1,82 +1,139 @@
-/* Статичные стили прототипа (scripts/css-modules.mjs): :where — специфичность атрибута style, !important — его приоритет. */
-:where(.cd052a46) {
-  flex: none !important;
-  align-items: center !important;
-  gap: 8px !important;
-  padding: max(8px, env(safe-area-inset-top)) 10px 8px 16px !important;
-  border-bottom: 1px solid var(--color-divider) !important;
-  background: var(--color-bg) !important;
+/* Мобильная оболочка в духе приложений: светлая шапка и нижние вкладки с иконками. Только < 720 px (.only-narrow). */
+.bar {
+  --tab-bg: var(--color-bg);
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  min-height: 52px;
+  padding: env(safe-area-inset-top) 6px 0 16px;
+  background: var(--tab-bg);
+  border-bottom: 1px solid var(--color-divider);
 }
-:where(.c03ad802) {
-  font-family: var(--font-heading) !important;
-  font-weight: 600 !important;
-  font-size: 18px !important;
-  letter-spacing: .08em !important;
-  text-transform: uppercase !important;
-  color: inherit !important;
-  text-decoration: none !important;
-  white-space: nowrap !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 6px !important;
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 19px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--color-text);
+  text-decoration: none;
 }
-:where(.cee04050) {
-  font-size: 12px !important;
-  letter-spacing: .18em !important;
-  text-transform: uppercase !important;
-  color: color-mix(in srgb, var(--color-text) 62%, transparent) !important;
-  min-width: 0 !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  white-space: nowrap !important;
+.title {
+  margin: 0;
+  min-width: 0;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 21px;
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-text);
 }
-:where(.c4012f9c) {
-  flex: none !important;
-  position: relative !important;
-  width: 44px !important;
-  height: 44px !important;
-  display: grid !important;
-  place-items: center !important;
-  border: 1px solid var(--color-divider) !important;
-  background: transparent !important;
-  cursor: pointer !important;
-  color: inherit !important;
+.grow { flex: 1; }
+.iconBtn {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: var(--color-text);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
-:where(.c13cd613) {
-  position: absolute !important;
-  top: 3px !important;
-  right: 3px !important;
-  min-width: 16px !important;
-  height: 16px !important;
-  padding: 0 4px !important;
-  box-sizing: border-box !important;
-  background: var(--color-accent) !important;
-  color: #fff !important;
-  font-family: var(--font-heading) !important;
-  font-size: 11px !important;
-  line-height: 16px !important;
-  text-align: center !important;
+.iconBtn:active { background: color-mix(in srgb, var(--color-text) 8%, transparent); }
+.signup { flex: none; height: 36px; min-height: 36px !important; padding: 0 14px !important; font-size: 13px !important; border-radius: 10px; margin-right: 6px; }
+.badge {
+  position: absolute;
+  top: 5px;
+  right: 3px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 9px;
+  background: #e5484d;
+  color: #fff;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--color-bg);
 }
-:where(.c4b8dcc6) {
-  position: fixed !important;
-  left: 0 !important;
-  right: 0 !important;
-  bottom: 0 !important;
-  z-index: 85 !important;
-  padding-bottom: env(safe-area-inset-bottom) !important;
-  border-top: 1px solid var(--color-divider) !important;
-  background: var(--color-neutral-100) !important;
+
+.nav {
+  --tab-bg: var(--color-bg);
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 85;
+  padding-bottom: env(safe-area-inset-bottom);
+  background: color-mix(in srgb, var(--tab-bg) 94%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+  backdrop-filter: saturate(180%) blur(14px);
+  border-top: 1px solid var(--color-divider);
 }
-:where(.cedbcc9d) {
-  min-width: 16px !important;
-  height: 16px !important;
-  padding: 0 4px !important;
-  box-sizing: border-box !important;
-  background: var(--color-accent) !important;
-  color: #fff !important;
-  font-size: 11px !important;
-  line-height: 16px !important;
-  text-align: center !important;
+.tab {
+  flex: 1;
+  min-width: 0;
+  height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  text-decoration: none;
+  color: color-mix(in srgb, var(--color-text) 58%, transparent);
+  -webkit-tap-highlight-color: transparent;
 }
-/* Узкий телефон: вместо надписи — только знак, чтобы название раздела («мои заказы») помещалось целиком. */
-@media (max-width: 379.98px) { .brandText { display: none; } }
+.tabOn { color: var(--color-text); }
+.tabIcon { width: 28px; height: 28px; display: grid; place-items: center; transition: transform .12s ease; }
+.tab:active .tabIcon { transform: scale(.88); }
+.tabLabel {
+  max-width: 100%;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tabOn .tabLabel { font-weight: 700; }
+.avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--color-accent-200);
+  color: var(--color-accent-900);
+  font-family: var(--font-heading);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+.avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.avatarOn { box-shadow: 0 0 0 2px var(--tab-bg), 0 0 0 3.5px var(--color-text); }
+
+/* Узкий телефон: на карте вместо надписи — только знак. */
+@media (max-width: 349.98px) { .brandText { display: none; } }

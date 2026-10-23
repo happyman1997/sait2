@@ -137,3 +137,5 @@
   text-transform: uppercase !important;
   white-space: nowrap !important;
 }
+.howAgain { margin-top: 14px; height: 34px; font-size: 13px; padding: 0 4px !important; }
+.howDone { margin-top: 14px; height: 40px; font-size: 14px; }

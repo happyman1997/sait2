@@ -56,8 +56,8 @@ export function ApplicantsPage() {
     <div className={sty.c07c9bd7}>
       <div className={sty.c914ecb0}>
         <div className={sty.ce822620}>
-          <Link href="/" className={'btn btn-primary ' + sty.c19d5231}>← Вернуться к карте</Link>
-          <h2 className={sty.cfac1c55}>Отклики</h2>
+          <Link href="/" className={'btn btn-primary only-wide ' + sty.c19d5231}>← Вернуться к карте</Link>
+          <h2 className={'only-wide ' + sty.cfac1c55}>Отклики</h2>
         </div>
         <div className={sty.c816d564}>Найм и отказы — в одном месте. Нанимая, вы заключаете с исполнителем договор на условиях заказа и <a href="/legal/offer#shift" target="_blank" rel="noreferrer">условиях смены</a>.</div>
 

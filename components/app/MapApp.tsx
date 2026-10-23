@@ -55,7 +55,11 @@ function qs(f: Filters, base: LatLng | null) {
   return p.toString();
 }
 
-export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: number | null; autoApply: boolean }) {
+export function MapApp({ me, initialJob, autoApply, openList = false, startNew = false }: {
+  me: Me; initialJob: number | null; autoApply: boolean;
+  /** Пришли с вкладки «Поиск» (/?list=1) или «＋ Заказ» (/?new=1) с другой страницы. */
+  openList?: boolean; startNew?: boolean;
+}) {
   const flash = useFlash();
   const narrow = useNarrow();
   const mapRef = useRef<SeasonMapHandle>(null);
@@ -122,7 +126,8 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
   const [busy, setBusy] = useState(false);
   const [hover, setHover] = useState<number | null>(null);
   const [stackPick, setStackPick] = useState<number[] | null>(null);
-  const [listOpen, setListOpen] = useState(false);
+  // Список заказов поверх карты — общий с нижней вкладкой «Поиск» (MobileShell).
+  const { mapList: listOpen, setMapList: setListOpen } = useLive();
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   // Открытая карточка — в адресе (?job=…). Открыли нажатием — новая запись истории: «Назад» закрывает карточку,
@@ -492,6 +497,37 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
     window.addEventListener('arena:home', h);
     return () => window.removeEventListener('arena:home', h);
   }, []);
+  // Вкладка «＋ Заказ» на телефоне: поле адреса нового заказа — в фокус (с другой страницы — через /?new=1).
+  const startNewRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    startNewRef.current = () => {
+      if (!isEmp) return;
+      setListOpen(false); setFiltersOpen(false); setStackPick(null); setObjEdit(null);
+      if (form) return;
+      setSelected(null);
+      setTimeout(() => {
+        const el = document.querySelector<HTMLInputElement>('input[aria-label="Адрес заказа"]');
+        el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        el?.focus();
+      }, 60);
+    };
+  });
+  useEffect(() => {
+    const h = () => startNewRef.current();
+    window.addEventListener('arena:new-job', h);
+    return () => window.removeEventListener('arena:new-job', h);
+  }, []);
+  // Пришли с вкладки на другой странице (/?list=1, /?new=1): открыть нужное и убрать признак из адреса.
+  useEffect(() => {
+    if (!openList && !startNew) return;
+    if (openList) setListOpen(true);
+    if (startNew) startNewRef.current();
+    const url = new URL(window.location.href);
+    url.searchParams.delete('list'); url.searchParams.delete('new');
+    window.history.replaceState(window.history.state, '', url);
+  }, [openList, startNew, setListOpen]);
+  // Ушли с карты — список не остаётся открытым.
+  useEffect(() => () => setListOpen(false), [setListOpen]);
   // Смена базы в настройках — пересчитать расстояния.
   useEffect(() => {
     window.addEventListener('arena:reload', loadJobs);
@@ -551,7 +587,7 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
     ? 'grid-row: 2; grid-column: 1; min-height: 0; border-top: 1px solid var(--color-divider); overflow-y: auto; overflow-x: hidden; padding: 14px 16px ' + (me && live.workMode && detail ? '96px' : '26px') + '; background: var(--color-neutral-100); box-shadow: 0 -6px 18px rgba(31,45,58,.10)'
     : 'grid-row: 1; grid-column: 1; min-height: 0; border-right: 1px solid var(--color-divider); overflow-y: auto; overflow-x: hidden; padding: 20px 22px 26px 20px; background: var(--color-neutral-100)';
   const shellStyle = narrow
-    ? 'position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: ' + (form || selected ? 'minmax(110px, 22%)' : 'minmax(220px, 46%)') + ' minmax(0, 1fr)'
+    ? 'position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: ' + (form || selected ? 'minmax(110px, 22%)' : 'minmax(240px, 56%)') + ' minmax(0, 1fr)'
     : 'position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: ' + (form ? 'minmax(420px, 620px)' : 'minmax(320px, 420px)') + ' minmax(340px, 1fr); overflow-x: auto';
   // Как у шапки на карте и левой панели — во всю ширину экрана.
   const PAD = 'clamp(14px, 2vw, 20px)';
@@ -559,7 +595,7 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
   return (
     <div className={sty.cecc0ae7}>
 
-      {!me && !(narrow && (form || selected)) && (
+      {!me && !narrow && (
         <div style={css('flex: none; display: flex; align-items: baseline; gap: 6px 16px; flex-wrap: wrap; padding: clamp(9px, 1.4vw, 13px) ' + PAD + '; background: var(--color-accent-900); border-bottom: 1px solid var(--color-accent-900)')}>
           <span className={'fh only-wide ' + sty.cd0d9449}>Сезонные работы на карте</span>
           <span className={'only-wide ' + sty.c3230d14}>Здесь ищут подработку: убрать снег, скосить траву, разгрузить машину. Видно, где работа, когда выходить и сколько заплатят. Резюме не нужно.</span>
@@ -579,9 +615,10 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
         </div>
       )}
 
-      {!(narrow && (form || selected)) && (
+      {/* Телефон: поиск и фильтры — плавающими кнопками на карте (ниже), без отдельной полосы. */}
+      {!narrow && (
         <div style={css('flex: none; display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 10px ' + PAD + '; border-bottom: 1px solid var(--color-divider); background: var(--color-neutral-100)')}>
-          <button className={'btn btn-primary ' + sty.c524a41d} onClick={() => setListOpen(o => !o)} aria-expanded={listOpen}>
+          <button className={'btn btn-primary ' + sty.c524a41d} onClick={() => setListOpen(!listOpen)} aria-expanded={listOpen}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /></svg>
             {listOpen ? 'Скрыть список заказов' : 'Все заказы списком · ' + found}
           </button>
@@ -665,7 +702,21 @@ export function MapApp({ me, initialJob, autoApply }: { me: Me; initialJob: numb
           {!form && !selected && !objEdit && <DocLinks style="margin-top: 22px" />}
         </div>
 
-        <div style={css('position: relative; min-width: 0; min-height: 0; overflow: hidden; ' + (narrow ? 'grid-row: 1; grid-column: 1' : 'grid-row: 1; grid-column: 2'))}>
+        <div data-compact-map={narrow && (form || selected != null) ? '' : undefined}
+          style={css('position: relative; min-width: 0; min-height: 0; overflow: hidden; ' + (narrow ? 'grid-row: 1; grid-column: 1' : 'grid-row: 1; grid-column: 2'))}>
+          {narrow && !form && !selected && (
+            <div className={sty.mapTools}>
+              <button className={sty.searchPill} onClick={() => setListOpen(true)} aria-expanded={listOpen}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m20 20-4.6-4.6" /></svg>
+                <span className={sty.searchText}>Поиск заказов</span>
+                <span aria-live="polite" className={sty.searchCount}>{loaded ? found : '…'}</span>
+              </button>
+              <button className={sty.filterBtn} onClick={() => setFiltersOpen(o => !o)} aria-expanded={filtersOpen} aria-label={'Фильтры' + (nFilters ? ', включено: ' + nFilters : '')}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></svg>
+                {nFilters > 0 && <span className={sty.filterBadge}>{nFilters}</span>}
+              </button>
+            </div>
+          )}
           <SeasonMap ref={mapRef} pins={pins} draft={draftPoint} mode={isEmp ? 'employer' : 'view'} highlight={hover} anchor={isEmp || !me ? null : anchor}
             radiusKm={isEmp ? 0 : filters.km} onMapClick={onMapClick} onPinClick={onPinClick} onStackClick={onStackClick} />
           {stackPick && stackPick.length > 0 && !form && (

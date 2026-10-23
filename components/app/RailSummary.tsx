@@ -2,7 +2,7 @@
 
 // Левая панель без выбранного заказа: гостю — «Как это работает», вошедшим — «Смена/Заказ за три шага».
 import Link from 'next/link';
-import { useState, type KeyboardEvent } from 'react';
+import { useState, useSyncExternalStore, type KeyboardEvent } from 'react';
 import { css } from '@/lib/css';
 import { Corners, LABEL } from './ui';
 import sty from './RailSummary.module.css';
@@ -64,6 +64,15 @@ export function GuestGuide() {
   );
 }
 
+// «Как это работает» вошедшему нужен один раз: «Понятно» скрывает подсказку (запоминается в браузере).
+const HIDE_KEY = 'arena.stepsHidden';
+const onHideChange = (cb: () => void) => { window.addEventListener('arena:steps', cb); return () => window.removeEventListener('arena:steps', cb); };
+const readHidden = () => { try { return localStorage.getItem(HIDE_KEY) === '1'; } catch { return false; } };
+const setHidden = (on: boolean) => {
+  try { if (on) localStorage.setItem(HIDE_KEY, '1'); else localStorage.removeItem(HIDE_KEY); } catch { /* приватный режим */ }
+  window.dispatchEvent(new Event('arena:steps'));
+};
+
 export function StartSteps({ isEmp, addr }: {
   isEmp: boolean;
   addr?: { query: string; setQuery: (v: string) => void; busy: boolean; note: string; error: boolean; onFind: () => void };
@@ -72,6 +81,7 @@ export function StartSteps({ isEmp, addr }: {
     ? ['Нажмите на карту или найдите адрес — откроется форма заказа.', 'Укажите тип работы, дату, объём и оплату. Условия видны исполнителю сразу.', 'Опубликуйте — исполнители откликнутся, их список появится в карточке заказа.']
     : ['Выберите метку на карте — откроются условия смены и оплата.', 'Откликнитесь. Профиль спросим только на этом шаге.', 'После найма откроются чат с работодателем и телефон встречающего.'];
   const onKey = (e: KeyboardEvent) => { if (e.key === 'Enter') { e.preventDefault(); addr?.onFind(); } };
+  const hidden = useSyncExternalStore(onHideChange, readHidden, () => false);
   return (
     <div>
       {isEmp && addr && (
@@ -84,6 +94,9 @@ export function StartSteps({ isEmp, addr }: {
           <div style={css('font-size: 13px; line-height: 1.4; margin-top: 8px; color: ' + (addr.error ? 'var(--color-accent-900)' : 'color-mix(in srgb, var(--color-text) 66%, transparent)'))}>{addr.note}</div>
         </div>
       )}
+      {hidden ? (
+        <button className={'btn btn-ghost ' + sty.howAgain} onClick={() => setHidden(false)}>Как это работает?</button>
+      ) : <>
       <div style={css(LABEL + (isEmp && addr ? '; margin-top: 22px' : ''))}>Как это работает</div>
       <div className={'fh ' + sty.ce15ec2e}>{isEmp ? 'Заказ за три шага' : 'Смена за три шага'}</div>
       <div className={sty.cd8f77ee}>
@@ -100,6 +113,8 @@ export function StartSteps({ isEmp, addr }: {
           ? 'Нажмите на любую точку карты — откроется форма заказа: тип, адрес, дата, оплата и объём. Регион определится по метке. Чат с исполнителем открывается после найма.'
           : 'На карте у каждого заказа видна ставка и тип работы — выберите любую, чтобы прочитать условия и откликнуться. Чат открывается после найма.'}
       </div>
+      <button className={'btn btn-secondary btn-block ' + sty.howDone} onClick={() => setHidden(true)}>Понятно, скрыть подсказку</button>
+      </>}
     </div>
   );
 }

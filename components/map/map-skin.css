@@ -10,7 +10,15 @@
   border-radius: 0; border: 1px solid var(--color-accent, #5980a6); border-top: 0; color: var(--color-text, #1d1f20);
   background: color-mix(in srgb, var(--color-neutral-100, #fff) 82%, transparent); font-size: 10px;
 }
-/* Телефон: кнопки масштаба крупнее — под палец. */
+/* Телефон: кнопки масштаба крупнее — под палец, справа под строкой поиска, без линейки — меньше шума на маленькой карте. */
 @media (max-width: 719.98px) {
   .maplibregl-ctrl-group button { width: 40px; height: 40px; }
+  .maplibregl-ctrl-top-left { top: 54px; left: auto; right: 0; }
+  .maplibregl-ctrl-top-left .maplibregl-ctrl { float: right; margin: 10px 12px 0 0; }
+  /* Под открытой карточкой или формой карта низкая — кнопки масштаба только мешают (масштаб — двумя пальцами). */
+  [data-compact-map] .maplibregl-ctrl-top-left { display: none; }
+  .maplibregl-ctrl-group { border: 0; border-radius: 12px !important; overflow: hidden; box-shadow: 0 2px 12px rgba(20, 30, 40, .18); background: var(--color-bg, #fff); }
+  .maplibregl-ctrl-group button { background: var(--color-bg, #fff); }
+  .maplibregl-ctrl-group button + button { border-top: 1px solid var(--color-divider, #ddd); }
+  .maplibregl-ctrl-scale { display: none; }
 }

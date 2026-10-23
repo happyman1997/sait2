@@ -92,6 +92,8 @@
 }
 :where(.c46a7c4f) {
   margin-top: 2px !important;
+  -webkit-hyphens: auto;
+  hyphens: auto;
 }
 :where(.cc626c4c) {
   display: flex !important;

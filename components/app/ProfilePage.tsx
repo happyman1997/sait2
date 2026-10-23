@@ -125,7 +125,7 @@ export function ProfilePage() {
   return (
     <div className={sty.c2120941}>
       <div className={sty.c51490d3}>
-        <button className={'btn btn-ghost ' + sty.c0bba3b7} onClick={() => (window.history.length > 1 ? router.back() : router.push('/'))}>← Назад</button>
+        <button className={'btn btn-ghost only-wide ' + sty.c0bba3b7} onClick={() => (window.history.length > 1 ? router.back() : router.push('/'))}>← Назад</button>
         <span style={{ flex: 1 }} />
         {me?.isStaff && <Link href="/support" className={'btn btn-ghost ' + sty.cd553319}>Поддержка</Link>}
         <button className={'btn btn-ghost ' + sty.ce42f018} onClick={() => setRail('settings')}>Настройки</button>
