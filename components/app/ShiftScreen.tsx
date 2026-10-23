@@ -6,13 +6,13 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { css } from '@/lib/css';
-import { dateLabel, jobNum, jobStatus, money, SAFETY_ITEMS, seriesDayLabel, type JobDetail } from '@/lib/jobs';
+import { dateLabel, jobNum, jobStatus, money, SAFETY_ITEMS, seriesDayLabel, shortTitle, type JobDetail } from '@/lib/jobs';
 import { showModeration } from '@/components/ModerationGuard';
 import { useFlash } from '@/components/Toast';
 import { useLive, useLiveEvent } from './Live';
 import { SeriesBlock } from './SeriesBlock';
 import { ShiftBlock } from './ShiftBlock';
-import { Chip, Corners, LABEL, MUTED } from './ui';
+import { Corners, LABEL, MUTED } from './ui';
 import sty from './ShiftScreen.module.css';
 
 const TIP_KEY = 'arena:first-tip-hidden';
@@ -91,7 +91,7 @@ export function ShiftScreen({ pick = null }: { pick?: number | null }) {
     <div className={sty.cca0d1b9}>
       <div className={sty.c69859bc}>
         <div style={css(LABEL + '; font-size: 12px')}>{'Смена ' + jobNum(job.num) + ' · ' + when}</div>
-        <h1 className={'fh ' + sty.cf2e09da}>{job.title}</h1>
+        <h1 className={'fh ' + sty.cf2e09da}>{shortTitle(job.title, job.address)}</h1>
         <div style={css('font-size: 13.5px; line-height: 1.4; margin-top: 3px; ' + MUTED)}>{job.address}</div>
         <div className={sty.c70c55fd}>
           <span className={s.cls}>{s.label}</span>
@@ -137,10 +137,20 @@ export function ShiftScreen({ pick = null }: { pick?: number | null }) {
                 </div>
               </div>
             )) : (
-              <div className={sty.c520f760}>
-                {SAFETY_ITEMS.map(i => (
-                  <Chip key={i.id} active={!!meSafety?.items.includes(i.id)} onClick={() => canCheck && !busy && toggle(i.id)} extra="min-height: 34px">{i.label}</Chip>
-                ))}
+              // Пункты — строками с квадратиком-галочкой: сразу видно, что их нужно отметить.
+              <div className={sty.checkList}>
+                {SAFETY_ITEMS.map(i => {
+                  const on = !!meSafety?.items.includes(i.id);
+                  return (
+                    <button key={i.id} type="button" role="checkbox" aria-checked={on} aria-disabled={!canCheck || undefined}
+                      className={sty.checkRow + (on ? ' ' + sty.checkOn : '')} onClick={() => canCheck && !busy && toggle(i.id)}>
+                      <span className={sty.checkBox} aria-hidden="true">
+                        {on && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>}
+                      </span>
+                      <span>{i.label.charAt(0).toUpperCase() + i.label.slice(1)}</span>
+                    </button>
+                  );
+                })}
               </div>
             )}
             <div style={css('font-size: 13px; line-height: 1.4; margin-top: 8px; ' + MUTED)}>

@@ -365,6 +365,9 @@ button:not(:disabled):active { transform: translateY(1px); }
   .btn, .input, .seg { border-radius: 10px; }
   .tag { border-radius: 8px; }
   .card, .dialog, .blueprint { border-radius: 14px; }
+  /* Кнопки и переключатели — обычным регистром и одного вида (в блоках они местами были прописными). */
+  .btn, [role="tab"] { text-transform: none !important; letter-spacing: normal !important; }
+  .btn { font-weight: 600; }
 }
 
 /* Рабочий режим: крупные цели касания и текст */

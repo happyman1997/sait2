@@ -139,3 +139,8 @@
 @media (max-width: 719.98px) {
   :where(.cc2d836c) { width: 100% !important; border-right: 0 !important; padding: 16px 16px 24px !important; }
 }
+
+/* Телефон: заголовки, имена и кнопки — обычным регистром, как в мобильных приложениях; мелкие подписи разделов остаются прописными. */
+@media (max-width: 719.98px) {
+  .c0177dc8 { text-transform: none !important; letter-spacing: normal !important; }
+}

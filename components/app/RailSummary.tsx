@@ -34,6 +34,8 @@ const GUIDE = {
 
 export function GuestGuide() {
   const [who, setWho] = useState<'freelancer' | 'employer'>('freelancer');
+  // Телефон: три шага свёрнуты — под картой остаются заголовок, пара строк и кнопка профиля.
+  const [more, setMore] = useState(false);
   const g = GUIDE[who];
   const tab = (id: 'freelancer' | 'employer', label: string) => (
     <button role="tab" aria-selected={who === id} onClick={() => setWho(id)}
@@ -49,15 +51,20 @@ export function GuestGuide() {
         </div>
         <div className={'fh ' + sty.cc1bc816}>{g.title}</div>
         <div className={sty.c5cc1dcf}>{g.lead}</div>
-        <div className={sty.caf4ed04}>
-          {g.steps.map((t, i) => (
-            <div key={i} className={sty.c6776925}>
-              <div className={'fh ' + sty.c0422fe0}>0{i + 1}</div>
-              <div className={sty.c5d0b7df}>{t}</div>
-            </div>
-          ))}
+        <button className={'only-narrow ' + sty.moreBtn} onClick={() => setMore(m => !m)} aria-expanded={more}>
+          {more ? 'Свернуть ▴' : 'Как это работает — 3 шага ▾'}
+        </button>
+        <div className={more ? '' : sty.foldNarrow}>
+          <div className={sty.caf4ed04}>
+            {g.steps.map((t, i) => (
+              <div key={i} className={sty.c6776925}>
+                <div className={'fh ' + sty.c0422fe0}>0{i + 1}</div>
+                <div className={sty.c5d0b7df}>{t}</div>
+              </div>
+            ))}
+          </div>
+          <div className={sty.cf7a0fd3}>{g.note}</div>
         </div>
-        <div className={sty.cf7a0fd3}>{g.note}</div>
         <Link href={'/auth?role=' + who} className={'btn btn-secondary btn-block ' + sty.cd488481}>{g.cta}</Link>
       </div>
     </div>
@@ -97,7 +104,10 @@ export function StartSteps({ isEmp, addr }: {
       {hidden ? (
         <button className={'btn btn-ghost ' + sty.howAgain} onClick={() => setHidden(false)}>Как это работает?</button>
       ) : <>
-      <div style={css(LABEL + (isEmp && addr ? '; margin-top: 22px' : ''))}>Как это работает</div>
+      <div className={sty.howHead + (isEmp && addr ? ' ' + sty.howHeadGap : '')}>
+        <div style={css(LABEL)}>Как это работает</div>
+        <button className={'btn btn-ghost ' + sty.howHide} onClick={() => setHidden(true)}>Скрыть</button>
+      </div>
       <div className={'fh ' + sty.ce15ec2e}>{isEmp ? 'Заказ за три шага' : 'Смена за три шага'}</div>
       <div className={sty.cd8f77ee}>
         {steps.map((t, i) => (
@@ -108,12 +118,11 @@ export function StartSteps({ isEmp, addr }: {
           </div>
         ))}
       </div>
-      <div className={sty.c9ccca91}>
+      <div className={'only-wide ' + sty.c9ccca91}>
         {isEmp
           ? 'Нажмите на любую точку карты — откроется форма заказа: тип, адрес, дата, оплата и объём. Регион определится по метке. Чат с исполнителем открывается после найма.'
           : 'На карте у каждого заказа видна ставка и тип работы — выберите любую, чтобы прочитать условия и откликнуться. Чат открывается после найма.'}
       </div>
-      <button className={'btn btn-secondary btn-block ' + sty.howDone} onClick={() => setHidden(true)}>Понятно, скрыть подсказку</button>
       </>}
     </div>
   );

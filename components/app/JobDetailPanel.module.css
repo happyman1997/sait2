@@ -461,3 +461,8 @@
 }
 .shiftLink { margin-top: 8px; height: 44px; font-size: 15px; }
 .shareBtn { margin-top: 12px; height: 44px; font-size: 15px; }
+
+/* Телефон: заголовки, имена и кнопки — обычным регистром, как в мобильных приложениях; мелкие подписи разделов остаются прописными. */
+@media (max-width: 719.98px) {
+  .ce5f1500, .c0929946, .cb541011, .c439f72f { text-transform: none !important; letter-spacing: normal !important; }
+}

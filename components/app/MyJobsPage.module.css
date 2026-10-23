@@ -168,3 +168,8 @@
     justify-content: flex-start !important;
   }
 }
+
+/* Телефон: заголовки, имена и кнопки — обычным регистром, как в мобильных приложениях; мелкие подписи разделов остаются прописными. */
+@media (max-width: 719.98px) {
+  .c197cab9, .c10a0e6b { text-transform: none !important; letter-spacing: normal !important; }
+}

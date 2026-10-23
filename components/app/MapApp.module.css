@@ -263,3 +263,8 @@
   position: absolute; top: -3px; right: -3px; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px;
   background: var(--color-accent); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
 }
+
+/* Телефон: заголовки, имена и кнопки — обычным регистром, как в мобильных приложениях; мелкие подписи разделов остаются прописными. */
+@media (max-width: 719.98px) {
+  .c4b2febe { text-transform: none !important; letter-spacing: normal !important; }
+}

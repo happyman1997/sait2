@@ -52,3 +52,8 @@
   font-size: 11.5px !important;
   color: color-mix(in srgb, var(--color-text) 66%, transparent) !important;
 }
+
+/* Телефон: заголовки, имена и кнопки — обычным регистром, как в мобильных приложениях; мелкие подписи разделов остаются прописными. */
+@media (max-width: 719.98px) {
+  .ce5110ac { text-transform: none !important; letter-spacing: normal !important; }
+}

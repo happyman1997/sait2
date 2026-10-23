@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, api } from '@/lib/api';
 import { css } from '@/lib/css';
-import { crewOf, dateLabel, isOnCall, jobNum, jobStatus, localISO, money, plural, type MyJob } from '@/lib/jobs';
+import { crewOf, dateLabel, isOnCall, jobNum, jobStatus, localISO, money, plural, shortTitle, type MyJob } from '@/lib/jobs';
 import { useFlash } from '@/components/Toast';
 import { ApplicantReviews } from './ApplicantReviews';
 import { useLiveEvent } from './Live';
@@ -75,7 +75,7 @@ export function ApplicantsPage() {
                 <div className={sty.c58abcd8}>
                   <div className={'fh ' + sty.c500ce95}>{jobNum(j.num)}</div>
                   <div className={sty.c5f2fcd1}>
-                    <div className={'fh ' + sty.c8601717}>{j.title}</div>
+                    <div className={'fh ' + sty.c8601717}>{shortTitle(j.title, j.address)}</div>
                     <div className={sty.c9ed26e5}>{j.address} · {dateLabel(j.date)}</div>
                     <div className={sty.c67ef075}>
                       <span className={s.cls}>{s.label}</span>

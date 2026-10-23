@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { autoTitle, dateLabel, daysAhead, emptyJobForm, jobAllErrors, jobStatus, jobStepErrors, money, moneyShort } from '@/lib/jobs';
+import { autoTitle, dateLabel, daysAhead, emptyJobForm, jobAllErrors, jobStatus, jobStepErrors, money, moneyShort, shortTitle } from '@/lib/jobs';
 
 describe('форматирование', () => {
   it('ставки', () => {
@@ -23,6 +23,16 @@ describe('форматирование', () => {
     expect(autoTitle('уборка снега', 'Москва, ул. Тверская, 18')).toBe('Уборка снега — Москва, ул. Тверская');
     expect(autoTitle('Покос травы', 'г Москва, ул Тверская, д 18, кв 5')).toBe('Покос травы — г Москва, ул Тверская');
     expect(autoTitle('Покос травы', '')).toBe('Покос травы');
+  });
+
+  it('короткий заголовок — без улицы, когда адрес и так стоит строкой ниже', () => {
+    const addr = 'Москва, ул. Тверская, 18';
+    expect(shortTitle(autoTitle('уборка снега', addr), addr)).toBe('Уборка снега');
+    // Гостю адрес частного заказчика показывается без дома — улица в нём всё равно есть.
+    expect(shortTitle('Покос травы — Москва, ул. Садовая', 'Москва, ул. Садовая (частный заказчик: дом и точная метка — после найма)')).toBe('Покос травы');
+    // Хвост не из адреса или заголовок без « — » — не трогаем.
+    expect(shortTitle('Покосить газон — у бизнес-центра', addr)).toBe('Покосить газон — у бизнес-центра');
+    expect(shortTitle('Вынести хлам из подвала', addr)).toBe('Вынести хлам из подвала');
   });
 });
 

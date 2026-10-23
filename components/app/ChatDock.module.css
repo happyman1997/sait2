@@ -307,3 +307,21 @@
   cursor: pointer;
 }
 .hintClose:hover { color: #fff; }
+
+/* Телефон: заголовки, имена и кнопки — обычным регистром, как в мобильных приложениях; мелкие подписи разделов остаются прописными. */
+@media (max-width: 719.98px) {
+  .ced0a3ae, .c7d1228b, .c0b950a1 { text-transform: none !important; letter-spacing: normal !important; }
+}
+/* Телефон: «Сообщения» — отдельный экран со своей верхней полосой (стрелка назад и заголовок), как в приложениях. */
+.mTop {
+  flex: none; display: flex; align-items: center; gap: 8px; min-height: 52px; box-sizing: border-box;
+  padding: env(safe-area-inset-top) 12px 0 4px !important; background: var(--color-bg) !important; border-bottom: 1px solid var(--color-divider);
+}
+.mBack {
+  flex: none; width: 44px; height: 44px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 12px;
+  background: none; color: var(--color-text); cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.mBack:active { background: color-mix(in srgb, var(--color-text) 8%, transparent); }
+.mTitle { margin: 0; font-family: var(--font-heading); font-weight: 700; font-size: 21px; line-height: 1.2; color: var(--color-text); }
+.mTop .cb741258 { width: 34px !important; height: 34px !important; border-radius: 50% !important; }
+

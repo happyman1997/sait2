@@ -130,7 +130,8 @@ export function NotifyRail() {
   };
 
   const s = settings;
-  const heading = me.role === 'employer' ? 'Журнал · отклики и выходы' : 'Журнал · мои смены';
+  // Над списком уже написано «Журнал» — здесь только о чём он.
+  const heading = me.role === 'employer' ? 'Отклики и выходы' : 'Мои смены';
 
   return (
     <div style={{ display: 'contents' }}>
@@ -138,8 +139,12 @@ export function NotifyRail() {
       <aside role="dialog" aria-label={rail === 'settings' ? 'Настройки' : 'Журнал'}
         className={sty.c61f6465}>
         <div className={sty.ca68f838}>
+          {/* Телефон: отдельный экран — стрелка «назад» слева, как в приложениях; на компьютере — «Закрыть» справа. */}
+          <button className={'only-narrow ' + sty.mBack} onClick={() => setRail(null)} aria-label="Назад">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+          </button>
           <div className={'fh ' + sty.c41db1e5}>{rail === 'settings' ? 'Настройки' : 'Журнал'}</div>
-          <button className={'btn btn-ghost ' + sty.c165129c} onClick={() => setRail(null)}>Закрыть</button>
+          <button className={'btn btn-ghost only-wide ' + sty.c165129c} onClick={() => setRail(null)}>Закрыть</button>
         </div>
 
         {rail === 'journal' && (

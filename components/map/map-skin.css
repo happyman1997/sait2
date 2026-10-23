@@ -22,3 +22,8 @@
   .maplibregl-ctrl-group button + button { border-top: 1px solid var(--color-divider, #ddd); }
   .maplibregl-ctrl-scale { display: none; }
 }
+/* Заказ-ромбик (подпись не поместилась): на сенсорном экране вокруг него невидимая зона нажатия ~40 px —
+   сам ромбик и раскладка меток не меняются, нажатие открывает карточку с ценой. */
+@media (pointer: coarse) {
+  [data-kind="pin"][data-dot]::before { content: ''; position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; transform: translate(-50%, -50%); }
+}

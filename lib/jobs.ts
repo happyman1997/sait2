@@ -368,3 +368,11 @@ export function autoTitle(typeLabel: string, address: string): string {
   const t = typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1);
   return (t + (head ? ' — ' + head : '')).slice(0, 160);
 }
+
+/** Заголовок для строки, под которой и так стоит адрес: без хвоста « — город, улица» из autoTitle (иначе адрес дважды). */
+export function shortTitle(title: string, address: string): string {
+  const i = title.lastIndexOf(' — ');
+  if (i <= 0) return title;
+  const tail = title.slice(i + 3).trim().toLowerCase();
+  return tail && String(address || '').toLowerCase().includes(tail) ? title.slice(0, i) : title;
+}

@@ -239,3 +239,28 @@
   border: 1px solid var(--color-accent-900) !important;
   flex: none !important;
 }
+
+/* Телефон: заголовки, имена и кнопки — обычным регистром, как в мобильных приложениях; мелкие подписи разделов остаются прописными. */
+@media (max-width: 719.98px) {
+  .c41db1e5, .c532e21a { text-transform: none !important; letter-spacing: normal !important; }
+}
+/* Телефон: журнал и настройки — отдельный экран над нижними вкладками, сверху полоса со стрелкой «назад». */
+.mBack {
+  flex: none; width: 44px; height: 44px; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 12px;
+  background: none; color: var(--color-text); cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+@media (max-width: 719.98px) {
+  .c88cdade { display: none !important; }
+  .c61f6465 {
+    left: 0 !important; width: auto !important; bottom: calc(56px + env(safe-area-inset-bottom)) !important; z-index: 84 !important;
+    padding: 0 16px 24px !important; border: 0 !important; box-shadow: none !important; background: var(--color-bg) !important;
+  }
+  .ca68f838 {
+    position: sticky; top: 0; z-index: 2; align-items: center !important; justify-content: flex-start !important; gap: 6px !important;
+    min-height: 52px; margin: 0 -16px 4px !important; padding: env(safe-area-inset-top) 12px 0 4px;
+    background: var(--color-bg); border-bottom: 1px solid var(--color-divider);
+  }
+  .c41db1e5 { font-weight: 700; }
+  .c57daa0f { margin-top: 12px !important; padding: 0 !important; border: 0 !important; background: none !important; }
+}
+

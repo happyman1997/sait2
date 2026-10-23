@@ -199,3 +199,8 @@
     box-shadow: 0 -6px 14px rgba(31, 45, 58, .08) !important;
   }
 }
+
+/* Телефон: заголовки, имена и кнопки — обычным регистром, как в мобильных приложениях; мелкие подписи разделов остаются прописными. */
+@media (max-width: 719.98px) {
+  .c22e630a, .c61fef2d, .c0dd5712 { text-transform: none !important; letter-spacing: normal !important; }
+}

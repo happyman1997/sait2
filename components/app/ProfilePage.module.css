@@ -456,3 +456,13 @@
   flex-wrap: wrap !important;
   align-items: baseline !important;
 }
+
+/* Телефон: заголовки, имена и кнопки — обычным регистром, как в мобильных приложениях; мелкие подписи разделов остаются прописными. */
+@media (max-width: 719.98px) {
+  .c1c9f7dc, .cc869800, .c583964a { text-transform: none !important; letter-spacing: normal !important; }
+}
+/* Телефон: фото — кругом, имя — обычным регистром. */
+@media (max-width: 719.98px) {
+  .ce1ef653 { width: 88px !important; height: 88px !important; border-radius: 50% !important; border: 0 !important; }
+  .c4d09782 { font-size: 26px !important; line-height: 1.15 !important; text-transform: none !important; letter-spacing: normal !important; }
+}

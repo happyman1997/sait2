@@ -86,3 +86,8 @@
   height: 36px !important;
   font-size: 13px !important;
 }
+
+/* Телефон: заголовки, имена и кнопки — обычным регистром, как в мобильных приложениях; мелкие подписи разделов остаются прописными. */
+@media (max-width: 719.98px) {
+  .c583964a, .c41db1e5, .c532e21a { text-transform: none !important; letter-spacing: normal !important; }
+}

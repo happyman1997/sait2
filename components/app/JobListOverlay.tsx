@@ -2,7 +2,7 @@
 
 // «Все заказы списком» — выезжающая слева панель с поиском.
 import { Fragment } from 'react';
-import { dateLabel, jobNum, jobStatus, money, type JobSummary } from '@/lib/jobs';
+import { dateLabel, jobNum, jobStatus, money, shortTitle, type JobSummary } from '@/lib/jobs';
 import { AdSlot } from './AdSlot';
 import sty from './JobListOverlay.module.css';
 
@@ -36,7 +36,7 @@ export function JobListOverlay({ jobs, q, setQ, onClose, onOpen, onHover, role }
                   <span className={'fh ' + sty.c12af3c0}>{jobNum(j.num)}</span>
                   <span className={'fh ' + sty.c36d7f6a}>{money(j.pay, j.unit)}</span>
                 </span>
-                <span className={'fh ' + sty.c0177dc8}>{j.title}</span>
+                <span className={'fh ' + sty.c0177dc8}>{shortTitle(j.title, j.address)}</span>
                 <span className={sty.c5774fa4}>
                   {j.address} · {j.repeat ? 'с ' + dateLabel(j.date) : dateLabel(j.date)}{j.distanceKm != null ? ' · ' + (j.distanceKm < 10 ? j.distanceKm.toFixed(1) : Math.round(j.distanceKm)) + ' км' : ''}
                 </span>

@@ -388,7 +388,7 @@ export class SeasonMapView {
       if (!pt || !inView(pt)) return;
       const isHot = String(p.id) === hot;
       if (dense && !isHot && !p.active && !p.urgent) {
-        html.push('<div data-id="' + esc(p.id) + '" data-kind="pin" title="' + esc(p.title) + '" style="position:absolute;left:' +
+        html.push('<div data-id="' + esc(p.id) + '" data-kind="pin" data-dot="1" title="' + esc(p.rate + ' · ' + p.title) + '" style="position:absolute;left:' +
           pt[0] + 'px;top:' + pt[1] + 'px;transform:translate(-50%,-50%) rotate(45deg);width:11px;height:11px;box-sizing:border-box;' +
           'pointer-events:auto;cursor:pointer;background:' + PAPER + ';border:1.5px solid ' + ACCENT +
           ';box-shadow:0 2px 6px rgba(31,45,58,.22)"></div>');
@@ -621,8 +621,9 @@ export class SeasonMapView {
         el.style.left = left0 + 'px';
         el.style.top = top0 + 'px';
         el.style.transform = 'translate(-50%, -50%)';
-        // Свёрнутая точка — под плашками, а не поверх их текста.
+        // Свёрнутая точка — под плашками, а не поверх их текста. data-dot — крупная зона нажатия на телефоне (map-skin.css).
         el.style.zIndex = '1';
+        el.dataset.dot = '1';
         el.innerHTML = '<span style="display:block;width:11px;height:11px;transform:rotate(45deg);box-sizing:border-box;background:' +
           PAPER + ';border:1.5px solid ' + ACCENT + ';box-shadow:0 2px 6px rgba(31,45,58,.22)"></span>';
       }

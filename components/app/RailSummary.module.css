@@ -138,4 +138,18 @@
   white-space: nowrap !important;
 }
 .howAgain { margin-top: 14px; height: 34px; font-size: 13px; padding: 0 4px !important; }
-.howDone { margin-top: 14px; height: 40px; font-size: 14px; }
+/* «Как это работает» и «Скрыть» в одной строке — скрыть можно, не прокручивая вниз. */
+.howHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 2px; }
+.howHeadGap { margin-top: 18px; }
+.howHide { height: 40px; min-height: 40px !important; padding: 0 6px !important; margin-right: -6px; font-size: 14px; }
+/* Гостю на телефоне: три шага под кнопкой «Как это работает — 3 шага». */
+.moreBtn {
+  align-items: center; min-height: 40px; margin-top: 8px; padding: 0; border: 0; background: none; cursor: pointer;
+  font: 600 14px/1.2 var(--font-body); color: var(--color-accent-100); text-decoration: underline; text-underline-offset: 3px;
+}
+@media (max-width: 719.98px) { .foldNarrow { display: none; } }
+
+/* Телефон: заголовки, имена и кнопки — обычным регистром, как в мобильных приложениях; мелкие подписи разделов остаются прописными. */
+@media (max-width: 719.98px) {
+  .cc1bc816, .ce15ec2e { text-transform: none !important; letter-spacing: normal !important; }
+}

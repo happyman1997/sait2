@@ -75,8 +75,9 @@ export function ChatDock({ place }: { place: 'map' | 'form' | 'page' }) {
     return () => clearTimeout(t);
   }, [fresh, narrow, dock.open, newest]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // На телефоне плашку заменяет пункт «Чат» нижнего меню; открытый чат — на весь экран над меню.
-  if (!me || (narrow && (place === 'form' || !dock.open))) return null;
+  // На телефоне плашку заменяет кнопка чата в верхней полосе; открытый чат — отдельный экран над нижними вкладками
+  // (и поверх формы заказа: черновик формы остаётся как был).
+  if (!me || (narrow && !dock.open)) return null;
 
   const send = async (quick?: string) => {
     const text = (quick ?? draft).trim();
@@ -101,6 +102,13 @@ export function ChatDock({ place }: { place: 'map' | 'form' | 'page' }) {
     ? 'position: fixed; left: 0; right: 0; top: 0; bottom: ' + NAV_H + '; z-index: 84; display: flex; flex-direction: column; background: var(--color-bg)'
     : 'position: fixed; ' + left + '; bottom: 0; z-index: 60; width: ' + (dock.open ? '400px' : '296px') + '; max-width: 92vw; box-sizing: border-box; display: flex; flex-direction: column; border: 1px solid var(--color-accent); border-bottom: 0; background: var(--color-bg); box-shadow: var(--shadow-lg)';
   const active = chats.find(c => c.num === dock.num && c.thread === dock.thread);
+  // Телефон: стрелка «назад» в верхней полосе — из переписки к списку диалогов, из списка — закрыть «Сообщения».
+  const back = (
+    <button className={sty.mBack} onClick={() => setDock(showChat ? { view: 'list' } : { open: false })}
+      aria-label={showChat ? 'Ко всем диалогам' : 'Закрыть сообщения'}>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+    </button>
+  );
 
   return (
     <div className={narrow ? '' : 'blueprint'} style={css(style)} aria-label="Сообщения">
@@ -113,6 +121,9 @@ export function ChatDock({ place }: { place: 'map' | 'form' | 'page' }) {
         </div>
       )}
       {!narrow && <><i className="corner tl" /><i className="corner tr" /></>}
+      {narrow ? (!showChat && (
+        <div className={sty.mTop}>{back}<h2 className={sty.mTitle}>Сообщения</h2></div>
+      )) : (
       <button onClick={() => setDock({ open: !dock.open })} aria-expanded={dock.open} title="Переписка с работодателями и исполнителями"
         style={css('width: 100%; box-sizing: border-box; display: flex; align-items: center; gap: 11px; padding: 0 14px; min-height: ' + (narrow ? '48px' : '52px') + '; border: 0; background: var(--color-accent); color: #fff; cursor: pointer; text-align: left')}>
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ flex: 'none' }}><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>
@@ -120,6 +131,7 @@ export function ChatDock({ place }: { place: 'map' | 'form' | 'page' }) {
         {unread > 0 && <span className={'fh ' + sty.cbf6add9}>{unread}</span>}
         <span className={'fh ' + sty.c074b79a}>{dock.open ? 'свернуть ▾' : 'открыть ▴'}</span>
       </button>
+      )}
 
       {dock.open && (
         <div style={css('display: flex; flex-direction: column; min-height: 0; ' + (narrow ? 'flex: 1' : 'height: min(620px, 72vh)') + '; background: var(--color-bg)')}>
@@ -145,8 +157,8 @@ export function ChatDock({ place }: { place: 'map' | 'form' | 'page' }) {
 
           {showChat && (
             <div className={sty.c30bd7cc}>
-              <div className={sty.cc2dfd1f}>
-                <button onClick={() => setDock({ view: 'list' })} className={'fh ' + sty.c30a4f79}>← все</button>
+              <div className={sty.cc2dfd1f + (narrow ? ' ' + sty.mTop : '')}>
+                {narrow ? back : <button onClick={() => setDock({ view: 'list' })} className={'fh ' + sty.c30a4f79}>← все</button>}
                 <span className={'fh ' + sty.cb741258}>{thread?.initials || initialsOf(active?.who || '')}</span>
                 <div className={sty.c33f2a66}>
                   <div className={'fh ' + sty.c0b950a1}>{thread?.who || active?.who || ''}</div>
