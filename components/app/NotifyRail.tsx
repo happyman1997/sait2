@@ -295,8 +295,8 @@ export function NotifyRail() {
                 <div className={sty.cca8dfae}><span className={sty.c4729215} />Заказ на карте</div>
                 <div className={sty.cca8dfae}><span className={sty.c5981d15} />Выбранный заказ</div>
                 <div className={sty.cca8dfae}><span className={sty.cf3db642} />Черновик заказа</div>
-                <div className={sty.cca8dfae}><span className={sty.cd0f69c5} />Точка — заказ на плотной карте</div>
-                <div className={sty.cca8dfae}><span className={'fh ' + sty.cfc1c96f}>7</span>Группа заказов — клик приближает</div>
+                <div className={sty.cca8dfae}><span className={sty.cd0f69c5} />Ромбик — заказ, где рядом тесно; нажатие откроет его</div>
+                <div className={sty.cca8dfae}><span className={'fh ' + sty.cfc1c96f}>7</span>Кружок — столько заказов рядом; нажатие приближает</div>
               </div>
             </div>
           </>

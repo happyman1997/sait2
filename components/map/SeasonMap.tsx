@@ -10,6 +10,8 @@ export type SeasonMapHandle = { flyTo: (lat: number, lng: number, zoom?: number)
 
 type Props = MapCallbacks & {
   pins: Pin[];
+  /** Точки для первого кадра (заказы от базы); без них — по меткам. */
+  fit?: LatLng[];
   draft: LatLng | null;
   mode: 'employer' | 'view';
   highlight: number | null;
@@ -20,7 +22,7 @@ type Props = MapCallbacks & {
 export const SeasonMap = forwardRef<SeasonMapHandle, Props>(function SeasonMap(props, ref) {
   const el = useRef<HTMLDivElement>(null);
   const view = useRef<SeasonMapView | null>(null);
-  const { pins, draft, mode, highlight, anchor, radiusKm, onMapClick, onPinClick, onStackClick } = props;
+  const { pins, fit, draft, mode, highlight, anchor, radiusKm, onMapClick, onPinClick, onStackClick, onView } = props;
 
   useEffect(() => {
     const v = new SeasonMapView(el.current!, {});
@@ -28,8 +30,8 @@ export const SeasonMap = forwardRef<SeasonMapHandle, Props>(function SeasonMap(p
     return () => { v.destroy(); view.current = null; };
   }, []);
 
-  useEffect(() => { view.current?.setCallbacks({ onMapClick, onPinClick, onStackClick }); }, [onMapClick, onPinClick, onStackClick]);
-  useEffect(() => { view.current?.update({ pins, draft, mode, highlight, anchor, radiusKm }); }, [pins, draft, mode, highlight, anchor, radiusKm]);
+  useEffect(() => { view.current?.setCallbacks({ onMapClick, onPinClick, onStackClick, onView }); }, [onMapClick, onPinClick, onStackClick, onView]);
+  useEffect(() => { view.current?.update({ pins, fit, draft, mode, highlight, anchor, radiusKm }); }, [pins, fit, draft, mode, highlight, anchor, radiusKm]);
 
   useImperativeHandle(ref, () => ({ flyTo: (lat, lng, zoom) => view.current?.flyTo(lat, lng, zoom) }), []);
 

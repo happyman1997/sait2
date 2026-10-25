@@ -103,7 +103,7 @@ function toSummary(r: SummaryRow, viewer: Viewer, base?: { lat: number; lng: num
  * фиксации транзакции, на соседних — по времени.
  */
 type Base = { lat: number; lng: number; label: string };
-type Search = { rows: SummaryRow[]; base: Base; guest?: { jobs: JobSummary[]; base: Base } };
+type Search = { rows: SummaryRow[]; base: Base; guest?: { jobs: JobSummary[]; base: Base; more: boolean } };
 // 200 записей по ≤500 строк — потолок памяти кэша; просроченные убираются при каждой вставке.
 const guestSearch = new TtlCache<Search>(20_000, 200);
 const VIEWER_MAX_AGE = 5_000;
@@ -128,7 +128,7 @@ export async function listJobs(p: ListParams, viewer: Viewer, db: Db = pool()) {
   if (!viewer) {
     const hit = await guestSearch.get(key, load);
     // Готовый гостевой ответ — один объект на запись кэша (его JSON и gzip кодируются один раз, http.ts).
-    return (hit.guest ??= { jobs: hit.rows.map(x => toSummary(x, null, qBase)), base: hit.base });
+    return (hit.guest ??= { jobs: hit.rows.map(x => toSummary(x, null, qBase)), base: hit.base, more: hit.rows.length >= NEAR_LIMIT });
   }
   const hit = await guestSearch.get(key, load, VIEWER_MAX_AGE);
   const own = viewer.role === 'freelancer' && !mineLoaded && hit.rows.length
@@ -139,7 +139,7 @@ export async function listJobs(p: ListParams, viewer: Viewer, db: Db = pool()) {
       .map(x => [x.job_id, x.status]))
     : null;
   // Выдача посчитана от округлённой точки, а своя метка базы на карте — точно на месте.
-  return { jobs: hit.rows.map(x => toSummary(own ? { ...x, my_status: own.get(x.id) ?? null } : x, viewer, qBase)), base: b };
+  return { jobs: hit.rows.map(x => toSummary(own ? { ...x, my_status: own.get(x.id) ?? null } : x, viewer, qBase)), base: b, more: hit.rows.length >= NEAR_LIMIT };
 }
 
 // ───────────────────────── Страницы для поисковиков ─────────────────────────
@@ -197,7 +197,7 @@ export async function customTypes(db: Db = pool()) {
 
 async function searchJobs(p: ListParams, viewer: Viewer, db: Db) {
   const r = await searchRows(p, viewer, db);
-  return { jobs: r.rows.map(x => toSummary(x, viewer, r.base)), base: r.base };
+  return { jobs: r.rows.map(x => toSummary(x, viewer, r.base)), base: r.base, more: r.rows.length >= NEAR_LIMIT };
 }
 
 /**
@@ -215,12 +215,30 @@ const SEARCH_SQL = (like: number, ids: number) =>
   `($${like}::text IS NULL OR j.search LIKE $${like} OR j.type_id = ANY($${ids}::text[])
      OR j.type_id IN (SELECT id FROM job_types WHERE lower(label) LIKE $${like}))`;
 
-async function searchRows(p: ListParams, viewer: Viewer, db: Db) {
+/**
+ * Выдача от базы — не больше стольких ближайших. Набралось ровно столько (more) — дальше есть ещё: карта тогда
+ * догружает то, что в кадре (areaJobs), иначе вдали от базы она была бы пустой.
+ */
+const NEAR_LIMIT = 500;
+
+/** Отбор для карты и списка — общий у выдачи от базы и выдачи по кадру: $1 зритель, $2–$3 база, $4–$10 фильтры. */
+function filterParams(p: ListParams, viewer: Viewer) {
   const base = baseOf(viewer, p.lat, p.lng);
   const { like, typeIds } = searchTerms(p.q);
   const types = (p.types || []).filter(t => /^[a-z0-9_]{1,40}$/.test(t)).slice(0, 50);
   const km = p.km && p.km > 0 ? Math.min(p.km, 20000) : null;
-  const params: unknown[] = [viewer?.id ?? null, base.lat, base.lng, p.today, types.length ? types : null, Math.max(0, p.minPay || 0), km, p.when === 'soon', like, typeIds];
+  return { base, params: [viewer?.id ?? null, base.lat, base.lng, p.today, types.length ? types : null, Math.max(0, p.minPay || 0), km, p.when === 'soon', like, typeIds] as unknown[] };
+}
+const FILTER_SQL = `j.status IN ('open', 'staffed')
+          -- Разовый — пока не прошла дата; серия — пока не прошёл последний выход («по снегопаду» — без конца).
+          AND (j.date >= $4::date OR (j.repeat IS NOT NULL AND (j.series_end IS NULL OR j.series_end >= $4::date)))
+          AND ($5::text[] IS NULL OR j.type_id = ANY($5))
+          AND j.pay >= $6
+          AND (NOT $8 OR j.date BETWEEN $4::date AND $4::date + 1)
+          AND ${SEARCH_SQL(9, 10)}`;
+
+async function searchRows(p: ListParams, viewer: Viewer, db: Db) {
+  const { base, params } = filterParams(p, viewer);
   // Внутри — 500 ближайших к базе подходящих заказов: KNN по GiST-индексу jobs_pt_idx останавливается на 500-м.
   // Радиус — снаружи: всё, что внутри радиуса, ближе всего, что за ним, поэтому отбор среди 500 ближайших точен,
   // а индекс не приходится проходить по всему кругу (на плотной карте это в разы быстрее).
@@ -229,15 +247,9 @@ async function searchRows(p: ListParams, viewer: Viewer, db: Db) {
     `WITH near AS (
        SELECT j.id, j.pt
          FROM jobs j
-        WHERE j.status IN ('open', 'staffed')
-          -- Разовый — пока не прошла дата; серия — пока не прошёл последний выход («по снегопаду» — без конца).
-          AND (j.date >= $4::date OR (j.repeat IS NOT NULL AND (j.series_end IS NULL OR j.series_end >= $4::date)))
-          AND ($5::text[] IS NULL OR j.type_id = ANY($5))
-          AND j.pay >= $6
-          AND (NOT $8 OR j.date BETWEEN $4::date AND $4::date + 1)
-          AND ${SEARCH_SQL(9, 10)}
+        WHERE ${FILTER_SQL}
         ORDER BY j.pt <-> ll_to_earth($2, $3)
-        LIMIT 500
+        LIMIT ${NEAR_LIMIT}
      )
      SELECT ${SUMMARY_COLS}
        FROM near JOIN jobs j ON j.id = near.id JOIN job_types t ON t.id = j.type_id
@@ -247,6 +259,73 @@ async function searchRows(p: ListParams, viewer: Viewer, db: Db) {
     db
   );
   return { rows: r.rows, base };
+}
+
+// ───────────────────────── Карта: что в кадре ─────────────────────────
+
+export type AreaParams = ListParams & { w: number; s: number; e: number; n: number; zoom: number };
+export type AreaCell = { lat: number; lng: number; n: number };
+/** В кадре не больше стольких — приходят сами заказы; больше — сводка по участкам (cells). */
+export const AREA_LIMIT = 500;
+// Сколько точек кадра читаем самое большее: дальше сводка по участкам приблизительная, а запрос — не тяжелее.
+const AREA_SCAN = 20_000;
+// Сдвиг скрытой точки — до 350 м (privacy.ts): кадр берём с запасом, а точно отбираем по сдвинутым точкам.
+const FUZZ_PAD_DEG = 0.004;
+
+/**
+ * Заказы в кадре карты — для плотной карты, где ближайших к базе больше NEAR_LIMIT. Отбор по кадру — по тем же
+ * точкам, что видит зритель (у частных заказчиков — сдвинутым): иначе подбором маленьких кадров можно было бы
+ * найти настоящий адрес. Участки сводки — сетка по экрану при этом масштабе (64 px), точка участка — среднее его заказов.
+ */
+export async function areaJobs(p: AreaParams, viewer: Viewer, db: Db = pool()): Promise<{ jobs: JobSummary[]; cells: AreaCell[]; total: number }> {
+  const { base, params } = filterParams(p, viewer);
+  const s = Math.max(-85, p.s), n = Math.min(85, p.n);
+  const whole = p.e - p.w >= 360;
+  const w = whole ? -180 : Math.max(-180, p.w), e = whole ? 180 : Math.min(180, p.e);
+  if (!(s < n && w < e)) return { jobs: [], cells: [], total: 0 };
+  const cos = Math.max(0.2, Math.cos(((s + n) / 2) * Math.PI / 180));
+  const box = { s: s - FUZZ_PAD_DEG, n: n + FUZZ_PAD_DEG, w: w - FUZZ_PAD_DEG / cos, e: e + FUZZ_PAD_DEG / cos };
+  const c = { lat: (box.s + box.n) / 2, lng: (box.w + box.e) / 2 };
+  // Шар вокруг кадра — чтобы отбор шёл по индексу jobs_pt_idx, а не по всей таблице.
+  const radius = Math.max(...[[box.s, box.w], [box.s, box.e], [box.n, box.w], [box.n, box.e]].map(([lat, lng]) => kmBetween(c, { lat, lng }))) * 1000 * 1.02 + 100;
+  const r = await query<{ id: string; lat: number; lng: number; employer_id: string; org_type: string; my_status: AppStatus | null }>(
+    `SELECT j.id, j.lat, j.lng, j.employer_id,
+            coalesce((SELECT ep.org_type FROM employer_profiles ep WHERE ep.user_id = j.employer_id), 'частное лицо') AS org_type,
+            (SELECT a.status FROM applications a WHERE a.job_id = j.id AND a.freelancer_id = $1) AS my_status
+       FROM jobs j
+      WHERE ${FILTER_SQL}
+        AND ($7::float8 IS NULL OR earth_distance(ll_to_earth($2, $3), j.pt) <= $7 * 1000)
+        AND earth_box(ll_to_earth($11, $12), $13) @> j.pt
+        AND j.lat BETWEEN $14 AND $15 AND j.lng BETWEEN $16 AND $17
+      LIMIT ${AREA_SCAN}`,
+    [...params, c.lat, c.lng, radius, box.s, box.n, box.w, box.e],
+    db
+  );
+  // Точки, как их видит зритель (правило — как в toSummary), и только те, что в самом кадре.
+  const pts = r.rows.map(x => {
+    const hidden = isPrivateOrg(x.org_type) && x.employer_id !== viewer?.id && x.my_status !== 'hired';
+    return { id: x.id, ...(hidden ? fuzzPoint(x.id, x.lat, x.lng) : { lat: x.lat, lng: x.lng }) };
+  }).filter(q => q.lat >= s && q.lat <= n && q.lng >= w && q.lng <= e);
+  if (pts.length <= AREA_LIMIT) {
+    if (!pts.length) return { jobs: [], cells: [], total: 0 };
+    const full = await query<SummaryRow>(
+      `SELECT ${SUMMARY_COLS} FROM jobs j JOIN job_types t ON t.id = j.type_id
+        WHERE j.id = ANY($4::uuid[]) ORDER BY j.urgent DESC, j.date, j.created_at DESC`,
+      [viewer?.id ?? null, base.lat, base.lng, pts.map(q => q.id)], db);
+    return { jobs: full.rows.map(x => toSummary(x, viewer, base)), cells: [], total: pts.length };
+  }
+  const zoom = Math.min(22, Math.max(0, p.zoom));
+  const cell = 64 / (512 * 2 ** zoom);
+  const acc = new Map<string, { lat: number; lng: number; n: number }>();
+  for (const q of pts) {
+    const sin = Math.sin(q.lat * Math.PI / 180);
+    const x = (q.lng + 180) / 360, y = 0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI);
+    const k = Math.floor(x / cell) + ':' + Math.floor(y / cell);
+    const a = acc.get(k);
+    if (a) { a.lat += q.lat; a.lng += q.lng; a.n++; } else acc.set(k, { lat: q.lat, lng: q.lng, n: 1 });
+  }
+  const cells = [...acc.values()].map(a => ({ lat: Math.round(a.lat / a.n * 1e5) / 1e5, lng: Math.round(a.lng / a.n * 1e5) / 1e5, n: a.n }));
+  return { jobs: [], cells, total: pts.length };
 }
 
 /** Типы работ для фильтра: справочник + пользовательские, с числом открытых заказов. */

@@ -46,7 +46,8 @@ app/                 страницы и API-маршруты
   auth/              вход / регистрация (4 шага) / восстановление
   api/auth/*         signup/{check,start,resend,verify}, login, logout, me, recover/{start,resend,verify,complete}
   api/stats          счётчики исполнителей/работодателей (снимок раз в сутки)
-  api/jobs           GET поиск (радиус, тип, оплата, «сегодня и завтра», текст) · POST публикация
+  api/jobs           GET поиск (радиус, тип, оплата, «сегодня и завтра», текст) — 500 ближайших к базе, more: есть ещё · POST публикация
+  api/jobs/area      GET что в кадре карты (w,s,e,n,z + те же фильтры): до 500 — заказы, больше — сводка по участкам (cells)
   api/jobs/[num]     GET карточка · PATCH правка · /apply · /withdraw · /cancel
   api/job-types      справочник + пользовательские типы
   api/geo/*          прокси геокодера (search, reverse) с кэшем и лимитами

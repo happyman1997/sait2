@@ -4,13 +4,18 @@
 import type { ExpressionSpecification, LngLatBounds, Map as GLMap } from 'maplibre-gl';
 import { SELF_HOSTED_MAP, STYLE_URL } from './style';
 
-export type Pin = { id: number; lat: number; lng: number; urgent: boolean; rate: string; kind: string; active: boolean; title: string };
+/** n — не заказ, а сводка с сервера: столько заказов на этом участке (плотная карта, /api/jobs/area). */
+export type Pin = { id: number; lat: number; lng: number; urgent: boolean; rate: string; kind: string; active: boolean; title: string; n?: number };
 export type LatLng = { lat: number; lng: number };
+/** Видимая часть карты — границы кадра и масштаб. */
+export type MapViewport = { w: number; s: number; e: number; n: number; zoom: number };
 
 export type MapCallbacks = {
   onMapClick?: (p: LatLng) => void;
   onPinClick?: (id: number) => void;
   onStackClick?: (ids: number[]) => void;
+  /** Карту отпустили (или выставили кадр) — для догрузки заказов кадра. */
+  onView?: (v: MapViewport) => void;
 };
 
 // Россия целиком — кадр по умолчанию, когда меток нет.
@@ -31,13 +36,15 @@ const plural = (k: number, a: string, b: string, c: string) => {
 };
 
 const countText = (n: number) => (n > 999 ? '999+' : String(n));
+/** Группа из одного настоящего заказа (не сводки участка) — рисуется плашкой. */
+const isSingle = (g: Pin[]) => g.length === 1 && !g[0].n;
 // Срочные в группе — только в подсказке: красные цифры на каждом кружке читались как непрочитанные уведомления.
 const clusterTitle = (n: number, u: number) => n + ' ' + plural(n, 'заказ', 'заказа', 'заказов') + ' рядом' + (u ? ', срочных ' + u : '') + ' — нажмите, чтобы приблизить';
 
 /** Группа заказов — кружок с числом на её месте; размер — по числу заказов. */
-function clusterHtml(pt: [number, number], c: LatLng, n: number, u: number, ids: number[]) {
+function clusterHtml(pt: [number, number], c: LatLng, n: number, u: number, ids: number[], agg: boolean) {
   const d = n >= 100 ? 50 : n >= 20 ? 44 : n >= 5 ? 38 : 34;
-  return '<div data-id="c:' + c.lat + ':' + c.lng + '" data-kind="cluster" data-n="' + n + '" data-u="' + u + '" data-ids="' + ids.join(',') + '" title="' +
+  return '<div data-id="c:' + c.lat + ':' + c.lng + '" data-kind="cluster"' + (agg ? ' data-agg="1"' : '') + ' data-n="' + n + '" data-u="' + u + '" data-ids="' + ids.join(',') + '" title="' +
     esc(clusterTitle(n, u)) + '" style="position:absolute;left:' + pt[0] + 'px;top:' + pt[1] + 'px;transform:translate(-50%,-50%);z-index:4;width:' + d + 'px;height:' + d +
     'px;box-sizing:border-box;border-radius:50%;display:grid;place-items:center;pointer-events:auto;cursor:pointer;font-family:var(--font-heading,sans-serif);' +
     'font-weight:700;font-size:' + (n >= 100 ? 15 : 16) + 'px;line-height:1;color:#fff;background:' + ACCENT + ';border:2px solid ' + PAPER +
@@ -84,6 +91,7 @@ export class SeasonMapView {
   private held = new Set<Node>();
 
   pins: Pin[] = [];
+  fitPts: LatLng[] | null = null;
   draft: LatLng | null = null;
   mode: 'employer' | 'view' = 'view';
   highlight: number | null = null;
@@ -97,9 +105,9 @@ export class SeasonMapView {
     this.host.style.cssText = 'position:absolute;inset:0';
     root.appendChild(this.host);
     this.overlay = document.createElement('div');
-    // contain:strict — сдвиг метки пересчитывает раскладку только этого слоя, а не всей страницы: развод меток
-    // меряет их десятки раз за кадр, и без этого перетаскивание плотной карты заметно подтормаживало.
-    this.overlay.style.cssText = 'position:absolute;inset:0;overflow:hidden;contain:strict;pointer-events:none;z-index:5';
+    // contain — сдвиг метки пересчитывает раскладку только этого слоя, а не всей страницы. Слой не обрезан по своему
+    // краю (обрезает сама карта): пока карту тянут, слой едет целиком, и метки из запаса за краем кадра уже видны.
+    this.overlay.style.cssText = 'position:absolute;inset:0;contain:layout size style;pointer-events:none;z-index:5';
     root.appendChild(this.overlay);
     // Один обработчик на слой меток вместо обработчика на каждую плашку при каждой перерисовке.
     this.overlay.addEventListener('click', (ev) => this.onOverlayClick(ev));
@@ -126,7 +134,7 @@ export class SeasonMapView {
       ev.stopPropagation();
       const z = this.map?.getZoom() || 3;
       // Ближе уже некуда (заказы в соседних домах) — список этих заказов, как у нескольких на одном адресе.
-      if (z >= 16) { this.cb.onStackClick?.(String(el.dataset.ids || '').split(',').filter(Boolean).map(Number)); return; }
+      if (z >= 16 && !el.dataset.agg) { this.cb.onStackClick?.(String(el.dataset.ids || '').split(',').filter(Boolean).map(Number)); return; }
       const pts = el.dataset.id!.split('|').map(s => s.split(':'));
       const lat = pts.reduce((a, p) => a + +p[1], 0) / pts.length, lng = pts.reduce((a, p) => a + +p[2], 0) / pts.length;
       this.flyTo(lat, lng, Math.min(z + (z < 9 ? 3 : 2), 17));
@@ -155,10 +163,21 @@ export class SeasonMapView {
     this.schedulePaint();
   }
 
-  setCallbacks(cb: MapCallbacks) { this.cb = cb; }
+  setCallbacks(cb: MapCallbacks) { this.cb = cb; this.emitView(); }
 
-  update(p: { pins?: Pin[]; draft?: LatLng | null; mode?: 'employer' | 'view'; highlight?: number | null; anchor?: LatLng | null; radiusKm?: number }) {
-    const pinsChanged = p.pins !== undefined && p.pins !== this.pins;
+  private emitView() {
+    if (!this.map || !this.ready || !this.cb.onView) return;
+    const b = this.map.getBounds();
+    this.cb.onView({ w: b.getWest(), s: b.getSouth(), e: b.getEast(), n: b.getNorth(), zoom: this.map.getZoom() });
+  }
+
+  /**
+   * fit — точки, по которым выставляется первый кадр (заказы от базы). Без него — по меткам; но догруженное
+   * в кадр (сводка участков) кадр не двигает: иначе карта подстраивалась бы под ответ и тут же просила новый.
+   */
+  update(p: { pins?: Pin[]; fit?: LatLng[]; draft?: LatLng | null; mode?: 'employer' | 'view'; highlight?: number | null; anchor?: LatLng | null; radiusKm?: number }) {
+    const pinsChanged = p.fit !== undefined ? p.fit !== this.fitPts : p.pins !== undefined && p.pins !== this.pins;
+    if (p.fit !== undefined) this.fitPts = p.fit;
     if (p.pins !== undefined) this.pins = p.pins;
     if (p.draft !== undefined) this.draft = p.draft;
     if (p.highlight !== undefined) this.highlight = p.highlight;
@@ -251,6 +270,7 @@ export class SeasonMapView {
       if (fly) this.flyTo(fly.lat, fly.lng, fly.zoom);
       else this.fitData();
       this.paint();
+      this.emitView();
     };
     map.on('styledata', () => { this.ruLabels(); this.drawRadius(); start(); });
     map.on('load', start);
@@ -258,7 +278,7 @@ export class SeasonMapView {
     this.paint();
     map.on('move', () => this.onMove());
     (['zoom', 'resize'] as const).forEach(ev => map.on(ev, () => this.schedulePaint()));
-    map.on('moveend', () => this.paint());
+    map.on('moveend', () => { this.paint(); this.emitView(); });
 
     map.on('click', (ev) => this.cb.onMapClick?.({ lat: ev.lngLat.lat, lng: ev.lngLat.lng }));
     // Автоподгонка кадра работает, пока пользователь сам не тронул карту.
@@ -287,7 +307,7 @@ export class SeasonMapView {
   // Кадр вокруг базы: растим радиус, пока в кадр не попадёт хотя бы MIN_SHOWN заказов.
   private fitData() {
     if (!this.map || !this.gl) return;
-    const pins = this.pins;
+    const pins: LatLng[] = this.fitPts ?? this.pins.filter(p => !p.n);
     const home = this.anchor || { lat: 55.751, lng: 37.618 };
     if (!pins.length) {
       if (this.anchor) this.map.jumpTo({ center: [home.lng, home.lat], zoom: 9 });
@@ -298,7 +318,7 @@ export class SeasonMapView {
     const dist = pins.map(p => kmBetween(p.lat, p.lng, home.lat, home.lng));
     const MIN_SHOWN = 8;
     const RINGS = [400, 700, 1000, 1500, 2500];
-    let use: Pin[] | null = null;
+    let use: LatLng[] | null = null;
     for (const ring of RINGS) {
       const set = pins.filter((_, k) => dist[k] <= ring);
       if (set.length >= Math.min(MIN_SHOWN, pins.length)) { use = set; break; }
@@ -373,7 +393,9 @@ export class SeasonMapView {
   }
 
   private centroidLL(g: Pin[]): LatLng {
-    return { lat: g.reduce((a, p) => a + p.lat, 0) / g.length, lng: g.reduce((a, p) => a + p.lng, 0) / g.length };
+    // Сводка участка весит столько, сколько в ней заказов.
+    const w = g.reduce((a, p) => a + (p.n || 1), 0);
+    return { lat: g.reduce((a, p) => a + p.lat * (p.n || 1), 0) / w, lng: g.reduce((a, p) => a + p.lng * (p.n || 1), 0) / w };
   }
 
   /** Группы по сетке экрана: CELL — сторона ячейки в пикселях. */
@@ -404,7 +426,7 @@ export class SeasonMapView {
           const cj = cens[j];
           if (taken[j] || !cj) continue;
           const dx = Math.abs(ci[0] - cj[0]), dy = Math.abs(ci[1] - cj[1]);
-          const solo = groups[i].length === 1 || groups[j].length === 1;
+          const solo = isSingle(groups[i]) || isSingle(groups[j]);
           const hit = solo ? (dx < 96 && dy < 40) : Math.hypot(dx, dy) < 46;
           if (hit) { acc = acc.concat(groups[j]); taken[j] = true; }
         }
@@ -442,7 +464,7 @@ export class SeasonMapView {
     const inView = (pt: [number, number]) => pt[0] > -M && pt[1] > -M && pt[0] < hostRect.width + M && pt[1] < hostRect.height + M;
     // Плашек сразу — не больше, чем читается; лишние одиночные — ромбиками (нажатие откроет карточку).
     // Считаем только видимые: заказы всего города за краем кадра место на экране не занимают.
-    const singles = groups.filter(g => { if (g.length !== 1) return false; const q = spotOf(g[0]); return !!q && inView(q); }).length;
+    const singles = groups.filter(g => { if (!isSingle(g)) return false; const q = spotOf(g[0]); return !!q && inView(q); }).length;
     const dense = near ? singles > (narrow ? 14 : 45) : pins.length > 14;
 
     const renderPin = (p: Pin, stackIdx: number, stackN: number, fan = -1) => {
@@ -481,8 +503,9 @@ export class SeasonMapView {
     };
 
     groups.forEach((group, gi) => {
-      if (group.length === 1) { renderPin(group[0], 0, 1); return; }
-      if (near && sameSpot(group)) {
+      const agg = group.some(p => p.n);
+      if (isSingle(group)) { renderPin(group[0], 0, 1); return; }
+      if (near && !agg && sameSpot(group)) {
         // Веер не уходит за верх карты: сколько влезло — показываем, остальное — «ещё N здесь».
         const anchor = this.pt(group[0].lat, group[0].lng);
         if (!anchor) return;
@@ -508,7 +531,7 @@ export class SeasonMapView {
       const c = this.centroidLL(group);
       const pt = this.pt(c.lat, c.lng);
       if (!pt || !inView(pt)) return;
-      html.push(clusterHtml(pt, c, group.length, group.filter(p => p.urgent).length, group.map(p => p.id)));
+      html.push(clusterHtml(pt, c, group.reduce((a, p) => a + (p.n || 1), 0), group.filter(p => p.urgent && !p.n).length, group.filter(p => !p.n).map(p => p.id), agg));
     });
 
     if (lone) renderPin(lone, 0, 1);
@@ -618,6 +641,7 @@ export class SeasonMapView {
       host2.dataset.n = String(n); host2.dataset.u = String(u);
       host2.dataset.id = host2.dataset.id + '|' + c.dataset.id;
       host2.dataset.ids = [host2.dataset.ids, c.dataset.ids].filter(Boolean).join(',');
+      if (c.dataset.agg) host2.dataset.agg = '1';
       const cnt = host2.querySelector('[data-role="n"]');
       if (cnt) cnt.textContent = countText(n);
       host2.title = clusterTitle(n, u);

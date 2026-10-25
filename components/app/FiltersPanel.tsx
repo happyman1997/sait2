@@ -19,7 +19,7 @@ const SEC_VALUE = 'font-family: var(--font-heading); font-weight: 600; font-size
 const SCALE = 'display: flex; justify-content: space-between; font-size: 12px; color: color-mix(in srgb, var(--color-text) 62%, transparent)';
 
 export function FiltersPanel({ filters, setFilters, types, found, baseLabel, onClose }: {
-  filters: Filters; setFilters: (f: Filters) => void; types: JobTypeRow[]; found: number; baseLabel: string; onClose: () => void;
+  filters: Filters; setFilters: (f: Filters) => void; types: JobTypeRow[]; found: number | string; baseLabel: string; onClose: () => void;
 }) {
   const [typeQuery, setTypeQuery] = useState('');
   const [typeOpen, setTypeOpen] = useState(false);

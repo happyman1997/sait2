@@ -198,6 +198,70 @@ describe('поиск', () => {
   });
 });
 
+describe('плотная карта: что в кадре', () => {
+  // n заказов вокруг центра Москвы (в пределах ~±8 км), одним запросом — как на большой площадке.
+  const bulk = (n: number, employer: string, type = 'snow') => query(
+    `INSERT INTO jobs (employer_id, type_id, title, description, address, lat, lng, district, pay, unit, pay_type, date, crew, urgent, access, tools, status)
+     SELECT $1, $3, 'Заказ ' || g, 'Тестовый заказ', 'Москва, ул. Тестовая, ' || g,
+            55.75 + ((g * 37) % 100 - 50) * 0.0014, 37.62 + ((g * 61) % 100 - 50) * 0.0025, 'Москва',
+            3000, 'за заказ', 'перевод на карту', $4::date, 1, false, '{домофон}', 'инвентарь есть на объекте', 'open'
+       FROM generate_series(1, $2::int) g`, [employer, n, type, plusDays(2)]).then(() => jobs.invalidateSearch());
+  const MSK_BOX = { w: 37.4, s: 55.6, e: 37.85, n: 55.9 };
+  const SPB_BOX = { w: 30.2, s: 59.88, e: 30.42, n: 60.0 };
+
+  it('от базы — 500 ближайших и признак «есть ещё»; вдали от базы кадр догружает свои заказы', async () => {
+    await bulk(520, emp.id!);
+    for (const a of ['Невский пр-т, 1', 'Лиговский пр-т, 5', 'Садовая, 3']) await jobs.createJob(form({ ...SPB, address: 'Санкт-Петербург, ' + a, type: 'grass' }), emp2, today);
+    const near = await jobs.listJobs({ today }, fl);
+    expect(near.jobs).toHaveLength(500);
+    expect(near.more).toBe(true);
+    expect(near.jobs.some(j => j.typeId === 'grass')).toBe(false);
+
+    const spb = await jobs.areaJobs({ today, ...SPB_BOX, zoom: 12 }, fl);
+    expect(spb.cells).toEqual([]);
+    expect(spb.jobs.map(j => j.typeId)).toEqual(['grass', 'grass', 'grass']);
+    expect(spb.total).toBe(3);
+  });
+
+  it('в кадре больше 500 — сводка по участкам: сумма сходится, у каждого участка — средняя точка его заказов', async () => {
+    await bulk(520, emp.id!);
+    const r = await jobs.areaJobs({ today, ...MSK_BOX, zoom: 10 }, fl);
+    expect(r.jobs).toEqual([]);
+    expect(r.total).toBe(520);
+    expect(r.cells.reduce((a, c) => a + c.n, 0)).toBe(520);
+    expect(r.cells.length).toBeGreaterThan(1);
+    for (const c of r.cells) {
+      expect(c.lat).toBeGreaterThan(MSK_BOX.s); expect(c.lat).toBeLessThan(MSK_BOX.n);
+      expect(c.lng).toBeGreaterThan(MSK_BOX.w); expect(c.lng).toBeLessThan(MSK_BOX.e);
+    }
+    // Приблизили — участки мельче, их больше.
+    const closer = await jobs.areaJobs({ today, ...MSK_BOX, zoom: 12 }, fl);
+    expect(closer.cells.length).toBeGreaterThan(r.cells.length);
+    // Фильтры — те же, что у выдачи от базы: под вид работ не попал ни один.
+    expect((await jobs.areaJobs({ today, types: ['grass'], ...MSK_BOX, zoom: 10 }, fl)).total).toBe(0);
+    // Мало заказов — признака «есть ещё» нет, кадр не нужен.
+    await query('TRUNCATE jobs CASCADE');
+    await bulk(20, emp.id!);
+    expect((await jobs.listJobs({ today }, fl)).more).toBe(false);
+  });
+
+  it('частный заказчик: кадр отбирает по сдвинутой точке — подбором маленьких кадров дом не найти', async () => {
+    const priv = await mkUser('employer', 'ivan_p', '9170000001', 'Иван Петров');
+    await query(`UPDATE employer_profiles SET org_type = 'частное лицо', org_name = NULL WHERE user_id = $1`, [priv.id]);
+    const j = await jobs.createJob(form({ address: 'Москва, ул. Тверская, 18, кв. 5' }), priv, today);
+    const shown = (await jobs.listJobs({ today }, fl)).jobs.find(x => x.num === j.num)!;
+    // Кадр ±50 м вокруг настоящей точки (сдвиг — 150–350 м): заказа там нет.
+    const d = 0.00045;
+    const real = await jobs.areaJobs({ today, w: MOSCOW.lng - d * 1.8, e: MOSCOW.lng + d * 1.8, s: MOSCOW.lat - d, n: MOSCOW.lat + d, zoom: 18 }, fl);
+    expect(real.total).toBe(0);
+    // Вокруг показанной точки — есть, и с той же точкой, что в выдаче.
+    const fz = await jobs.areaJobs({ today, w: shown.lng - d * 1.8, e: shown.lng + d * 1.8, s: shown.lat - d, n: shown.lat + d, zoom: 18 }, fl);
+    expect(fz.jobs.map(x => [x.num, x.lat, x.lng])).toEqual([[j.num, shown.lat, shown.lng]]);
+    // Владелец видит свой заказ на настоящем месте.
+    expect((await jobs.areaJobs({ today, w: MOSCOW.lng - d * 1.8, e: MOSCOW.lng + d * 1.8, s: MOSCOW.lat - d, n: MOSCOW.lat + d, zoom: 18 }, priv)).total).toBe(1);
+  });
+});
+
 describe('карточка и отклик', () => {
   it('телефон встречающего — только владельцу и нанятому', async () => {
     const j = await jobs.createJob(form(), emp, today);

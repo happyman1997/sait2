@@ -15,7 +15,7 @@ import { navigatingByLink, popOwnEntry, useBackClose } from '@/lib/backstack';
 import { autoShare } from '@/lib/share';
 import { useNarrow } from '@/components/useNarrow';
 import { SeasonMap, type SeasonMapHandle } from '@/components/map/SeasonMap';
-import type { LatLng, Pin } from '@/components/map/mapView';
+import type { LatLng, MapViewport, Pin } from '@/components/map/mapView';
 import { ActiveFilterTags, EMPTY_FILTERS, FiltersPanel, filtersCount, type Filters, type JobTypeRow } from './FiltersPanel';
 import { applyState, JobDetailPanel } from './JobDetailPanel';
 import { JobFormPanel } from './JobFormPanel';
@@ -92,15 +92,20 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
   }, []);
 
+  // От базы приходит не больше 500 ближайших; набралось столько (more) — карта догружает то, что в кадре (ниже).
+  const [more, setMore] = useState(false);
+  const [jobsRev, setJobsRev] = useState(0);
   // Ответы могут прийти не по порядку (быстрый ввод в поиске) — применяем только последний запрос.
   const loadSeq = useRef(0);
   const loadJobs = useCallback(async () => {
     const seq = ++loadSeq.current;
     try {
-      const r = await api<{ jobs: JobSummary[]; base: { lat: number; lng: number; label: string } }>('/api/jobs?' + qs(filters, null));
+      const r = await api<{ jobs: JobSummary[]; base: { lat: number; lng: number; label: string }; more?: boolean }>('/api/jobs?' + qs(filters, null));
       if (seq !== loadSeq.current) return;
       setJobs(r.jobs);
       setBase(r.base);
+      setMore(!!r.more);
+      setJobsRev(v => v + 1);
       setLoaded(true);
     } catch (e) {
       if (seq !== loadSeq.current) return;
@@ -118,6 +123,34 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
     api<{ types: JobTypeRow[] }>('/api/job-types?today=' + localISO()).then(r => setTypes(r.types)).catch(() => {});
   }, []);
   useEffect(loadTypes, [loadTypes]);
+
+  // ─── Плотная карта: что в кадре ───
+  // Карту отпустили — через миг спрашиваем, что в кадре: сами заказы или, если их там сотни, сводку по участкам
+  // (кружки с числом). Ответ — для текущих фильтров (key): после их смены старая сводка не показывается.
+  type Area = { key: string; box: MapViewport; jobs: JobSummary[]; cells: { lat: number; lng: number; n: number }[] };
+  const [view, setView] = useState<MapViewport | null>(null);
+  const [area, setArea] = useState<Area | null>(null);
+  const viewTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const onView = useCallback((v: MapViewport) => {
+    clearTimeout(viewTimer.current);
+    // Тот же кадр (карта сообщает его и при смене обработчиков) — не перезапрашиваем.
+    viewTimer.current = setTimeout(() => setView(o => (o && o.w === v.w && o.s === v.s && o.e === v.e && o.n === v.n && o.zoom === v.zoom ? o : v)), 350);
+  }, []);
+  useEffect(() => () => clearTimeout(viewTimer.current), []);
+  const areaKey = qs(filters, null).replace(/(^|&)today=[^&]*/, '');
+  const areaSeq = useRef(0);
+  useEffect(() => {
+    if (!more || !view) return;
+    const seq = ++areaSeq.current;
+    const p = new URLSearchParams(qs(filters, null));
+    (['w', 's', 'e', 'n'] as const).forEach(k => p.set(k, view[k].toFixed(5)));
+    p.set('z', view.zoom.toFixed(2));
+    api<{ jobs: JobSummary[]; cells: Area['cells'] }>('/api/jobs/area?' + p.toString())
+      .then(r => { if (seq === areaSeq.current) setArea({ key: areaKey, box: view, jobs: r.jobs, cells: r.cells }); })
+      .catch(() => { /* карта остаётся с выдачей от базы */ });
+    // jobsRev — выдача обновилась (новый или закрытый заказ): кадр перечитываем, прежний пока остаётся на карте.
+  }, [more, view, filters, areaKey, jobsRev]);
+  const areaNow = more && area?.key === areaKey ? area : null;
 
   // ─── Выбранный заказ ───
   const [selected, setSelected] = useState<number | null>(initialJob);
@@ -569,17 +602,29 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
   }, [detail, flash, loadJobs]);
 
   // ─── Метки ───
+  // Все известные заказы: от базы и из кадра — для меток и списка «Заказы на этом адресе».
+  const pool = useMemo(() => {
+    if (!areaNow?.jobs.length) return jobs;
+    const seen = new Set(jobs.map(j => j.num));
+    return jobs.concat(areaNow.jobs.filter(j => !seen.has(j.num)));
+  }, [jobs, areaNow]);
   const pins: Pin[] = useMemo(() => {
-    const list = jobs.map(j => ({
+    // Пришла сводка по участкам — она уже считает и заказы от базы, что в этом кадре: их не дублируем.
+    const box = areaNow?.cells.length ? areaNow.box : null;
+    const onMap = box ? pool.filter(j => !(j.lat >= box.s && j.lat <= box.n && j.lng >= box.w && j.lng <= box.e)) : pool;
+    const list: Pin[] = onMap.map(j => ({
       id: j.num, lat: j.lat, lng: j.lng, urgent: j.urgent, rate: moneyShort(j.pay, j.unit), kind: j.typeLabel,
       active: j.num === selected, title: j.title + ' — ' + j.address
     }));
-    if (detail && detail.num === selected && !jobs.some(j => j.num === detail.num)) {
+    (box ? areaNow!.cells : []).forEach((c, i) => list.push({ id: -(i + 1), lat: c.lat, lng: c.lng, n: c.n, urgent: false, rate: '', kind: '', active: false, title: '' }));
+    if (detail && detail.num === selected && !onMap.some(j => j.num === detail.num)) {
       list.push({ id: detail.num, lat: detail.lat, lng: detail.lng, urgent: detail.urgent, rate: moneyShort(detail.pay, detail.unit), kind: detail.typeLabel, active: true, title: detail.title });
     }
     return list;
-  }, [jobs, selected, detail]);
+  }, [pool, areaNow, selected, detail]);
 
+  // Первый кадр — по заказам от базы: догруженное в кадр его не двигает.
+  const fitPts = useMemo(() => jobs.map(j => ({ lat: j.lat, lng: j.lng })), [jobs]);
   const draftPoint = useMemo(() => (form && form.lat != null && form.lng != null ? { lat: form.lat, lng: form.lng } : null), [form]);
   const anchor = useMemo(() => (base ? { lat: base.lat, lng: base.lng } : null), [base]);
   const onPinClick = useCallback((n: number) => select(n), [select]);
@@ -587,6 +632,8 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
 
   // ─── Разметка ───
   const found = jobs.length;
+  // От базы пришли не все — «500+»: остальные видны на карте, если её сдвинуть.
+  const foundText = found + (more ? '+' : '');
   const nFilters = filtersCount(filters);
   const showDetail = !!detail && !form && detail.num === selected;
   const railStyle = narrow
@@ -626,10 +673,10 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
         <div style={css('flex: none; display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 10px ' + PAD + '; border-bottom: 1px solid var(--color-divider); background: var(--color-neutral-100)')}>
           <button className={'btn btn-primary ' + sty.c524a41d} onClick={() => setListOpen(!listOpen)} aria-expanded={listOpen}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /></svg>
-            {listOpen ? 'Скрыть список заказов' : 'Все заказы списком · ' + found}
+            {listOpen ? 'Скрыть список заказов' : 'Все заказы списком · ' + foundText}
           </button>
           <button className={'btn btn-primary ' + sty.c8269510} onClick={() => setFiltersOpen(o => !o)} aria-expanded={filtersOpen}>{nFilters ? 'Фильтры · ' + nFilters : 'Фильтры'}</button>
-          <span aria-live="polite" className={'fh ' + sty.c9462104}>{loaded ? 'найдено ' + found : 'загрузка…'}</span>
+          <span aria-live="polite" className={'fh ' + sty.c9462104}>{loaded ? 'найдено ' + foundText : 'загрузка…'}</span>
           {me && (
             <span className={'only-wide ' + sty.cddf581b}>
               <button className={'btn btn-primary ' + sty.cec3a420} onClick={() => live.setRail(live.rail === 'journal' ? null : 'journal')} title="Оповещения и журнал" aria-label={'Журнал' + (live.journal ? ', новых: ' + live.journal : '')}>
@@ -647,7 +694,7 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
         </div>
       )}
 
-      {filtersOpen && <FiltersPanel filters={filters} setFilters={setFilters} types={types} found={found} baseLabel={me?.baseLat != null ? base?.label || me.baseLabel : 'центр Москвы' + (me ? ' · свою базу укажите в профиле' : ' · войдите, чтобы искать от своего города')} onClose={() => setFiltersOpen(false)} />}
+      {filtersOpen && <FiltersPanel filters={filters} setFilters={setFilters} types={types} found={foundText} baseLabel={me?.baseLat != null ? base?.label || me.baseLabel : 'центр Москвы' + (me ? ' · свою базу укажите в профиле' : ' · войдите, чтобы искать от своего города')} onClose={() => setFiltersOpen(false)} />}
 
       <div style={css(shellStyle)}>
         {listOpen && (
@@ -717,7 +764,7 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
               <button className={sty.searchPill} onClick={() => setListOpen(true)} aria-expanded={listOpen}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m20 20-4.6-4.6" /></svg>
                 <span className={sty.searchText}>Поиск заказов</span>
-                <span aria-live="polite" className={sty.searchCount}>{loaded ? found : '…'}</span>
+                <span aria-live="polite" className={sty.searchCount}>{loaded ? foundText : '…'}</span>
               </button>
               <button className={sty.filterBtn} onClick={() => setFiltersOpen(o => !o)} aria-expanded={filtersOpen} aria-label={'Фильтры' + (nFilters ? ', включено: ' + nFilters : '')}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></svg>
@@ -725,8 +772,8 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
               </button>
             </div>
           )}
-          <SeasonMap ref={mapRef} pins={pins} draft={draftPoint} mode={isEmp ? 'employer' : 'view'} highlight={hover} anchor={isEmp || me?.baseLat == null ? null : anchor}
-            radiusKm={isEmp ? 0 : filters.km} onMapClick={onMapClick} onPinClick={onPinClick} onStackClick={onStackClick} />
+          <SeasonMap ref={mapRef} pins={pins} fit={fitPts} draft={draftPoint} mode={isEmp ? 'employer' : 'view'} highlight={hover} anchor={isEmp || me?.baseLat == null ? null : anchor}
+            radiusKm={isEmp ? 0 : filters.km} onMapClick={onMapClick} onPinClick={onPinClick} onStackClick={onStackClick} onView={onView} />
           {stackPick && stackPick.length > 0 && !form && (
             <div className={'blueprint ' + sty.c030d8ff}>
               <Corners />
@@ -735,7 +782,7 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
                 <button className={'btn btn-ghost ' + sty.cd1673a6} onClick={() => setStackPick(null)}>Закрыть</button>
               </div>
               <div className={sty.c380f53b}>
-                {stackPick.map(n => jobs.find(j => j.num === n)).filter((j): j is JobSummary => !!j).map(j => (
+                {stackPick.map(n => pool.find(j => j.num === n)).filter((j): j is JobSummary => !!j).map(j => (
                   <button key={j.num} onClick={() => select(j.num)} className={sty.c40300c1}>
                     <span className={sty.c33f2a66}>
                       <span className={'fh ' + sty.c4b2febe}>{j.title}</span>
