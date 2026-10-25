@@ -40,7 +40,7 @@ export function BaseForm({ label, set, free, onDone }: { label: string; set: boo
       </div>
       <div className={sty.row}>
         <input className={'input ' + sty.input} value={q} onChange={e => { setQ(e.target.value); setErr(''); }} onKeyDown={e => { if (e.key === 'Enter') change(); }}
-          aria-label={set ? 'Новая база' : 'Ваша база'} placeholder="город, посёлок или адрес" />
+          aria-label={set ? 'Новая база' : 'Ваша база'} placeholder="город или адрес" />
         <button className={'btn btn-secondary ' + sty.btn} onClick={change} disabled={busy}>{busy ? 'Ищем…' : set ? 'Сменить' : 'Сохранить'}</button>
       </div>
       {err && <div role="alert" className={sty.err}>{err}</div>}

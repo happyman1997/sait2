@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { css } from '@/lib/css';
-import { kmLabel, localISO, money, type JobSummary } from '@/lib/jobs';
+import { kmLabel, localISO, money, plural, type JobSummary } from '@/lib/jobs';
 import { disablePush, enablePush, pushState, type PushState } from '@/lib/push-client';
 import { useFlash } from '@/components/Toast';
 import { BaseForm } from './BaseForm';
@@ -154,7 +154,13 @@ export function NotifyRail() {
               ))}
             </div>
             {events === null && <div style={css(NOTE + '; margin-top: 6px')}>Загружаем…</div>}
-            {!!events?.length && <div style={css(NOTE + '; margin-top: 7px')}>{'Показаны последние ' + events.length + ' · «без доставки» — сверх дневного лимита, только в журнале.'}</div>}
+            {/* Сервер отдаёт до 30 событий: о «последних N» — только когда упёрлись в предел; о «без доставки» — когда такие есть. */}
+            {!!events?.length && (events.length >= 30 || events.some(e => e.muted)) && (
+              <div style={css(NOTE + '; margin-top: 7px')}>
+                {[events.length >= 30 ? 'Показаны последние ' + events.length + ' ' + plural(events.length, 'событие', 'события', 'событий') + '.' : '',
+                  events.some(e => e.muted) ? '«Без доставки» — сверх дневного лимита: такие события есть только в журнале.' : ''].filter(Boolean).join(' ')}
+              </div>
+            )}
             {events?.length === 0 && (
               <div style={css(NOTE + '; margin-top: 6px')}>
                 {me.role === 'employer'

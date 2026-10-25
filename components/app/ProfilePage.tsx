@@ -682,7 +682,7 @@ function Organization({ p, patch, busy, fieldErr }: {
           {fieldErr('inn')}
         </div>
         <div className="field">
-          <label htmlFor="org-object">Объекты обслуживания</label>
+          <label htmlFor="org-object">Тип объекта</label>
           <select id="org-object" className="input" value={objectKind} onChange={e => setObjectKind(e.target.value)}>
             <option value="">не указан</option>
             {OBJECT_KINDS.map(o => <option key={o} value={o}>{o}</option>)}
@@ -696,9 +696,10 @@ function Organization({ p, patch, busy, fieldErr }: {
           </select>
         </div>
       </div>
-      <div className={sty.c4bb9003}>
-        <div style={css(LABEL + '; margin-bottom: 7px')}>Доступ на объект</div>
-        <div className={sty.c2bf69bb}>
+      {/* Подпись — как у полей выше (не прописной заголовок раздела). */}
+      <div className={'field ' + sty.c4bb9003}>
+        <label id="org-access">Доступ на объект</label>
+        <div className={sty.c2bf69bb} role="group" aria-labelledby="org-access">
           {ACCESS.map(a => <Chip key={a} active={access.includes(a)} onClick={() => setAccess(x => (x.includes(a) ? x.filter(y => y !== a) : [...x, a]))}>{a}</Chip>)}
         </div>
       </div>

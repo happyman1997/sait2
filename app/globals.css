@@ -382,7 +382,8 @@ button:not(:disabled):active { transform: translateY(1px); }
 @media (max-width: 719.98px) {
   :root { --toast-lift: calc(56px + env(safe-area-inset-bottom)); }
   /* Сообщение — обычным текстом, как остальное на телефоне: заглавные с разрядкой в две-три строки не читаются. */
-  .toast { font-family: var(--font-body) !important; font-size: 15px !important; font-weight: 600; line-height: 1.4; letter-spacing: normal !important; text-transform: none !important; border-radius: 12px; }
+  /* width: max-content — иначе при left: 50% ширина ужимается до половины экрана и текст рвётся на 4 строки. */
+  .toast { width: max-content; max-width: calc(100vw - 32px) !important; font-family: var(--font-body) !important; font-size: 15px !important; font-weight: 600; line-height: 1.4; letter-spacing: normal !important; text-transform: none !important; border-radius: 12px; }
 }
 
 /* Телефон. Поля ввода — 16 px: с более мелким шрифтом iPhone увеличивает страницу при каждом нажатии на поле.
