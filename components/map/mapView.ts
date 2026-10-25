@@ -30,6 +30,20 @@ const plural = (k: number, a: string, b: string, c: string) => {
   return m10 === 1 && m100 !== 11 ? a : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? b : c;
 };
 
+const countText = (n: number) => (n > 999 ? '999+' : String(n));
+// Срочные в группе — только в подсказке: красные цифры на каждом кружке читались как непрочитанные уведомления.
+const clusterTitle = (n: number, u: number) => n + ' ' + plural(n, 'заказ', 'заказа', 'заказов') + ' рядом' + (u ? ', срочных ' + u : '') + ' — нажмите, чтобы приблизить';
+
+/** Группа заказов — кружок с числом на её месте; размер — по числу заказов. */
+function clusterHtml(pt: [number, number], c: LatLng, n: number, u: number, ids: number[]) {
+  const d = n >= 100 ? 50 : n >= 20 ? 44 : n >= 5 ? 38 : 34;
+  return '<div data-id="c:' + c.lat + ':' + c.lng + '" data-kind="cluster" data-n="' + n + '" data-u="' + u + '" data-ids="' + ids.join(',') + '" title="' +
+    esc(clusterTitle(n, u)) + '" style="position:absolute;left:' + pt[0] + 'px;top:' + pt[1] + 'px;transform:translate(-50%,-50%);z-index:4;width:' + d + 'px;height:' + d +
+    'px;box-sizing:border-box;border-radius:50%;display:grid;place-items:center;pointer-events:auto;cursor:pointer;font-family:var(--font-heading,sans-serif);' +
+    'font-weight:700;font-size:' + (n >= 100 ? 15 : 16) + 'px;line-height:1;color:#fff;background:' + ACCENT + ';border:2px solid ' + PAPER +
+    ';box-shadow:0 0 0 1px ' + DEEP + ',0 4px 12px rgba(31,45,58,.28)"><span data-role="n">' + countText(n) + '</span></div>';
+}
+
 // Геодезический круг радиуса (км → полигон).
 const circlePoly = (lat: number, lng: number, km: number, steps: number) => {
   const R = 6371, d = km / R, la = lat * Math.PI / 180, lo = lng * Math.PI / 180, ring: [number, number][] = [];
@@ -66,6 +80,8 @@ export class SeasonMapView {
   private settle: ReturnType<typeof setInterval> | undefined;
   private destroyed = false;
   private raf = 0;
+  /** Плашки, на которых сейчас лежит палец: перерисовка не должна выкидывать их из страницы (см. keepTouched). */
+  private held = new Set<Node>();
 
   pins: Pin[] = [];
   draft: LatLng | null = null;
@@ -81,10 +97,20 @@ export class SeasonMapView {
     this.host.style.cssText = 'position:absolute;inset:0';
     root.appendChild(this.host);
     this.overlay = document.createElement('div');
-    this.overlay.style.cssText = 'position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:5';
+    // contain:strict — сдвиг метки пересчитывает раскладку только этого слоя, а не всей страницы: развод меток
+    // меряет их десятки раз за кадр, и без этого перетаскивание плотной карты заметно подтормаживало.
+    this.overlay.style.cssText = 'position:absolute;inset:0;overflow:hidden;contain:strict;pointer-events:none;z-index:5';
     root.appendChild(this.overlay);
     // Один обработчик на слой меток вместо обработчика на каждую плашку при каждой перерисовке.
     this.overlay.addEventListener('click', (ev) => this.onOverlayClick(ev));
+    this.overlay.addEventListener('touchstart', (ev) => { for (const t of Array.from(ev.changedTouches)) this.held.add(t.target as Node); }, { passive: true });
+    const release = (ev: TouchEvent) => {
+      if (ev.touches.length) return;
+      this.held.clear();
+      this.overlay.querySelectorAll('[data-ghost]').forEach(g => g.remove());
+    };
+    this.overlay.addEventListener('touchend', release, { passive: true });
+    this.overlay.addEventListener('touchcancel', release, { passive: true });
     this.boot();
   }
 
@@ -98,9 +124,12 @@ export class SeasonMapView {
       this.cb.onStackClick?.(String(el.dataset.ids || '').split(',').filter(Boolean).map(Number));
     } else if (kind === 'cluster') {
       ev.stopPropagation();
+      const z = this.map?.getZoom() || 3;
+      // Ближе уже некуда (заказы в соседних домах) — список этих заказов, как у нескольких на одном адресе.
+      if (z >= 16) { this.cb.onStackClick?.(String(el.dataset.ids || '').split(',').filter(Boolean).map(Number)); return; }
       const pts = el.dataset.id!.split('|').map(s => s.split(':'));
       const lat = pts.reduce((a, p) => a + +p[1], 0) / pts.length, lng = pts.reduce((a, p) => a + +p[2], 0) / pts.length;
-      this.flyTo(lat, lng, Math.min((this.map?.getZoom() || 3) + 3, 12));
+      this.flyTo(lat, lng, Math.min(z + (z < 9 ? 3 : 2), 17));
     }
   }
 
@@ -108,6 +137,22 @@ export class SeasonMapView {
   private schedulePaint() {
     if (this.raf || this.destroyed) return;
     this.raf = requestAnimationFrame(() => { this.raf = 0; this.paint(); });
+  }
+
+  /** Где была карта при последней полной перерисовке (точка левого верхнего угла и масштаб). */
+  private shot: { lng: number; lat: number; zoom: number } | null = null;
+
+  // Карту тянут, масштаб тот же — сдвигаем слой меток целиком, без перерисовки: полная перерисовка плотной карты
+  // на каждом кадре заметно тормозила. Метки нарисованы с запасом за краем кадра, поэтому перерисовываем,
+  // только когда сдвинули далеко или отпустили карту (moveend).
+  private onMove() {
+    const map = this.map, s = this.shot;
+    if (!map || this.raf || this.destroyed) return;
+    if (s && Math.abs(map.getZoom() - s.zoom) < 1e-9) {
+      const p = map.project([s.lng, s.lat]);
+      if (Math.hypot(p.x, p.y) < 120) { this.overlay.style.transform = 'translate(' + p.x + 'px,' + p.y + 'px)'; return; }
+    }
+    this.schedulePaint();
   }
 
   setCallbacks(cb: MapCallbacks) { this.cb = cb; }
@@ -186,6 +231,10 @@ export class SeasonMapView {
       }
     });
     this.map = map;
+    // Слой меток — внутри карты: колесо, перетаскивание и щипок, начатые на кружке или плашке, двигают карту
+    // (отдельным слоем поверх неё над плотным городом карту было не приблизить и не сдвинуть). Нажатие на метку
+    // по-прежнему открывает заказ: обработчик слоя гасит всплытие, до «клика по карте» оно не доходит.
+    map.getCanvasContainer().appendChild(this.overlay);
     map.touchZoomRotate.disableRotation();
     map.addControl(new gl.NavigationControl({ showCompass: false, visualizePitch: false }), 'top-left');
     map.addControl(new gl.ScaleControl({ unit: 'metric' }), 'top-right');
@@ -207,7 +256,8 @@ export class SeasonMapView {
     map.on('load', start);
     setTimeout(start, 900);
     this.paint();
-    (['move', 'zoom', 'resize'] as const).forEach(ev => map.on(ev, () => this.schedulePaint()));
+    map.on('move', () => this.onMove());
+    (['zoom', 'resize'] as const).forEach(ev => map.on(ev, () => this.schedulePaint()));
     map.on('moveend', () => this.paint());
 
     map.on('click', (ev) => this.cb.onMapClick?.({ lat: ev.lngLat.lat, lng: ev.lngLat.lng }));
@@ -224,7 +274,9 @@ export class SeasonMapView {
     let tries = 0;
     this.settle = setInterval(() => {
       if (!this.map || ++tries > 24) { clearInterval(this.settle); return; }
-      this.map.resize();
+      // resize() останавливает текущий жест — без нужды не зовём: иначе в первые секунды карта не тянулась пальцем.
+      const cv = this.map.getCanvas();
+      if (cv.clientWidth !== this.host.clientWidth || cv.clientHeight !== this.host.clientHeight) this.map.resize();
       if (!this.touched) this.fitData();
       this.ruLabels();
       this.paint();
@@ -324,25 +376,17 @@ export class SeasonMapView {
     return { lat: g.reduce((a, p) => a + p.lat, 0) / g.length, lng: g.reduce((a, p) => a + p.lng, 0) / g.length };
   }
 
-  // Метки в одной точке экрана (один адрес).
-  private coincident(pins: Pin[]) {
-    const cells: Record<string, Pin[]> = {}, order: string[] = [];
+  /** Группы по сетке экрана: CELL — сторона ячейки в пикселях. */
+  private cluster(pins: Pin[], CELL = 104) {
+    const cells: Record<string, Pin[]> = {};
+    // Сетка привязана к самой карте, а не к экрану: иначе при перетаскивании заказы перескакивают
+    // из кружка в кружок и числа на них меняются на ходу.
+    const world = 512 * Math.pow(2, this.map?.getZoom() || 0);
     pins.forEach(p => {
-      const pt = this.pt(p.lat, p.lng);
-      if (!pt) return;
-      const key = Math.round(pt[0] / 6) + ':' + Math.round(pt[1] / 6);
-      if (!cells[key]) { cells[key] = []; order.push(key); }
-      cells[key].push(p);
-    });
-    return order.map(k => cells[k]);
-  }
-
-  private cluster(pins: Pin[]) {
-    const CELL = 104, cells: Record<string, Pin[]> = {};
-    pins.forEach(p => {
-      const pt = this.pt(p.lat, p.lng);
-      if (!pt) return;
-      const key = Math.round(pt[0] / CELL) + ':' + Math.round(pt[1] / CELL);
+      if (!this.pt(p.lat, p.lng)) return;
+      const sin = Math.sin(p.lat * Math.PI / 180);
+      const wx = (p.lng + 180) / 360 * world, wy = (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * world;
+      const key = Math.round(wx / CELL) + ':' + Math.round(wy / CELL);
       (cells[key] = cells[key] || []).push(p);
     });
     const groups = Object.keys(cells).map(k => cells[k]);
@@ -378,16 +422,28 @@ export class SeasonMapView {
     // Плашки по одной — с масштаба области; на телефоне — только с масштаба города: на узкой карте плашки соседних
     // заказов налезали друг на друга, поэтому там раньше собираем их в метки «N заказов».
     const narrow = window.matchMedia('(max-width: 719.98px)').matches;
-    const near = this.map.getZoom() >= (narrow ? 11 : 7);
-    // Открытый заказ не прячем в группу «N заказов» — он всегда виден своей плашкой.
-    const lone = near ? null : pins.find(p => p.active) || null;
+    const zoom = this.map.getZoom();
+    const near = zoom >= (narrow ? 11 : 7);
+    // Открытый заказ не прячем в группу — он всегда виден своей плашкой.
+    const lone = pins.find(p => p.active) || null;
     const others = lone ? pins.filter(p => p !== lone) : pins;
-    const groups = near ? this.coincident(others) : this.cluster(others);
-    const dense = pins.length > 14 && !near;
+    // Тесно стоящие заказы — в кружок с числом при любом масштабе: в плотном городе иначе сотни плашек налезают
+    // друг на друга, а перерисовка каждого кадра при перетаскивании тормозит.
+    const groups = this.cluster(others, near ? 84 : 104);
+    const spotOf = (p: Pin) => this.pt(p.lat, p.lng);
+    // Несколько заказов на одном адресе (точки на экране совпадают) — веер плашек, а не число: приближать некуда.
+    const sameSpot = (g: Pin[]) => {
+      const a = spotOf(g[0]);
+      return !!a && g.every(p => { const b = spotOf(p); return !!b && Math.abs(a[0] - b[0]) < 7 && Math.abs(a[1] - b[1]) < 7; });
+    };
     // Метки далеко за краем кадра не создаём — на всю Россию это сотни лишних DOM-узлов на кадр.
     const hostRect = this.host.getBoundingClientRect();
     const M = 160;
     const inView = (pt: [number, number]) => pt[0] > -M && pt[1] > -M && pt[0] < hostRect.width + M && pt[1] < hostRect.height + M;
+    // Плашек сразу — не больше, чем читается; лишние одиночные — ромбиками (нажатие откроет карточку).
+    // Считаем только видимые: заказы всего города за краем кадра место на экране не занимают.
+    const singles = groups.filter(g => { if (g.length !== 1) return false; const q = spotOf(g[0]); return !!q && inView(q); }).length;
+    const dense = near ? singles > (narrow ? 14 : 45) : pins.length > 14;
 
     const renderPin = (p: Pin, stackIdx: number, stackN: number, fan = -1) => {
       const pt = this.pt(p.lat, p.lng);
@@ -425,8 +481,8 @@ export class SeasonMapView {
     };
 
     groups.forEach((group, gi) => {
-      if (near || group.length === 1) {
-        if (group.length === 1) { renderPin(group[0], 0, 1); return; }
+      if (group.length === 1) { renderPin(group[0], 0, 1); return; }
+      if (near && sameSpot(group)) {
         // Веер не уходит за верх карты: сколько влезло — показываем, остальное — «ещё N здесь».
         const anchor = this.pt(group[0].lat, group[0].lng);
         if (!anchor) return;
@@ -452,18 +508,7 @@ export class SeasonMapView {
       const c = this.centroidLL(group);
       const pt = this.pt(c.lat, c.lng);
       if (!pt || !inView(pt)) return;
-      const n = group.length;
-      const urgentN = group.filter(p => p.urgent).length;
-      const big = n >= 15 ? 19 : n >= 5 ? 17 : 15;
-      html.push('<div data-id="c:' + c.lat + ':' + c.lng + '" data-kind="cluster" data-n="' + n + '" data-u="' + urgentN + '" title="' +
-        esc(n + ' предложений' + (urgentN ? ', срочных ' + urgentN : '')) +
-        '" style="position:absolute;left:' + pt[0] + 'px;top:' + pt[1] + 'px;transform:translate(-50%,-50%);z-index:4;' +
-        'display:flex;flex-direction:column;align-items:stretch;box-sizing:border-box;pointer-events:auto;cursor:pointer;white-space:nowrap;' +
-        'font-family:var(--font-heading,sans-serif);font-weight:600;line-height:1;color:#fff;background:' + ACCENT + ';border:1px solid ' + DEEP + ';box-shadow:0 4px 14px rgba(31,45,58,.26)">' +
-        '<span style="display:flex;align-items:baseline;gap:5px;padding:6px 9px"><span data-role="n" style="font-size:' + big + 'px">' + n + '</span>' +
-        '<span data-role="w" style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.88)">' + plural(n, 'заказ', 'заказа', 'заказов') + '</span></span>' +
-        (urgentN ? '<span data-role="u" style="padding:3px 9px;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;background:' + PAPER + ';color:' + DEEP + '">' +
-          urgentN + ' срочн' + (urgentN === 1 ? 'ый' : 'ых') + '</span>' : '') + '</div>');
+      html.push(clusterHtml(pt, c, group.length, group.filter(p => p.urgent).length, group.map(p => p.id)));
     });
 
     if (lone) renderPin(lone, 0, 1);
@@ -488,8 +533,28 @@ export class SeasonMapView {
         'font-size:17px;background:' + PAPER + ';color:' + INK + ';border:1px dashed ' + ACCENT + '">+</div>');
     }
 
+    this.overlay.style.transform = '';
     this.overlay.innerHTML = html.join('');
     this.deoverlap();
+    this.keepTouched();
+    const o = this.map.unproject([0, 0]);
+    this.shot = { lng: o.lng, lat: o.lat, zoom: this.map.getZoom() };
+  }
+
+  // Палец, опустившийся на плашку, продолжает слать события именно ей. После перерисовки старая плашка
+  // оказывается вне страницы, события до карты не доходят — и карта не двигается, если вести пальцем с метки.
+  // Поэтому возвращаем такую плашку невидимой, без данных для нажатия, и убираем, когда палец поднят.
+  private keepTouched() {
+    for (const n of this.held) {
+      if (n.isConnected) continue;
+      let top: Node = n;
+      while (top.parentNode) top = top.parentNode;
+      if (!(top instanceof HTMLElement)) continue;
+      [top, ...Array.from(top.querySelectorAll<HTMLElement>('*'))].forEach(el => { delete el.dataset.id; delete el.dataset.kind; delete el.dataset.ids; });
+      top.dataset.ghost = '1';
+      top.style.visibility = 'hidden';
+      this.overlay.appendChild(top);
+    }
   }
 
   // Развод плашек по фактическим прямоугольникам (перенесено из прототипа без изменений логики).
@@ -501,8 +566,19 @@ export class SeasonMapView {
     let clusters = Array.from(this.overlay.querySelectorAll<HTMLElement>('[data-kind="cluster"]'));
     const host = this.host.getBoundingClientRect();
     const placedC: R[] = [], placedEl: HTMLElement[] = [];
+    // Прямоугольник кружка считаем по его стилю, а не меряем: замеров на кадр были сотни, и каждый после сдвига
+    // заставлял браузер заново раскладывать слой.
+    const cr = (c: HTMLElement): R => {
+      const x = host.left + (parseFloat(c.style.left) || 0), y = host.top + (parseFloat(c.style.top) || 0), h = (parseFloat(c.style.width) || 0) / 2;
+      return { left: x - h, right: x + h, top: y - h, bottom: y + h };
+    };
+    // Плашки меряем один раз, пока в слой ничего не писали (одна раскладка на кадр), дальше считаем сами.
+    const known = new Map<HTMLElement, R>();
+    const scaleOf = new Map<HTMLElement, number>();
+    all.forEach(el => { const b = el.getBoundingClientRect(); known.set(el, b); scaleOf.set(el, el.offsetHeight ? b.height / el.offsetHeight : 1); });
+    const rectOf = (el: HTMLElement): R => el.dataset.kind === 'cluster' ? cr(el) : known.get(el) || el.getBoundingClientRect();
     const clampIn = (c: HTMLElement) => {
-      const r = c.getBoundingClientRect();
+      const r = cr(c);
       let dx = 0, dy = 0;
       if (r.right > host.right - 4) dx = host.right - 4 - r.right;
       if (r.left + dx < host.left + 4) dx = host.left + 4 - r.left;
@@ -514,126 +590,123 @@ export class SeasonMapView {
     const overlaps = (r: R, q: R) => !(r.right < q.left || q.right < r.left || r.bottom < q.top || q.bottom < r.top);
     const overlapArea = (r: R, q: R) => Math.max(0, Math.min(r.right, q.right) - Math.max(r.left, q.left)) * Math.max(0, Math.min(r.bottom, q.bottom) - Math.max(r.top, q.top));
     const hitIdx = (r: R) => placedC.findIndex(q => overlaps(r, q));
-    const fixedZ: R[] = [];
-    const dot0 = this.overlay.querySelector('[data-kind="base"]');
-    if (dot0) {
-      const dotRect = dot0.getBoundingClientRect();
-      fixedZ.push(grow(dotRect, 3));
-      const lbl0 = this.overlay.querySelector('[data-kind="baselabel"]');
-      if (lbl0) {
-        const lr = lbl0.getBoundingClientRect();
-        fixedZ.push(grow(lr, 2));
-        fixedZ.push(grow({ left: dotRect.left - 13 - lr.width, right: dotRect.left - 13, top: lr.top, bottom: lr.bottom }, 2));
-      }
-    }
     // Кнопки масштаба, линейка и подпись карты лежат поверх меток — метки обходят и их.
     // Подпись карты (data-attrib) — соседний с картой элемент в SeasonMap.
     const ctrls = Array.from((this.root.parentElement || this.root).querySelectorAll<HTMLElement>('.maplibregl-ctrl, [data-attrib]'))
       .map(el => el.getBoundingClientRect()).filter(r => r.width > 0).map(r => grow(r, 2));
-    fixedZ.push(...ctrls);
+    // Что лежит поверх карты снаружи (строка поиска и фильтры на телефоне — data-map-cover): метка под ними не видна и
+    // не нажимается (палец попадает в строку поиска) — такие не рисуем, они появятся, если сдвинуть карту.
+    // Проверяем уже после сдвигов: кружок у края карты прижимается внутрь и может уехать как раз под строку поиска.
+    // Кнопки масштаба и подпись карты — так же: кружок под ними выглядел обрезанным, а сдвинутый висел на линии.
+    const covers = Array.from(document.querySelectorAll<HTMLElement>('[data-map-cover]'))
+      .map(el => el.getBoundingClientRect() as R).filter(r => r.right > r.left).concat(ctrls);
+    const covered = (el: HTMLElement) => {
+      const r = rectOf(el), area = (r.right - r.left) * (r.bottom - r.top);
+      return covers.some(q => overlapArea(r, q) > area * 0.3);
+    };
+    all.filter(el => el.isConnected && !el.dataset.active && covered(el)).forEach(el => el.remove());
     // Группы «N заказов» обходят и плашку открытого заказа — иначе она их закрывает.
     const act0 = this.overlay.querySelector<HTMLElement>('[data-active="1"]');
     const actZ = act0 && clusters.length ? grow(act0.getBoundingClientRect(), 6) : null;
-    if (actZ) fixedZ.push(actZ);
-    const hitFixed = (r: R) => fixedZ.some(q => overlaps(r, q));
+    // Группы обходят только открытый заказ; «моя база» уступает им место (кружок ляжет поверх, а не отъедет с линией).
+    const ctrlZ = actZ ? [actZ] : [];
+    const hitCtrl = (r: R) => ctrlZ.some(q => overlaps(r, q));
+    // Кружок, налезающий на уже поставленный, — сливаем в него (сумма заказов), а не отодвигаем с ножкой:
+    // в плотном городе сдвинутые группы с линиями превращались в путаницу.
+    const mergeInto = (host2: HTMLElement, c: HTMLElement, hi: number) => {
+      const n = (+host2.dataset.n! || 0) + (+c.dataset.n! || 0), u = (+host2.dataset.u! || 0) + (+c.dataset.u! || 0);
+      host2.dataset.n = String(n); host2.dataset.u = String(u);
+      host2.dataset.id = host2.dataset.id + '|' + c.dataset.id;
+      host2.dataset.ids = [host2.dataset.ids, c.dataset.ids].filter(Boolean).join(',');
+      const cnt = host2.querySelector('[data-role="n"]');
+      if (cnt) cnt.textContent = countText(n);
+      host2.title = clusterTitle(n, u);
+      c.remove();
+      placedC[hi] = cr(host2);
+    };
     clusters.forEach(c => {
+      clampIn(c);
+      if (covered(c)) { c.remove(); return; }
       const l0 = parseFloat(c.style.left) || 0, t0 = parseFloat(c.style.top) || 0;
-      const r0 = c.getBoundingClientRect();
-      const sx = r0.width + 6, sy = r0.height + 6;
-      const tries = [[0, 0], [0, -sy], [0, sy], [sx, 0], [-sx, 0], [sx, -sy], [-sx, -sy], [sx, sy], [-sx, sy], [0, -2 * sy], [0, 2 * sy], [2 * sx, 0], [-2 * sx, 0]];
-      // Рядом с плашкой открытого заказа — вплотную справа, слева, снизу, сверху (на маленькой карте телефона иначе места нет).
+      const hi0 = hitIdx(grow(cr(c), 3));
+      if (hi0 >= 0) { mergeInto(placedEl[hi0], c, hi0); return; }
+      const r0 = cr(c);
+      if (!hitCtrl(grow(r0, 3))) { placedC.push(r0); placedEl.push(c); return; }
+      const sx = r0.right - r0.left + 6, sy = r0.bottom - r0.top + 6;
+      // Мешает плашка открытого заказа — ищем рядом свободное место.
+      const tries = [[0, 0], [0, -sy], [0, sy], [sx, 0], [-sx, 0], [sx, -sy], [-sx, -sy], [sx, sy], [-sx, sy]];
       if (actZ) tries.push([actZ.right + 4 - r0.left, 0], [actZ.left - 4 - r0.right, 0], [0, actZ.bottom + 4 - r0.top], [0, actZ.top - 4 - r0.bottom]);
-      let okC = false;
-      // Запасной вариант — место, где перекрытие с уже занятым меньше всего.
       let best = { left: l0, top: t0, cost: Infinity };
+      let ok = false;
       for (const [dx, dy] of tries) {
         c.style.left = (l0 + dx) + 'px'; c.style.top = (t0 + dy) + 'px';
         clampIn(c);
-        const r = grow(c.getBoundingClientRect(), 3);
-        if (hitIdx(r) < 0 && !hitFixed(r)) { okC = true; break; }
-        const cost = placedC.concat(fixedZ).reduce((sum, q) => sum + overlapArea(r, q), 0);
+        const r = grow(cr(c), 3);
+        if (hitIdx(r) < 0 && !hitCtrl(r)) { ok = true; break; }
+        const cost = placedC.concat(ctrlZ).reduce((sum, q) => sum + overlapArea(r, q), 0);
         if (cost < best.cost) best = { left: parseFloat(c.style.left) || 0, top: parseFloat(c.style.top) || 0, cost };
       }
-      if (!okC) {
-        // Места нет — вливаем в группу, с которой сталкиваемся.
-        c.style.left = l0 + 'px'; c.style.top = t0 + 'px'; clampIn(c);
-        const hi = hitIdx(grow(c.getBoundingClientRect(), 3));
-        const host2 = hi >= 0 ? placedEl[hi] : null;
-        if (host2) {
-          const n = (+host2.dataset.n! || 0) + (+c.dataset.n! || 0), u = (+host2.dataset.u! || 0) + (+c.dataset.u! || 0);
-          host2.dataset.n = String(n); host2.dataset.u = String(u);
-          host2.dataset.id = host2.dataset.id + '|' + c.dataset.id;
-          const cnt = host2.querySelector('[data-role="n"]'), wd = host2.querySelector('[data-role="w"]'), ur = host2.querySelector('[data-role="u"]');
-          if (cnt) cnt.textContent = String(n);
-          if (wd) wd.textContent = plural(n, 'заказ', 'заказа', 'заказов');
-          if (u) {
-            const txt = u + ' срочн' + (u === 1 ? 'ый' : 'ых');
-            if (ur) ur.textContent = txt;
-            else host2.insertAdjacentHTML('beforeend', '<span data-role="u" style="padding:3px 9px;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;background:' + PAPER + ';color:' + DEEP + '">' + txt + '</span>');
-          }
-          host2.title = n + ' предложений' + (u ? ', срочных ' + u : '');
-          c.remove();
-          placedC[hi] = host2.getBoundingClientRect();
-          return;
-        }
-        // Мешают только кнопки карты и плашка открытого заказа — ставим туда, где закрыто меньше всего.
-        c.style.left = best.left + 'px'; c.style.top = best.top + 'px';
-      }
-      placedC.push(c.getBoundingClientRect()); placedEl.push(c);
+      if (!ok) { c.style.left = best.left + 'px'; c.style.top = best.top + 'px'; }
+      if (covered(c)) { c.remove(); return; }
+      placedC.push(cr(c)); placedEl.push(c);
       const nl = parseFloat(c.style.left) || 0, nt = parseFloat(c.style.top) || 0;
       const len = Math.hypot(nl - l0, nt - t0);
       if (len > 4) {
-        // Сдвинутая плашка держит ножку к своей настоящей точке.
+        // Сдвинутый кружок держит ножку к своей настоящей точке.
         const line = document.createElement('div');
         line.setAttribute('data-kind', 'clusterstem');
         line.style.cssText = 'position:absolute;left:' + l0 + 'px;top:' + t0 + 'px;width:' + len + 'px;height:1px;background:' + DEEP +
           ';transform-origin:0 0;transform:rotate(' + Math.atan2(nt - t0, nl - l0) + 'rad);pointer-events:none';
         this.overlay.insertBefore(line, c);
-        const dot = document.createElement('div');
-        dot.setAttribute('data-kind', 'clusterstem');
-        dot.style.cssText = 'position:absolute;left:' + l0 + 'px;top:' + t0 + 'px;width:5px;height:5px;transform:translate(-50%,-50%);background:' + DEEP + ';pointer-events:none';
-        this.overlay.insertBefore(dot, c);
       }
     });
     clusters = clusters.filter(c => c.isConnected);
-    const boxes: R[] = clusters.concat(all.filter(el => el.children.length === 0)).map(el => el.getBoundingClientRect() as R).concat(ctrls);
+    const boxes: R[] = clusters.map(cr).concat(all.filter(el => el.isConnected && el.children.length === 0).map(rectOf), ctrls, covers);
     const hits = (r: R) => boxes.some(q => overlaps(r, q));
     const isActive = (el: HTMLElement) => el.dataset.active === '1';
     const placeSingle = (el: HTMLElement) => {
+      if (!el.isConnected) return;
       const left0 = parseFloat(el.style.left) || 0;
       const top0 = parseFloat(el.style.top) || 0;
       const stem = el.children[el.children.length - 2] as HTMLElement;
       const stem0 = parseFloat(stem.style.height) || 11;
+      const b = rectOf(el), sc = scaleOf.get(el) || 1;
+      // Плашка не выходит за край карты; не помещается — поднимаем её на удлинённой ножке (низ метки остаётся на точке).
+      let dx = 0;
+      if (b.right > host.right - 6) dx = host.right - 6 - b.right;
+      if (b.left + dx < host.left + 6) dx = host.left + 6 - b.left;
+      const at = (lift: number): R => ({ left: b.left + dx, right: b.right + dx, top: b.top - lift * sc, bottom: b.bottom });
       let lift = 0, ok = false;
       for (let i = 0; i < 7; i++) {
-        let r = el.getBoundingClientRect();
-        let dx = 0;
-        if (r.right > host.right - 6) dx = host.right - 6 - r.right;
-        if (r.left + dx < host.left + 6) dx = host.left + 6 - r.left;
-        if (dx) { el.style.left = ((parseFloat(el.style.left) || 0) + dx) + 'px'; r = el.getBoundingClientRect(); }
-        if (!hits(grow(r, 2))) { ok = true; if (!isActive(el)) el.style.zIndex = '3'; break; }
-        if (r.top - 18 < host.top + 4) break;
+        const r = at(lift);
+        // Верх плашки за краем карты — она обрезана; лучше точка.
+        if (r.top < host.top + 2) break;
+        if (!hits(grow(r, 2))) { ok = true; break; }
+        if (r.top - 18 * sc < host.top + 4) break;
         lift += 18;
-        el.style.top = (top0 - lift) + 'px';
-        stem.style.height = (stem0 + lift) + 'px';
       }
-      if (!ok && isActive(el)) {
+      let fin: R;
+      if (ok) {
+        if (dx) el.style.left = (left0 + dx) + 'px';
+        if (lift) stem.style.height = (stem0 + lift) + 'px';
+        if (!isActive(el)) el.style.zIndex = '3';
+        fin = at(lift);
+      } else if (isActive(el)) {
         // Открытый заказ не сворачиваем — остаётся плашкой поверх соседей.
-        el.style.left = left0 + 'px';
-        el.style.top = top0 + 'px';
-        stem.style.height = stem0 + 'px';
-      } else if (!ok) {
+        fin = b;
+      } else {
         // Места нет — сворачиваем плашку в точку на её настоящей координате.
-        el.style.left = left0 + 'px';
-        el.style.top = top0 + 'px';
         el.style.transform = 'translate(-50%, -50%)';
         // Свёрнутая точка — под плашками, а не поверх их текста. data-dot — крупная зона нажатия на телефоне (map-skin.css).
         el.style.zIndex = '1';
         el.dataset.dot = '1';
         el.innerHTML = '<span style="display:block;width:11px;height:11px;transform:rotate(45deg);box-sizing:border-box;background:' +
           PAPER + ';border:1.5px solid ' + ACCENT + ';box-shadow:0 2px 6px rgba(31,45,58,.22)"></span>';
+        const x = host.left + left0, y = host.top + top0;
+        fin = { left: x - 5.5, right: x + 5.5, top: y - 5.5, bottom: y + 5.5 };
       }
-      boxes.push(el.getBoundingClientRect());
+      known.set(el, fin);
+      boxes.push(fin);
     };
     // Открытый заказ ставим первым — остальные уступают ему место.
     els.filter(isActive).forEach(placeSingle);
@@ -642,7 +715,7 @@ export class SeasonMapView {
     const fans = new Map<string, HTMLElement[]>();
     this.overlay.querySelectorAll<HTMLElement>('[data-g]').forEach(el => fans.set(el.dataset.g!, (fans.get(el.dataset.g!) || []).concat(el)));
     [...fans.values()].sort((a, b) => +b.some(isActive) - +a.some(isActive)).forEach(fan => {
-      const rects = fan.map(el => el.getBoundingClientRect());
+      const rects = fan.map(rectOf);
       const pinEls = fan.filter(el => el.dataset.kind === 'pin');
       if (!pinEls.length || fan.some(isActive) || !rects.some(r => hits(grow(r, 2)))) { boxes.push(...rects); return; }
       const ids = pinEls.map(el => el.dataset.id!).concat(fan.flatMap(el => (el.dataset.ids || '').split(',').filter(Boolean)));
@@ -666,7 +739,13 @@ export class SeasonMapView {
         return !hits(grow(badge.getBoundingClientRect(), 2));
       });
       if (!spot) { badge.style.left = x0 + 'px'; badge.style.top = y0 + 'px'; }
-      boxes.push(badge.getBoundingClientRect());
+      // Не уходит за край карты: у правого края надпись «N заказов здесь» обрезалась.
+      const bb = badge.getBoundingClientRect();
+      let bdx = 0;
+      if (bb.right > host.right - 6) bdx = host.right - 6 - bb.right;
+      if (bb.left + bdx < host.left + 6) bdx = host.left + 6 - bb.left;
+      if (bdx) badge.style.left = ((parseFloat(badge.style.left) || 0) + bdx) + 'px';
+      boxes.push(bdx ? { left: bb.left + bdx, right: bb.right + bdx, top: bb.top, bottom: bb.bottom } : bb);
     });
     const baseDot = this.overlay.querySelector<HTMLElement>('[data-kind="base"]');
     if (baseDot) boxes.push(baseDot.getBoundingClientRect());
@@ -677,9 +756,13 @@ export class SeasonMapView {
         const w = baseEl.getBoundingClientRect().width;
         const dotLeft = parseFloat(baseDot.style.left) || 0;
         baseEl.style.left = (dotLeft - 13 - w) + 'px';
+        // И слева занято (плотный город) — подпись убираем, остаётся кольцо базы: иначе она закрывает кружок с числом.
+        if (hits(grow(baseEl.getBoundingClientRect(), 2))) baseEl.style.display = 'none';
       }
-      boxes.push(baseEl.getBoundingClientRect());
+      if (baseEl.style.display !== 'none') boxes.push(baseEl.getBoundingClientRect());
     }
     els.filter(el => !isActive(el)).forEach(placeSingle);
+    // Плашка, которой не нашлось места, сворачивается в точку на своей координате — и та может оказаться под строкой поиска.
+    Array.from(this.overlay.querySelectorAll<HTMLElement>('[data-kind="pin"]:not([data-active="1"]), [data-kind="stackmore"]')).filter(covered).forEach(el => el.remove());
   }
 }

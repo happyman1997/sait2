@@ -713,7 +713,7 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
         <div data-compact-map={narrow && (form || selected != null) ? '' : undefined}
           style={css('position: relative; min-width: 0; min-height: 0; overflow: hidden; ' + (narrow ? 'grid-row: 1; grid-column: 1' : 'grid-row: 1; grid-column: 2'))}>
           {narrow && !form && !selected && (
-            <div className={sty.mapTools}>
+            <div className={sty.mapTools} data-map-cover="">
               <button className={sty.searchPill} onClick={() => setListOpen(true)} aria-expanded={listOpen}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m20 20-4.6-4.6" /></svg>
                 <span className={sty.searchText}>Поиск заказов</span>

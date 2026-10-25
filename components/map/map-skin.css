@@ -6,6 +6,8 @@
 .maplibregl-ctrl-group button:hover { background: color-mix(in srgb, var(--color-accent, #5980a6) 14%, var(--color-neutral-100, #fff)); }
 .maplibregl-ctrl-group button:focus-visible { outline: 2px solid var(--color-accent, #5980a6); outline-offset: 2px; box-shadow: none; }
 .maplibregl-ctrl-attrib { display: none !important; }
+/* Кнопки масштаба и линейка — поверх слоя меток (у него z-index 5): кружок у края карты не должен перехватывать нажатие на «+». */
+.maplibregl-ctrl-top-left, .maplibregl-ctrl-top-right, .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right { z-index: 6; }
 .maplibregl-ctrl-scale {
   border-radius: 0; border: 1px solid var(--color-accent, #5980a6); border-top: 0; color: var(--color-text, #1d1f20);
   background: color-mix(in srgb, var(--color-neutral-100, #fff) 82%, transparent); font-size: 10px;

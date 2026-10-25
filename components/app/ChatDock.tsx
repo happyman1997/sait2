@@ -111,7 +111,8 @@ export function ChatDock({ place }: { place: 'map' | 'form' | 'page' }) {
   );
 
   return (
-    <div className={narrow ? '' : 'blueprint'} style={css(style)} aria-label="Сообщения">
+    // Свёрнутая полоса «Сообщения» лежит на краю карты — метки под ней карта не рисует (data-map-cover).
+    <div className={narrow ? '' : 'blueprint'} style={css(style)} aria-label="Сообщения" data-map-cover={!narrow && !dock.open ? '' : undefined}>
       {showHint && (
         <div className={sty.ca2b78a5}>
           <button type="button" className={sty.hintClose} onClick={seeHint} aria-label="Скрыть подсказку">×</button>
