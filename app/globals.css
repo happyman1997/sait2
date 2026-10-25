@@ -379,7 +379,11 @@ button:not(:disabled):active { transform: translateY(1px); }
 :root[data-work] .tag { min-height: 36px; font-size: 14px !important; display: inline-flex; align-items: center; }
 :root[data-work] .job-row { min-height: 76px; }
 /* Уведомление поднимается над нижним меню на телефоне */
-@media (max-width: 719.98px) { :root { --toast-lift: calc(56px + env(safe-area-inset-bottom)); } }
+@media (max-width: 719.98px) {
+  :root { --toast-lift: calc(56px + env(safe-area-inset-bottom)); }
+  /* Сообщение — обычным текстом, как остальное на телефоне: заглавные с разрядкой в две-три строки не читаются. */
+  .toast { font-family: var(--font-body) !important; font-size: 15px !important; font-weight: 600; line-height: 1.4; letter-spacing: normal !important; text-transform: none !important; border-radius: 12px; }
+}
 
 /* Телефон. Поля ввода — 16 px: с более мелким шрифтом iPhone увеличивает страницу при каждом нажатии на поле.
    Кнопки и переключатели — не ниже 40/36 px, чтобы попадать пальцем; метки-теги — не мельче 12 px.
