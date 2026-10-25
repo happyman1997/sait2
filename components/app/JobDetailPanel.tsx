@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { useRef, useState } from 'react';
 import { css } from '@/lib/css';
-import { crewOf, dateLabel, jobNum, jobStatus, kmLabel, localISO, money, plural, ratingLabel, type JobDetail, type JobSummary } from '@/lib/jobs';
+import { crewOf, dateLabel, dayLabel, jobNum, jobStatus, kmLabel, localISO, money, plural, ratingLabel, type JobDetail, type JobSummary } from '@/lib/jobs';
 import { ApplicantsBlock, LeaveShiftForm, MoveDateForm, reveal, ShiftBlock, type Act, type ReviewOpen } from './ShiftBlock';
 import { SeriesBlock } from './SeriesBlock';
 import { ShareJob } from './ShareJob';
@@ -132,8 +132,13 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
   const { workMode } = useLive();
   const reqRef = useRef<HTMLDivElement>(null);
   const live = job.status === 'open' || job.status === 'staffed';
+  // Своему заказу — то, что сейчас нужно сделать: разобрать отклики, перейти к смене, проверить и принять сданную работу.
+  const ownerSticky = job.status === 'reported' && !job.repeat
+    ? <Link href={'/shift?job=' + job.num} className="btn btn-primary btn-block">Проверить и принять работу</Link>
+    : job.status === 'staffed' && job.hired > 0 ? <Link href={'/shift?job=' + job.num} className="btn btn-primary btn-block">Экран смены</Link>
+      : live ? <Link href="/apps" className="btn btn-primary btn-block">{'Отклики · ' + job.applicants}</Link> : null;
   const sticky = workMode ? null
-    : job.mine ? (live ? <Link href="/apps" className="btn btn-primary btn-block">{'Отклики · ' + job.applicants}</Link> : null)
+    : job.mine ? ownerSticky
       : !role ? <Link href={'/auth?apply=' + job.num} className="btn btn-primary btn-block">Откликнуться на заказ</Link>
         : role !== 'freelancer' ? null
           : st.key === 'open' ? <button className="btn btn-primary btn-block" onClick={() => onApply(reqOk)} disabled={busy}>Откликнуться на заказ</button>
@@ -191,7 +196,7 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
       {job.cancellation && (
         <div className={sty.caabaa43}>
           <div className={sty.c765e4b4}>
-            Отменено {new Date(job.cancellation.at).toLocaleDateString('ru-RU')} · работодатель · {job.cancellation.reason} · {job.cancellation.notice}{job.cancellation.late ? ' · пометка в профиле' : ''}
+            Отменено {dayLabel(job.cancellation.at)} · работодатель · {job.cancellation.reason} · {job.cancellation.notice}{job.cancellation.late ? ' · пометка в профиле' : ''}
           </div>
         </div>
       )}
@@ -248,7 +253,7 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
       )}
       {role === 'freelancer' && job.shift?.withdrawal && job.myStatus !== 'hired' && (
         <div className={sty.cf827e84}>
-          Вы отказались {new Date(job.shift.withdrawal.at).toLocaleDateString('ru-RU')} · {job.shift.withdrawal.reason} · {job.shift.withdrawal.notice}{job.shift.withdrawal.late ? ' · пометка в профиле на 90 дней' : ' · без последствий для рейтинга'}
+          Вы отказались {dayLabel(job.shift.withdrawal.at)} · {job.shift.withdrawal.reason} · {job.shift.withdrawal.notice}{job.shift.withdrawal.late ? ' · пометка в профиле на 90 дней' : ' · без последствий для рейтинга'}
         </div>
       )}
 

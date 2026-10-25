@@ -702,6 +702,8 @@ export type ApplicantCard = {
   reqConfirmed: boolean; lateMark: boolean;
   /** ФНС подтвердила статус самозанятого (перепроверка раз в сутки). */
   npd: boolean;
+  /** Диалог с ним внутри заказа (id исполнителя) — кнопка «Написать» у нанятого. */
+  thread: string;
 };
 
 /** Вкладка «Отклики»: открытые заказы работодателя и люди по ним. */
@@ -712,11 +714,11 @@ export async function applicantsBoard(viewer: Viewer) {
   const live = jobs.filter(j => j.status === 'open' || j.status === 'staffed' || j.status === 'reported');
   if (!live.length) return { jobs: [] as (MyJob & { people: ApplicantCard[] })[] };
   const rows = await query<{
-    num: string; id: string; name: string; status: AppStatus; created_at: Date; is_lead: boolean | null; rating: number | null; reviews: number;
+    num: string; id: string; freelancer_id: string; name: string; status: AppStatus; created_at: Date; is_lead: boolean | null; rating: number | null; reviews: number;
     done: number; no_show_count: number; gear: string[] | null; own_car: boolean | null; work_cities: string[] | null; skills: string[] | null;
     custom_skills: string[] | null; req_confirmed: boolean; late: boolean; npd: boolean | null;
   }>(
-    `SELECT j.num, a.id, u.name, a.status, a.created_at, h.is_lead, a.req_confirmed,
+    `SELECT j.num, a.id, a.freelancer_id, u.name, a.status, a.created_at, h.is_lead, a.req_confirmed,
             (SELECT avg(rating)::float8 FROM reviews WHERE target_id = u.id) AS rating,
             (SELECT count(*) FROM reviews WHERE target_id = u.id)::int AS reviews,
             ${doneSql('u.id')} AS done,
@@ -737,7 +739,7 @@ export async function applicantsBoard(viewer: Viewer) {
       rating: a.rating == null ? null : Math.round(a.rating * 10) / 10, reviews: a.reviews, done: a.done, noShows: a.no_show_count,
       gear: (a.gear || []).filter(g => g !== 'Ничего нет'), ownCar: !!a.own_car, cities: a.work_cities || [],
       skills: [...(a.skills || []).map(s => labels.get(s) || s), ...(a.custom_skills || [])],
-      reqConfirmed: a.req_confirmed, lateMark: a.late, npd: !!a.npd
+      reqConfirmed: a.req_confirmed, lateMark: a.late, npd: !!a.npd, thread: a.freelancer_id
     });
     byNum.set(Number(a.num), list);
   }

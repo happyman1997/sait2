@@ -204,3 +204,11 @@
 @media (max-width: 719.98px) {
   .c22e630a, .c61fef2d, .c0dd5712 { text-transform: none !important; letter-spacing: normal !important; }
 }
+
+/* Шаг «Доступ»: частые варианты одним нажатием и пояснение, кому видны подробности. */
+.accessQuick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.accessNote { font-size: 12.5px; line-height: 1.4; margin-top: 6px; color: color-mix(in srgb, var(--color-text) 64%, transparent); }
+
+/* Сообщение «заполните поля» — над кнопками внутри закреплённой полосы: видно, даже если шаг длинный. */
+.navWrap { flex-wrap: wrap; }
+.navAlert { flex: 1 0 100%; margin: 0 0 2px !important; }

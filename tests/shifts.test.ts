@@ -412,6 +412,8 @@ describe('мои смены и отклики', () => {
     const board = await sh.applicantsBoard(emp);
     expect(board.jobs).toHaveLength(1);
     expect(board.jobs[0].people.map(p => [p.name, p.status])).toEqual([['Данияр С.', 'hired'], ['Ольга К.', 'sent']]);
+    // «Написать» у нанятого — диалог внутри заказа: id исполнителя.
+    expect(board.jobs[0].people.map(p => p.thread)).toEqual([fl.id, fl2.id]);
     await expectErr(sh.applicantsBoard(fl), /раздел работодателя/);
   });
 });

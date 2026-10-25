@@ -215,6 +215,21 @@ describe('карточка и отклик', () => {
     expect((await jobs.getJob(j.num, fl)).meetName).toBe('Марат');
   });
 
+  it('подробности доступа (коды, квартира) — только владельцу и нанятому, остальным — вид доступа', async () => {
+    const j = await jobs.createJob(form({ access: ['домофон', 'домофон 12', 'код калитки 4321'] }), emp, today);
+    const outside = ['домофон', 'шлагбаум или ворота', 'подробности — после найма'];
+    expect((await jobs.getJob(j.num, null)).access).toEqual(outside);
+    expect((await jobs.getJob(j.num, fl)).access).toEqual(outside);
+    expect((await jobs.getJob(j.num, emp2)).access).toEqual(outside);
+    expect((await jobs.getJob(j.num, emp)).access).toEqual(['домофон', 'домофон 12', 'код калитки 4321']);
+    await jobs.applyToJob(j.num, {}, fl, today);
+    expect((await jobs.getJob(j.num, fl)).access).toEqual(outside);
+    const [{ id }] = (await query<{ id: string }>('SELECT id FROM jobs WHERE num = $1', [j.num])).rows;
+    await query(`INSERT INTO hires (job_id, freelancer_id) VALUES ($1, $2)`, [id, fl.id]);
+    await query(`UPDATE applications SET status = 'hired' WHERE freelancer_id = $1`, [fl.id]);
+    expect((await jobs.getJob(j.num, fl)).access).toEqual(['домофон', 'домофон 12', 'код калитки 4321']);
+  });
+
   it('частный заказчик: до отклика — без имени, до найма — без дома и с примерной точкой', async () => {
     const priv = await mkUser('employer', 'ivan_p', '9170000001', 'Иван Петров');
     await query(`UPDATE employer_profiles SET org_type = 'частное лицо', org_name = NULL WHERE user_id = $1`, [priv.id]);

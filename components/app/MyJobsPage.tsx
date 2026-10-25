@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, api } from '@/lib/api';
 import { css } from '@/lib/css';
-import { ACCEPT_CONFIRM, dateLabel, isSeries, jobNum, jobStatus, localISO, money, plural, seriesDayLabel, shortTitle, type JobDetail, type MyJob } from '@/lib/jobs';
+import { ACCEPT_CONFIRM, dateLabel, dayLabel, isSeries, jobNum, jobStatus, localISO, money, plural, REPORT_CONFIRM, seriesDayLabel, shortTitle, type JobDetail, type MyJob } from '@/lib/jobs';
 import { useFlash } from '@/components/Toast';
 import { useLive, useLiveEvent } from './Live';
 import { Corners } from './ui';
@@ -60,9 +60,9 @@ function track(j: MyJob, emp: boolean) {
   const left = j.autoAcceptAt ? daysLeft(j.autoAcceptAt) + ' ' + plural(daysLeft(j.autoAcceptAt), 'день', 'дня', 'дней') : '';
   const reported = !!j.reportedAt;
   const offNote = j.cancellation
-    ? 'Смена отменена работодателем · ' + j.cancellation.reason + ', ' + new Date(j.cancellation.at).toLocaleDateString('ru-RU') + '. Отклики закрыты.'
+    ? 'Смена отменена работодателем · ' + j.cancellation.reason + ', ' + dayLabel(j.cancellation.at) + '. Отклики закрыты.'
     : j.noShow ? 'Работодатель отметил «Не вышел» — вы сняты со смены.'
-      : j.withdrawal ? 'Вы отказались от смены · ' + j.withdrawal.reason + ', ' + new Date(j.withdrawal.at).toLocaleDateString('ru-RU') + '. Можно откликнуться снова, если заказ ещё открыт.'
+      : j.withdrawal ? 'Вы отказались от смены · ' + j.withdrawal.reason + ', ' + dayLabel(j.withdrawal.at) + '. Можно откликнуться снова, если заказ ещё открыт.'
         : j.myStatus === 'withdrawn' ? 'Вы отозвали отклик — без пометки в профиле.'
           : 'Работодатель выбрал другого исполнителя.';
   const notes = [
@@ -159,7 +159,7 @@ export function MyJobsPage({ role }: { role: 'freelancer' | 'employer' }) {
                   : isSeries(j.repeat)
                   ? <Link href={'/?job=' + j.num} className={'btn btn-primary ' + sty.c2792902}>Серия выходов</Link>
                   : <button className={'btn btn-primary ' + sty.ca52b2a4} disabled={busy || (!j.repeat && j.date > localISO() && !(emp && t.reported))}
-                      onClick={() => (emp ? window.confirm(ACCEPT_CONFIRM) && act(j.num, 'accept', 'Работа принята — оцените исполнителя') : act(j.num, 'report', 'Работа сдана — у работодателя 7 дней на приёмку'))}>
+                      onClick={() => (emp ? window.confirm(ACCEPT_CONFIRM) && act(j.num, 'accept', 'Работа принята — оцените исполнителя') : window.confirm(REPORT_CONFIRM) && act(j.num, 'report', 'Работа сдана — у работодателя 7 дней на приёмку'))}>
                       {(emp ? 'Принять работу' : 'Сдать работу') + (!j.repeat && j.date > localISO() && !(emp && t.reported) ? ' — с ' + dateLabel(j.date) : '')}
                     </button>)}
               </div>

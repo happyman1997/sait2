@@ -15,7 +15,9 @@
 :where(.c28112cd) {
   position: relative !important;
   z-index: 146 !important;
-  width: min(440px, 94vw) !important;
+  /* По ширине клетки с отступами 20px: 94vw на телефоне шире неё — окно съезжало вправо, к самому краю. */
+  width: min(440px, 100%) !important;
+  box-sizing: border-box !important;
   padding: 20px 22px !important;
   background: var(--color-bg) !important;
   box-shadow: 0 24px 60px rgba(20, 26, 32, .3) !important;

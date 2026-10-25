@@ -331,7 +331,8 @@
 :where(.cb9527de) {
   position: relative !important;
   z-index: 141 !important;
-  width: min(460px, 94vw) !important;
+  width: min(460px, 100%) !important;
+  box-sizing: border-box !important;
   background: var(--color-bg) !important;
   box-shadow: 0 24px 60px rgba(20, 26, 32, .3) !important;
 }

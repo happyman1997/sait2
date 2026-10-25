@@ -1,5 +1,5 @@
 // Заказы: общие для клиента и сервера типы, проверки формы и форматирование (тексты — из прототипа).
-import { CREW_ANY, MONTHS_GEN, PAY_TYPES, REPEATS, TOOLS, UNITS } from './catalog';
+import { ACCESS, CREW_ANY, MONTHS_GEN, PAY_TYPES, REPEATS, TOOLS, UNITS } from './catalog';
 
 export type JobStatus = 'open' | 'staffed' | 'reported' | 'accepted' | 'cancelled';
 export type AppStatus = 'sent' | 'hired' | 'rejected' | 'withdrawn';
@@ -89,6 +89,8 @@ export type ShiftInfo = {
   canDispute: boolean;
   /** Чек-лист «Перед выходом»: работодатель видит всех нанятых, исполнитель — свой. */
   safety: { name: string; items: string[]; me: boolean }[];
+  /** Пункты чек-листа «Перед выходом» — по требованиям работодателя; нет требований — пусто, чек-листа нет. */
+  safetyItems: { id: string; label: string }[];
 };
 
 /** Спор по расчёту: причины для каждой стороны (прототип, DISPUTE_REASONS). */
@@ -177,6 +179,42 @@ export function seriesDayLabel(iso: string) {
   return d.getUTCDate() + ' ' + MONTHS_GEN[d.getUTCMonth()] + ', ' + WEEKDAYS[d.getUTCDay()];
 }
 
+const ACCESS_KINDS: [RegExp, string][] = [
+  [/домофон/i, 'домофон'], [/шлагбаум|ворот|калитк/i, 'шлагбаум или ворота'], [/пропуск|охран|вахт|ресепш/i, 'пропуск у охраны'],
+  [/встреч/i, 'встречу лично'], [/свободн/i, 'свободный вход']
+];
+/** Подпись вместо подробностей доступа (кодов, квартир, подъездов), пока исполнителя не наняли. */
+export const ACCESS_LATER = 'подробности — после найма';
+
+/**
+ * «Как попасть на объект» для тех, кого ещё не наняли: только вид доступа (домофон, шлагбаум…). Что вписано своими словами —
+ * «домофон 12», «код калитки 1234» — видят владелец и нанятые: в этих строках бывают коды и номера квартир.
+ */
+export function accessForOutsiders(access: string[]): string[] {
+  const out = new Set<string>();
+  let details = false;
+  for (const a of access) {
+    if (ACCESS.includes(a)) { out.add(a); continue; }
+    const kind = ACCESS_KINDS.find(([re]) => re.test(a));
+    if (kind) out.add(kind[1]);
+    details = true;
+  }
+  return [...out, ...(details ? [ACCESS_LATER] : [])];
+}
+
+/**
+ * Чек-лист по требованиям работодателя из профиля (жилет, каска, инструктаж на месте). Частному заказчику без требований
+ * «каска и жилет» во дворе ни к чему — чек-листа нет.
+ */
+export function safetyItemsFor(req: string[] | null | undefined): { id: string; label: string }[] {
+  const r = (req || []).filter(x => x !== 'требований нет');
+  const ppe = r.filter(x => x === 'сигнальный жилет' || x === 'каска');
+  return [
+    ...(r.includes('инструктаж на месте') ? [{ id: 'brief', label: 'инструктаж пройден' }] : []),
+    ...(ppe.length ? [{ id: 'ppe', label: 'СИЗ на месте: ' + ppe.join(', ') }] : [])
+  ];
+}
+
 export const SAFETY_ITEMS = [
   { id: 'brief', label: 'инструктаж прочитан' },
   { id: 'ppe', label: 'СИЗ на месте: перчатки, каска, жилет' }
@@ -185,6 +223,11 @@ export const SAFETY_ITEMS = [
 export const AUTO_ACCEPT_DAYS = 7;
 /** Приёмка необратима — спрашиваем перед ней. */
 export const ACCEPT_CONFIRM = 'Принять работу? Смена закроется, откроются отзывы и отметки о расчёте. Отменить приёмку нельзя.';
+/** Сдача запускает 7 дней на приёмку и уведомляет работодателя — тоже спрашиваем. */
+export const REPORT_CONFIRM = 'Сдать работу? Работодатель получит уведомление и 7 дней на приёмку — если не ответит, смена закроется и будет засчитана вам.';
+/** Найм — договор на условиях заказа; отменить его без последствий для исполнителя нельзя. */
+export const hireConfirm = (name: string) => 'Нанять ' + name + '? Откроется чат, исполнитель получит уведомление, адрес и телефон встречающего.';
+export const hireDone = (name: string) => 'Найм оформлен: ' + name + ' — чат открыт';
 export const REVIEW_EDIT_MIN = 10;
 export const HIRE_GREETING = 'Здравствуйте! Вы наняты на этот заказ. Подтвердите, пожалуйста, время выхода.';
 export const REPORT_MESSAGE = 'Работа выполнена — прошу принять.';
@@ -331,6 +374,11 @@ export function dateLabel(iso: string): string {
   const p = String(iso || '').split('-');
   if (p.length !== 3) return String(iso || '');
   return parseInt(p[2], 10) + ' ' + (MONTHS_GEN[parseInt(p[1], 10) - 1] || '');
+}
+
+/** Дата события (ISO-время) по-человечески: «25 октября». */
+export function dayLabel(at: string | Date): string {
+  return dateLabel(localISO(new Date(at)));
 }
 
 export function jobNum(n: number): string {

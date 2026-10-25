@@ -10,7 +10,7 @@ import { api, ApiError } from '@/lib/api';
 import { css } from '@/lib/css';
 import { uploadForm } from '@/lib/image';
 import { disablePush } from '@/lib/push-client';
-import { dateLabel, money, plural, ratingLabel } from '@/lib/jobs';
+import { dateLabel, dayLabel, money, plural, ratingLabel } from '@/lib/jobs';
 import { normCity } from '@/lib/cities';
 import { CityInput } from '@/components/CityInput';
 import { SkillInput } from '@/components/SkillInput';
@@ -198,7 +198,7 @@ export function ProfilePage() {
                     <div className={sty.ca7d1012}>
                       <span aria-label={'Оценка ' + r.rating + ' из 5'} className={sty.c7f1a80c}>{'★'.repeat(r.rating) + '☆'.repeat(5 - r.rating)}</span>
                       <span className={'fh ' + sty.c583964a}>{r.author}</span>
-                      <span style={css('font-size: 12.5px; ' + MUTED)}>{r.title + ' · ' + new Date(r.at).toLocaleDateString('ru-RU')}</span>
+                      <span style={css('font-size: 12.5px; ' + MUTED)}>{r.title + ' · ' + dayLabel(r.at)}</span>
                     </div>
                     {r.text && <div className={sty.cf0e9b35}>{r.text}</div>}
                   </div>
@@ -779,7 +779,7 @@ function NpdCheck({ npd, onDone }: { npd?: { inn: string | null; status: 'ok' | 
       onDone();
     } catch (e) { setErr(e instanceof ApiError ? e.message : 'Проверка не прошла — попробуйте позже'); } finally { setBusy(false); }
   };
-  const when = npd?.checkedAt ? new Date(npd.checkedAt).toLocaleDateString('ru-RU') : '';
+  const when = npd?.checkedAt ? dayLabel(npd.checkedAt) : '';
   return (
     <>
       <div className={sty.c4da9731}>

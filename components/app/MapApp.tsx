@@ -22,7 +22,8 @@ import { JobFormPanel } from './JobFormPanel';
 import { JobListOverlay } from './JobListOverlay';
 import { useLive, useLiveEvent } from './Live';
 import { NAV_H } from './MobileShell';
-import { ObjectCardPanel, ObjectsList, type ObjectCard } from './ObjectsBlock';
+import { ObjectCardPanel, ObjectsList, type ObjectCard, type OrderDefaults } from './ObjectsBlock';
+import { ActionBox } from './ActionBox';
 import { GuestGuide, StartSteps, WorkLinks } from './RailSummary';
 import { DocLinks } from '@/components/DocLinks';
 import { Corners, LABEL } from './ui';
@@ -282,6 +283,8 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
     }
   }, []);
 
+  // Подстановка в новый заказ из профиля работодателя: грузится вместе с объектами («Мои объекты» ниже).
+  const defaultsRef = useRef<OrderDefaults | null>(null);
   /** Метка работодателя: клик по карте или найденный адрес. При открытой форме — только переставляем метку. */
   const placeAt = useCallback((p: LatLng, hit?: GeoHit) => {
     if (!isEmp) return;
@@ -289,8 +292,11 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
     setStackPick(null);
     setFormState(f => {
       if (f) return { ...f, lat: p.lat, lng: p.lng, ...(hit ? { address: hit.label, district: hit.district || f.district } : {}) };
+      // Доступ, инвентарь и встречающий — из профиля работодателя (указаны при регистрации), не вводить в каждом заказе.
+      const d = defaultsRef.current;
       const nf = emptyJobForm();
-      return { ...nf, lat: p.lat, lng: p.lng, address: hit?.label || '', district: hit?.district || '' };
+      return { ...nf, ...(d ? { access: d.access.slice(), tools: d.tools, meetName: d.meetName, meetPhone: d.meetPhone } : {}),
+        lat: p.lat, lng: p.lng, address: hit?.label || '', district: hit?.district || '' };
     });
     setFormErrs(e => ({ ...e, address: '' }));
     if (!form) { setFormStep(1); setFormError(''); setEditing(null); }
@@ -303,7 +309,7 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
   const formOpen = !!form;
   useEffect(() => {
     if (!isEmp || formOpen) return;
-    api<{ objects: ObjectCard[] }>('/api/me/objects').then(r => setObjects(r.objects)).catch(() => {});
+    api<{ objects: ObjectCard[]; defaults: OrderDefaults }>('/api/me/objects').then(r => { setObjects(r.objects); defaultsRef.current = r.defaults; }).catch(() => {});
   }, [isEmp, formOpen]);
 
   /** Заказ с объекта: метка, адрес, объём, доступ, инвентарь и встречающий — из карточки. */
@@ -692,6 +698,7 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
 
           {!form && !selected && !objEdit && (!me ? <GuestGuide /> : (
             <>
+              <ActionBox />
               <StartSteps isEmp={isEmp} addr={isEmp ? {
                 query: addrQuery, setQuery: v => { setAddrQuery(v); setAddrError(''); setAddrManual(false); }, busy: addrBusy,
                 note: addrError || 'Найденный адрес станет черновиком заказа. Можно просто нажать на карту.', error: !!addrError, onFind: findAddress

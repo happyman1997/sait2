@@ -16,6 +16,8 @@ export type ObjectCard = {
   id: string; name: string; address: string; lat: number; lng: number; area: string; contact: string;
   access: string[]; tools: string; shifts: number; lastDate: string | null;
 };
+/** Подстановка в новый заказ из профиля работодателя (server/objects.ts → orderDefaults). */
+export type OrderDefaults = { access: string[]; tools: string; meetName: string; meetPhone: string };
 
 const STATUS: Record<string, string> = { open: 'идёт набор', staffed: 'набрано', reported: 'сдана', accepted: 'принята', cancelled: 'отменена' };
 

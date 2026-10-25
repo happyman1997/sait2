@@ -69,6 +69,13 @@ beforeEach(async () => {
 afterAll(async () => { await pool().end(); });
 
 describe('объекты работодателя', () => {
+  it('доступ, инвентарь и встречающий из профиля подставляются в новый заказ', async () => {
+    expect(await objects.orderDefaults(emp)).toEqual({ access: [], tools: '', meetName: '', meetPhone: '' });
+    await query(`UPDATE employer_profiles SET access = '{домофон,"встречу лично",хак}', tools = 'нужен свой инвентарь', meet_name = 'Марина', meet_phone = '+7 916 555-12-34' WHERE user_id = $1`, [emp.id]);
+    expect(await objects.orderDefaults(emp)).toEqual({ access: ['домофон', 'встречу лично'], tools: 'нужен свой инвентарь', meetName: 'Марина', meetPhone: '+7 916 555-12-34' });
+    await expect(objects.orderDefaults(fl)).rejects.toThrow(/работодатель/);
+  });
+
   it('создать, изменить, заказ с объекта попадает в историю; чужой объект не привязать', async () => {
     const o = await objects.saveObject(emp, { name: 'Двор на Гиляровского', address: 'ул. Гиляровского, 24', ...MOSCOW, area: '320 м²', contact: 'консьерж', access: ['домофон', 'хак'], tools: 'инвентарь есть на объекте' });
     expect(o).toMatchObject({ name: 'Двор на Гиляровского', access: ['домофон'], shifts: 0 });

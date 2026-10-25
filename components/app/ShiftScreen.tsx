@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { css } from '@/lib/css';
-import { dateLabel, jobNum, jobStatus, money, SAFETY_ITEMS, seriesDayLabel, shortTitle, type JobDetail } from '@/lib/jobs';
+import { dateLabel, jobNum, jobStatus, money, seriesDayLabel, shortTitle, type JobDetail } from '@/lib/jobs';
 import { showModeration } from '@/components/ModerationGuard';
 import { useFlash } from '@/components/Toast';
 import { useLive, useLiveEvent } from './Live';
@@ -85,7 +85,8 @@ export function ShiftScreen({ pick = null }: { pick?: number | null }) {
     const items = meSafety.items.includes(id) ? meSafety.items.filter(x => x !== id) : [...meSafety.items, id];
     act('safety', { items }, '');
   };
-  const allDone = (items: string[]) => SAFETY_ITEMS.every(i => items.includes(i.id));
+  const checklist = shift?.safetyItems ?? [];
+  const allDone = (items: string[]) => checklist.every(i => items.includes(i.id));
 
   return (
     <div className={sty.cca0d1b9}>
@@ -125,7 +126,7 @@ export function ShiftScreen({ pick = null }: { pick?: number | null }) {
           </div>
         )}
 
-        {shift && shift.safety.length > 0 && (
+        {shift && shift.safety.length > 0 && checklist.length > 0 && (
           <div className={'blueprint ' + sty.caeb40d8}>
             <Corners />
             <div style={css(LABEL + '; font-size: 12px')}>Перед выходом</div>
@@ -133,13 +134,13 @@ export function ShiftScreen({ pick = null }: { pick?: number | null }) {
               <div key={p.name} className={sty.c0d69e4b}>
                 <div className={sty.c025e659}>{p.name}</div>
                 <div className={sty.c2bf69bb}>
-                  {SAFETY_ITEMS.map(i => <span key={i.id} className={'tag ' + (p.items.includes(i.id) ? 'tag-accent' : 'tag-outline')}>{i.label}</span>)}
+                  {checklist.map(i => <span key={i.id} className={'tag ' + (p.items.includes(i.id) ? 'tag-accent' : 'tag-outline')}>{i.label}</span>)}
                 </div>
               </div>
             )) : (
               // Пункты — строками с квадратиком-галочкой: сразу видно, что их нужно отметить.
               <div className={sty.checkList}>
-                {SAFETY_ITEMS.map(i => {
+                {checklist.map(i => {
                   const on = !!meSafety?.items.includes(i.id);
                   return (
                     <button key={i.id} type="button" role="checkbox" aria-checked={on} aria-disabled={!canCheck || undefined}

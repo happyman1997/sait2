@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { CREW_ANY, MONTHS_GEN } from '@/lib/catalog';
 import {
   autoTitle, daysAhead, emptyJobForm, isKnownPayType, isKnownRepeat, isKnownTools, isKnownUnit, jobAllErrors, JOB_FIELD_STEP,
-  isOnCall, jobNum, kmLabel, MAX_CALLS, money, payNumber, seriesDates, seriesDayLabel, SERIES_STEP, AUTO_ACCEPT_DAYS, type AppStatus, type Applicant, type JobDetail, type JobForm, type JobStatus, type JobSummary, type SeriesInfo, type ShiftInfo
+  accessForOutsiders, isOnCall, safetyItemsFor, jobNum, kmLabel, MAX_CALLS, money, payNumber, seriesDates, seriesDayLabel, SERIES_STEP, AUTO_ACCEPT_DAYS, type AppStatus, type Applicant, type JobDetail, type JobForm, type JobStatus, type JobSummary, type SeriesInfo, type ShiftInfo
 } from '@/lib/jobs';
 import { badWordIn, findBadField } from '@/lib/moderation';
 import { searchSkills } from '@/lib/skills';
@@ -305,8 +305,8 @@ async function loadJob(num: number, viewer: Viewer, db: Db): Promise<JobDetail> 
   const owner = !!viewer && viewer.id === r.employer_id;
 
   const [emp, cancel, hiredRows, sub] = await Promise.all([
-    one<{ name: string; org_type: string | null; org_name: string | null; created_at: Date; rating: number | null; reviews: number; jobs: number }>(
-      `SELECT u.name, p.org_type, p.org_name, u.created_at,
+    one<{ name: string; org_type: string | null; org_name: string | null; safety_req: string[] | null; created_at: Date; rating: number | null; reviews: number; jobs: number }>(
+      `SELECT u.name, p.org_type, p.org_name, p.safety_req, u.created_at,
               (SELECT avg(rating)::float8 FROM reviews WHERE target_id = u.id) AS rating,
               (SELECT count(*) FROM reviews WHERE target_id = u.id)::int AS reviews,
               (SELECT count(*) FROM jobs WHERE employer_id = u.id)::int AS jobs
@@ -338,7 +338,7 @@ async function loadJob(num: number, viewer: Viewer, db: Db): Promise<JobDetail> 
   // Отклики, блок смены и серия друг от друга не зависят — грузим одновременно.
   const [applicantList, shift, series] = await Promise.all([
     owner ? loadApplicants(r.id, db) : Promise.resolve(null),
-    viewer && (owner || meHired || r.my_status) ? loadShift(r.id, r.employer_id, empName, hired, viewer, owner, db) : Promise.resolve(null),
+    viewer && (owner || meHired || r.my_status) ? loadShift(r.id, r.employer_id, empName, hired, viewer, owner, emp?.safety_req ?? null, db) : Promise.resolve(null),
     r.repeat ? loadSeries(r, viewer, owner, hired, empName, db) : Promise.resolve(null)
   ]);
 
@@ -347,7 +347,8 @@ async function loadJob(num: number, viewer: Viewer, db: Db): Promise<JobDetail> 
     description: r.description,
     requirement: r.requirement,
     repeatNote: r.repeat_note,
-    access: r.access,
+    // Коды и квартиры из «Как попасть» — только своим, как точный адрес частного заказчика.
+    access: insider ? r.access : accessForOutsiders(r.access),
     tools: r.tools,
     meetName: insider ? r.meet_name : null,
     meetPhone: phoneForMe ? r.meet_phone : null,
@@ -506,7 +507,7 @@ async function loadSubReviews(r: { id: string; employer_id: string }, viewer: Vi
 
 type HiredRow = { freelancer_id: string; is_lead: boolean; name: string; app_id: string | null };
 
-async function loadShift(jobId: string, employerId: string, empName: string, hired: HiredRow[], viewer: NonNullable<Viewer>, owner: boolean, db: Db): Promise<ShiftInfo> {
+async function loadShift(jobId: string, employerId: string, empName: string, hired: HiredRow[], viewer: NonNullable<Viewer>, owner: boolean, safetyReq: string[] | null, db: Db): Promise<ShiftInfo> {
   const mine = owner || hired.some(h => h.freelancer_id === viewer.id);
   // Однострочные сведения — одним запросом (раньше восемь отдельных: столько же соединений пула на одну карточку).
   const [head, reviews, photos, safety, disputes] = await Promise.all([
@@ -574,6 +575,7 @@ async function loadShift(jobId: string, employerId: string, empName: string, hir
     disputes,
     // Спор — после сдачи работы; у каждой пары «работодатель ↔ исполнитель» не больше одного незакрытого.
     canDispute: (!!rep || !!acc || !!dayDone) && (owner ? hired.some(h => h.app_id && !openFor.has(h.app_id)) : !!meHired && !openFor.has('me')),
+    safetyItems: safetyItemsFor(safetyReq),
     safety: hired.filter(h => owner || h.freelancer_id === viewer.id).map(h => ({
       name: shortName(h.name), me: h.freelancer_id === viewer.id,
       items: safety.rows.find(r => r.freelancer_id === h.freelancer_id)?.items ?? []

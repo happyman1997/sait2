@@ -1,8 +1,8 @@
 'use client';
 
 // Форма заказа: 4 шага (Место → Работа → Деньги и время → Доступ), проверка по шагам, календарь с «Сегодня/Завтра».
-import { useState, type KeyboardEvent, type ReactNode } from 'react';
-import { MONTHS_GEN, PAY_TYPES, REPEATS, TOOLS, UNITS } from '@/lib/catalog';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { ACCESS, MONTHS_GEN, PAY_TYPES, REPEATS, TOOLS, UNITS } from '@/lib/catalog';
 import { css } from '@/lib/css';
 import { localISO, type JobForm } from '@/lib/jobs';
 import { ALERT, Corners, errFieldStyle, FIELD_ERR, LABEL, optStyle } from './ui';
@@ -12,7 +12,7 @@ import sty from './JobFormPanel.module.css';
 const STEP_NAMES = ['Место', 'Работа', 'Деньги и время', 'Доступ'];
 
 function FieldError({ text }: { text?: string }) {
-  return text ? <div role="alert" style={css(FIELD_ERR)}>{text}</div> : null;
+  return text ? <div role="alert" data-ferr="" style={css(FIELD_ERR)}>{text}</div> : null;
 }
 
 function DatePicker({ value, onPick, error }: { value: string; onPick: (iso: string) => void; error?: string }) {
@@ -109,9 +109,16 @@ export function JobFormPanel({ form, setForm, step, goStep, errs, formError, onN
   };
   const onAccessKey = (e: KeyboardEvent) => { if (e.key === 'Enter') { e.preventDefault(); addAccess(); } };
   const refTypes = types.filter(t => !t.custom);
+  // «Далее» с пустыми полями: на телефоне список видов работ длинный — подводим к первому полю с ошибкой,
+  // а общее сообщение стоит прямо над кнопками (в закреплённой полосе), а не в конце длинного шага.
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!formError) return;
+    rootRef.current?.querySelector('[data-ferr]')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [errs, formError]);
 
   return (
-    <div data-order-form="">
+    <div data-order-form="" ref={rootRef}>
       <div className={sty.cf5c1e62}>
         <div style={css(LABEL)}>{editing ? 'Правка заказа' : 'Новый заказ'}{narrow ? '' : ' · ' + step + ' / 4'}</div>
         <button className={'btn btn-ghost ' + sty.c4b8d758} onClick={onClose}>Закрыть</button>
@@ -234,8 +241,16 @@ export function JobFormPanel({ form, setForm, step, goStep, errs, formError, onN
           <>
             <div style={css(errs.access ? errFieldStyle + '; padding: 8px' : '')}>
               <div style={css(LABEL + '; margin-bottom: 8px')}>Как попасть на объект</div>
+              {/* Частые варианты — одним нажатием; подробности (код, подъезд) — строкой ниже. */}
+              {ACCESS.some(a => !form.access.includes(a)) && (
+                <div className={sty.accessQuick}>
+                  {ACCESS.filter(a => !form.access.includes(a)).map(a => (
+                    <button key={a} type="button" className={'tag tag-outline ' + sty.c4008c14} onClick={() => setForm({ access: [...form.access, a] }, 'access')}>+ {a}</button>
+                  ))}
+                </div>
+              )}
               <div className={sty.cfabd50d}>
-                <input className={'input ' + sty.c8b4ab7f} value={accessDraft} onChange={e => setAccessDraft(e.target.value)} onKeyDown={onAccessKey} aria-label="Доступ на объект" placeholder="например, домофон 12" />
+                <input className={'input ' + sty.c8b4ab7f} value={accessDraft} onChange={e => setAccessDraft(e.target.value)} onKeyDown={onAccessKey} aria-label="Доступ на объект" placeholder="подробнее: код, подъезд" />
                 <button type="button" className={'btn btn-secondary ' + sty.c0b0526d} onClick={addAccess} disabled={!accessDraft.trim()}>Добавить</button>
               </div>
               {form.access.length > 0 && (
@@ -246,6 +261,7 @@ export function JobFormPanel({ form, setForm, step, goStep, errs, formError, onN
                 </div>
               )}
               <FieldError text={errs.access} />
+              <div className={sty.accessNote}>Коды, номер квартиры и подъезда увидит только нанятый исполнитель — остальным видно «домофон», «шлагбаум» и т. п.</div>
             </div>
             <div>
               <div style={css(LABEL + '; margin-bottom: 8px')}>Инвентарь</div>
@@ -275,13 +291,13 @@ export function JobFormPanel({ form, setForm, step, goStep, errs, formError, onN
                 <FieldError text={errs.meetPhone} />
               </div>
             </div>
-            <div className={sty.c781cdc9}>Телефон встречающего увидит только нанятый исполнитель. Адрес, доступ и инвентарь видны в карточке сразу.</div>
+            <div className={sty.c781cdc9}>Телефон встречающего и подробности доступа (коды, квартира) увидит только нанятый исполнитель. Адрес, вид доступа и инвентарь видны в карточке сразу.</div>
           </>
         )}
       </div>
 
-      {formError && <div role="alert" style={css(ALERT)}>{formError}</div>}
-      <div className={sty.ca27aaae}>
+      <div className={sty.ca27aaae + ' ' + sty.navWrap}>
+        {formError && <div role="alert" className={sty.navAlert} style={css(ALERT)}>{formError}</div>}
         {step > 1 && <button className={'btn btn-secondary ' + sty.c61fef2d} onClick={onBack}>Назад</button>}
         <button className={'btn btn-primary blueprint ' + sty.c0dd5712} onClick={next} disabled={busy}>
           <Corners />{step === 4 ? (editing ? 'Сохранить изменения' : 'Опубликовать смену') : 'Далее'}

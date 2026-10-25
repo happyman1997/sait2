@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { autoTitle, dateLabel, daysAhead, emptyJobForm, jobAllErrors, jobStatus, jobStepErrors, money, moneyShort, shortTitle } from '@/lib/jobs';
+import { ACCESS_LATER, accessForOutsiders, autoTitle, dateLabel, dayLabel, daysAhead, emptyJobForm, jobAllErrors, jobStatus, jobStepErrors, kmLabel, money, moneyShort, ratingLabel, safetyItemsFor, shortTitle } from '@/lib/jobs';
 
 describe('форматирование', () => {
   it('ставки', () => {
@@ -33,6 +33,30 @@ describe('форматирование', () => {
     // Хвост не из адреса или заголовок без « — » — не трогаем.
     expect(shortTitle('Покосить газон — у бизнес-центра', addr)).toBe('Покосить газон — у бизнес-центра');
     expect(shortTitle('Вынести хлам из подвала', addr)).toBe('Вынести хлам из подвала');
+  });
+});
+
+describe('подписи и доступ', () => {
+  it('километры и рейтинг — через запятую, дата события — словами', () => {
+    expect(kmLabel(0.46)).toBe('0,5 км');
+    expect(kmLabel(22.4)).toBe('22 км');
+    expect(ratingLabel(4.75)).toBe('4,8');
+    expect(dayLabel('2026-10-25T09:30:00')).toBe('25 октября');
+  });
+
+  it('доступ до найма — только вид, без кодов и квартир', () => {
+    expect(accessForOutsiders(['домофон', 'встречу лично'])).toEqual(['домофон', 'встречу лично']);
+    expect(accessForOutsiders(['домофон 12', 'код калитки 4321', 'с торца, третий подъезд'])).toEqual(['домофон', 'шлагбаум или ворота', ACCESS_LATER]);
+    expect(accessForOutsiders([])).toEqual([]);
+  });
+
+  it('чек-лист перед выходом — по требованиям работодателя', () => {
+    expect(safetyItemsFor([])).toEqual([]);
+    expect(safetyItemsFor(null)).toEqual([]);
+    expect(safetyItemsFor(['требований нет'])).toEqual([]);
+    expect(safetyItemsFor(['каска', 'инструктаж на месте', 'сигнальный жилет'])).toEqual([
+      { id: 'brief', label: 'инструктаж пройден' }, { id: 'ppe', label: 'СИЗ на месте: каска, сигнальный жилет' }
+    ]);
   });
 });
 

@@ -97,6 +97,15 @@ describe('чек-лист и экран «Смена»', () => {
     expect((await jobs.getJob(j.num, emp)).shift!.safety).toEqual([{ name: 'Данияр С.', items: ['brief'], me: false }]);
   });
 
+  it('пункты чек-листа — по требованиям работодателя; без требований чек-листа нет', async () => {
+    const j = await jobs.createJob(form(), emp, today);
+    await hire(j.num, fl, emp);
+    expect((await jobs.getJob(j.num, fl)).shift!.safetyItems).toEqual([]);
+    await query(`INSERT INTO employer_profiles (user_id, org_type, safety_req) VALUES ($1, 'УК / ТСЖ', '{каска,"инструктаж на месте"}')
+                 ON CONFLICT (user_id) DO UPDATE SET safety_req = EXCLUDED.safety_req`, [emp.id]);
+    expect((await jobs.getJob(j.num, fl)).shift!.safetyItems.map(i => i.label)).toEqual(['инструктаж пройден', 'СИЗ на месте: каска']);
+  });
+
   it('текущая смена: нанят → раньше отклика; работодателю — сданная раньше идущей', async () => {
     expect(await sh.currentShift(fl)).toBeNull();
     const a = await jobs.createJob(form({ dateISO: plusDays(1), desc: 'А' }), emp, today);

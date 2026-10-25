@@ -35,6 +35,20 @@ const card = (r: Row): ObjectCard => ({
   access: r.access, tools: r.tools || '', shifts: r.shifts, lastDate: r.last_date
 });
 
+/** Что работодатель указал при регистрации или в профиле — подставляется в каждый новый заказ (шаг «Доступ»). */
+export type OrderDefaults = { access: string[]; tools: string; meetName: string; meetPhone: string };
+
+export async function orderDefaults(viewer: U | null): Promise<OrderDefaults> {
+  const u = needEmployer(viewer);
+  const p = await one<{ access: string[] | null; tools: string | null; meet_name: string | null; meet_phone: string | null }>(
+    'SELECT access, tools, meet_name, meet_phone FROM employer_profiles WHERE user_id = $1', [u.id]);
+  return {
+    access: (p?.access || []).filter(a => ACCESS.includes(a)),
+    tools: p?.tools && TOOLS.includes(p.tools) ? p.tools : '',
+    meetName: p?.meet_name || '', meetPhone: p?.meet_phone || ''
+  };
+}
+
 export async function listObjects(viewer: U | null): Promise<ObjectCard[]> {
   const u = needEmployer(viewer);
   const r = await query<Row>(SELECT + ' WHERE o.employer_id = $1 ORDER BY o.updated_at DESC', [u.id]);

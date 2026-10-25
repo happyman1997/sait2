@@ -72,11 +72,12 @@ export function MobileBar() {
   );
 }
 
-type Tab = { key: string; label: string; icon: IconName | 'avatar'; href?: string; act?: () => void; on: boolean };
+/** badge — число на вкладке; 'dot' — точка без числа (есть смена, на которую наняли). */
+type Tab = { key: string; label: string; icon: IconName | 'avatar'; href?: string; act?: () => void; on: boolean; badge?: number | 'dot' };
 
 /** Нижние вкладки: иконка и короткая подпись, у открытой вкладки иконка закрашена. */
 export function MobileNav() {
-  const { me, dock, setDock, mapList, setMapList, setRail } = useLive();
+  const { me, dock, setDock, mapList, setMapList, setRail, todo } = useLive();
   const path = usePathname();
   const router = useRouter();
   const onMap = path === '/';
@@ -88,17 +89,18 @@ export function MobileNav() {
     key: 'search', label: 'Поиск', icon: 'search', on: free && onMap && mapList,
     act: () => { setDock({ open: false }); setRail(null); if (onMap) setMapList(true); else router.push('/?list=1'); }
   };
-  const page = (href: string, label: string, icon: IconName): Tab => ({ key: href, label, icon, href, on: free && path === href });
+  const page = (href: string, label: string, icon: IconName, badge?: Tab['badge']): Tab => ({ key: href, label, icon, href, on: free && path === href, badge });
+  const count = (n: number) => (n > 0 ? n : undefined);
   const profile: Tab = { key: '/profile', label: 'Профиль', icon: 'avatar', href: '/profile', on: free && path === '/profile' };
 
   const tabs: Tab[] = !me
     ? [map, search, { key: 'login', label: 'Войти', icon: 'user', href: '/auth?mode=login', on: false }]
     : me.role === 'employer'
-      ? [map, page('/mine', 'Заказы', 'list'), {
+      ? [map, page('/mine', 'Заказы', 'list', count(todo.reported.length + todo.reviews.length)), {
         key: 'new', label: 'Заказ', icon: 'plus', on: false,
         act: () => { leave(); if (onMap) window.dispatchEvent(new Event('arena:new-job')); else router.push('/?new=1'); }
-      }, page('/apps', 'Отклики', 'people'), profile]
-      : [map, search, page('/shift', 'Смена', 'shift'), page('/mine', 'Мои смены', 'list'), profile];
+      }, page('/apps', 'Отклики', 'people', count(todo.apps)), profile]
+      : [map, search, page('/shift', 'Смена', 'shift', todo.shift ? 'dot' : undefined), page('/mine', 'Мои смены', 'list', count(todo.reviews.length)), profile];
 
   const face = (t: Tab) => t.icon !== 'avatar' ? <Icon name={t.icon} on={t.on} /> : (
     <span className={sty.avatar + (t.on ? ' ' + sty.avatarOn : '')}>
@@ -112,7 +114,9 @@ export function MobileNav() {
       <div className="only-narrow" aria-hidden="true" style={{ flex: 'none', height: NAV_H }} />
       <nav className={'only-narrow ' + sty.nav} aria-label="Разделы">
         {tabs.map(t => {
-          const inner = <><span className={sty.tabIcon}>{face(t)}</span><span className={sty.tabLabel}>{t.label}</span></>;
+          const badge = t.badge === 'dot' ? <span className={sty.tabDot} aria-hidden="true" />
+            : t.badge ? <span className={sty.tabBadge} aria-hidden="true">{t.badge > 9 ? '9+' : t.badge}</span> : null;
+          const inner = <><span className={sty.tabIcon}>{face(t)}{badge}</span><span className={sty.tabLabel}>{t.label}</span></>;
           return t.href
             ? <Link key={t.key} href={t.href} className={sty.tab + (t.on ? ' ' + sty.tabOn : '')} aria-current={t.on ? 'page' : undefined}
               onClick={() => { if (t.key === 'map' && onMap) window.dispatchEvent(new Event('arena:home')); leave(); }}>{inner}</Link>

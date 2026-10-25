@@ -106,7 +106,14 @@
   -webkit-tap-highlight-color: transparent;
 }
 .tabOn { color: var(--color-text); }
-.tabIcon { width: 28px; height: 28px; display: grid; place-items: center; transition: transform .12s ease; }
+.tabIcon { position: relative; width: 28px; height: 28px; display: grid; place-items: center; transition: transform .12s ease; }
+/* Число и точка на вкладке: ждут решения отклики, сдана работа, есть смена. */
+.tabBadge {
+  position: absolute; top: -4px; right: -10px; min-width: 17px; height: 17px; padding: 0 4px; box-sizing: border-box; border-radius: 9px;
+  background: #e5484d; color: #fff; font-family: var(--font-body); font-size: 10.5px; font-weight: 700; line-height: 17px; text-align: center;
+  box-shadow: 0 0 0 2px var(--tab-bg);
+}
+.tabDot { position: absolute; top: 0; right: -3px; width: 9px; height: 9px; border-radius: 50%; background: #e5484d; box-shadow: 0 0 0 2px var(--tab-bg); }
 .tab:active .tabIcon { transform: scale(.88); }
 .tabLabel {
   max-width: 100%;

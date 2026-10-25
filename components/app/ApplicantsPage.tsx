@@ -5,10 +5,10 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, api } from '@/lib/api';
 import { css } from '@/lib/css';
-import { crewOf, dateLabel, isOnCall, jobNum, jobStatus, localISO, money, plural, ratingLabel, shortTitle, type MyJob } from '@/lib/jobs';
+import { crewOf, dateLabel, hireConfirm, hireDone, isOnCall, jobNum, jobStatus, localISO, money, plural, ratingLabel, shortTitle, type MyJob } from '@/lib/jobs';
 import { useFlash } from '@/components/Toast';
 import { ApplicantReviews } from './ApplicantReviews';
-import { useLiveEvent } from './Live';
+import { useLive, useLiveEvent } from './Live';
 import { Corners } from './ui';
 import sty from './ApplicantsPage.module.css';
 
@@ -16,6 +16,7 @@ type Person = {
   id: string; name: string; initials: string; status: 'sent' | 'hired' | 'rejected' | 'withdrawn'; isLead: boolean; appliedAt: string;
   rating: number | null; reviews: number; done: number; noShows: number; gear: string[]; ownCar: boolean; cities: string[]; skills: string[];
   reqConfirmed: boolean; lateMark: boolean; npd: boolean;
+  thread: string;
 };
 type BoardJob = MyJob & { people: Person[] };
 
@@ -37,6 +38,7 @@ export function ApplicantsPage() {
   }, [flash]);
   useEffect(load, [load]);
   useLiveEvent(e => { if (e.t === 'job' || e.t === 'resync') load(); });
+  const { openChat } = useLive();
 
   const act = async (num: number, path: string, ok: string) => {
     setBusy(true);
@@ -118,9 +120,13 @@ export function ApplicantsPage() {
                         </div>
                         <div className={sty.c671b9fc}>
                           {p.status === 'sent' && open && <>
-                            <button className={'btn btn-primary ' + sty.c3fb23c6} disabled={busy || full} title={full ? 'Смена уже набрана' : ''} onClick={() => act(j.num, 'applicants/' + p.id + '/hire', 'Вы наняли ' + p.name + ' — чат открыт')}>Нанять</button>
+                            <button className={'btn btn-primary ' + sty.c3fb23c6} disabled={busy || full} title={full ? 'Смена уже набрана' : ''} onClick={() => { if (window.confirm(hireConfirm(p.name))) act(j.num, 'applicants/' + p.id + '/hire', hireDone(p.name)); }}>Нанять</button>
                             <button className={'btn btn-ghost ' + sty.cd45451c} disabled={busy} onClick={() => act(j.num, 'applicants/' + p.id + '/reject', 'Отказ отправлен — ' + p.name)}>Отказ</button>
                           </>}
+                          {/* Нанятому — сразу написать: договориться о времени, рассказать, как пройти. */}
+                          {p.status === 'hired' && (
+                            <button className={'btn btn-secondary ' + sty.cd45451c} onClick={() => openChat(j.num, p.thread)}>Написать</button>
+                          )}
                           {p.status === 'hired' && open && crew > 1 && !p.isLead && (
                             <button className={'btn btn-secondary ' + sty.cd45451c} disabled={busy} onClick={() => act(j.num, 'applicants/' + p.id + '/lead', p.name + ' назначен старшим')}>Сделать старшим</button>
                           )}

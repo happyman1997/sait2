@@ -5,7 +5,7 @@
 import { useId, useState } from 'react';
 import { css } from '@/lib/css';
 import { uploadForm } from '@/lib/image';
-import { ACCEPT_CONFIRM, COMPLAINT_KINDS, crewOf, dateLabel, DISPUTE_REASONS, isOnCall, isSeries, LEAVE_REASONS, localISO, money, plural, ratingLabel, type DisputeInfo, type JobDetail } from '@/lib/jobs';
+import { ACCEPT_CONFIRM, COMPLAINT_KINDS, crewOf, dateLabel, dayLabel, DISPUTE_REASONS, hireConfirm, hireDone, isOnCall, isSeries, LEAVE_REASONS, localISO, money, plural, ratingLabel, REPORT_CONFIRM, type DisputeInfo, type JobDetail } from '@/lib/jobs';
 import { ApplicantReviews } from './ApplicantReviews';
 import { Corners, LABEL } from './ui';
 import sty from './ShiftBlock.module.css';
@@ -52,7 +52,7 @@ export function ApplicantsBlock({ job, act, onChat, busy }: { job: JobDetail; ac
             </div>
             <div className={sty.c33d0c28}>
               {a.status === 'sent' && open && <>
-                <button className={'btn btn-secondary ' + sty.c93bbd0b} disabled={busy || full} onClick={() => act('applicants/' + a.id + '/hire', {}, 'Вы наняли ' + a.name + ' — чат открыт')} title={full ? 'Смена уже набрана' : ''}>Нанять</button>
+                <button className={'btn btn-secondary ' + sty.c93bbd0b} disabled={busy || full} onClick={() => { if (window.confirm(hireConfirm(a.name))) act('applicants/' + a.id + '/hire', {}, hireDone(a.name)); }} title={full ? 'Смена уже набрана' : ''}>Нанять</button>
                 <button className={'btn btn-ghost ' + sty.c932c509} disabled={busy} onClick={() => act('applicants/' + a.id + '/reject', {}, 'Отказ отправлен — ' + a.name)}>Отказ</button>
               </>}
               {a.status === 'hired' && <>
@@ -91,7 +91,7 @@ export function ShiftBlock({ job, isOwner, act, onChat, onReview, busy }: {
   const line = accepted
     ? (s.autoAccepted
       ? (series ? 'Серия закрылась автоматически через 7 дней после последнего выхода.' : 'Смена закрыта автоматически: работодатель не ответил 7 дней — засчитана исполнителю.')
-      : (series ? 'Серия завершена · ' : 'Работа принята · ') + new Date(s.acceptedAt!).toLocaleDateString('ru-RU'))
+      : (series ? 'Серия завершена · ' : 'Работа принята · ') + dayLabel(s.acceptedAt!))
     : series
       ? (isOwner
         ? 'Нанято ' + s.hired.length + (crewOf(job) === Infinity ? '' : ' из ' + crewOf(job)) + ' · серия с ' + dateLabel(job.date) + '. Каждый выход сдаётся и принимается отдельно — в «Серии выходов». «Завершить серию» закрывает заказ и открывает отзывы.'
@@ -149,7 +149,7 @@ export function ShiftBlock({ job, isOwner, act, onChat, onReview, busy }: {
       )}
 
       {!isOwner && job.myStatus === 'hired' && !accepted && !series && (
-        <button className="btn btn-secondary btn-block" disabled={busy || !canReport} onClick={() => act('report', {}, 'Работа сдана — у работодателя 7 дней на приёмку')} style={css('margin-top: 10px; ' + BTN)}>
+        <button className="btn btn-secondary btn-block" disabled={busy || !canReport} onClick={() => { if (window.confirm(REPORT_CONFIRM)) act('report', {}, 'Работа сдана — у работодателя 7 дней на приёмку'); }} style={css('margin-top: 10px; ' + BTN)}>
           {reported ? 'Работа сдана' : early ? 'Сдать работу — с ' + dateLabel(job.date) : 'Сдать работу'}
         </button>
       )}
@@ -201,7 +201,7 @@ export function ShiftBlock({ job, isOwner, act, onChat, onReview, busy }: {
 
       {accepted && s.myComplaint && (
         <div className={sty.ca8d24f8}>
-          Жалоба «{s.myComplaint.reason}» от {new Date(s.myComplaint.at).toLocaleDateString('ru-RU')} — на рассмотрении, ответ за 3 рабочих дня.
+          Жалоба «{s.myComplaint.reason}» от {dayLabel(s.myComplaint.at)} — на рассмотрении, ответ за 3 рабочих дня.
         </div>
       )}
       {accepted && !s.myComplaint && !complaintOpen && (
@@ -390,7 +390,7 @@ function Disputes({ job, isOwner, act, busy }: { job: JobDetail; isOwner: boolea
               <span className={live ? 'tag tag-accent' : 'tag tag-outline'}>{DISPUTE_STATUS[d.status] + (d.resolvedFor ? ' · в пользу ' + (d.resolvedFor === 'employer' ? 'работодателя' : 'исполнителя') : '')}</span>
             </div>
             <div className={sty.c3467092}>
-              {(d.openedBy === 'employer' ? 'Открыт работодателем ' : 'Открыт исполнителем ') + new Date(d.at).toLocaleDateString('ru-RU') + ' · ' + d.reason + ' · ' +
+              {(d.openedBy === 'employer' ? 'Открыт работодателем ' : 'Открыт исполнителем ') + dayLabel(d.at) + ' · ' + d.reason + ' · ' +
                 d.sum.toLocaleString('ru-RU') + ' ₽' + (isOwner ? ' · ' + d.other : '') + '. ' + d.text}
             </div>
             {d.response && <div className={sty.cabe90eb}><span style={css(MUTED)}>Ответ второй стороны: </span>{d.response}</div>}
