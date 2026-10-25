@@ -77,7 +77,8 @@ export function parseSkills(text: string, have: { skills: string[]; customSkills
     if (!v) continue;
     const id = matchSkill(v);
     if (id) { if (!skills.includes(id)) skills.push(id); continue; }
-    if (!customSkills.some(c => normSkill(c) === normSkill(v))) customSkills.push(v);
+    // Своё — с заглавной, как виды работ рядом: «Колка дров», а не «колка дров».
+    if (!customSkills.some(c => normSkill(c) === normSkill(v))) customSkills.push(v.charAt(0).toUpperCase() + v.slice(1));
   }
   return { skills, customSkills };
 }

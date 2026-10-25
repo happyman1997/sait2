@@ -298,7 +298,8 @@ function HeaderCard({ p, setP, patch, busy, err }: {
         .filter((x): x is string => !!x).map(label => ({ label }))
     : [
         ...(fp.skills || []).map(id => ({ label: TYPE_LABEL[id] || id, onRemove: () => patch({ freelancer: { skills: (fp.skills || []).filter(x => x !== id) } }, 'Навык «' + (TYPE_LABEL[id] || id) + '» убран из профиля') })),
-        ...(fp.customSkills || []).map(s => ({ label: s, onRemove: () => patch({ freelancer: { customSkills: (fp.customSkills || []).filter(x => x !== s) } }, 'Навык «' + s + '» убран из профиля') })),
+        // Старые свои навыки могли сохраниться со строчной — показываем с заглавной, как остальные.
+        ...(fp.customSkills || []).map(s => ({ label: s.charAt(0).toUpperCase() + s.slice(1), onRemove: () => patch({ freelancer: { customSkills: (fp.customSkills || []).filter(x => x !== s) } }, 'Навык «' + s + '» убран из профиля') })),
         ...(fp.workCities || []).map(c => ({ label: c, onRemove: (fp.workCities || []).length > 1 ? () => patch({ freelancer: { workCities: (fp.workCities || []).filter(x => x !== c) } }) : undefined }))
       ];
   // Навык — своими словами, с подсказками видов работ (components/SkillInput); через запятую — несколько.

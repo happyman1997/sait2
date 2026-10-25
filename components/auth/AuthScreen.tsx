@@ -29,8 +29,13 @@ const CODE_LEN = 6;
 const LABEL = 'font-family: var(--font-heading); font-size: 12.5px; letter-spacing: .2em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 64%, transparent)';
 const REQ = 'font-family: var(--font-heading); font-size: 11.5px; letter-spacing: .18em; text-transform: uppercase; color: var(--color-accent-700)';
 const H3 = 'margin: 0 0 14px; font-size: 24px; text-transform: uppercase; letter-spacing: .02em';
-const HINT = 'font-size: 12.5px; line-height: 1.4; color: color-mix(in srgb, var(--color-text) 62%, transparent)';
+const HINT = 'display: block; font-size: 12.5px; line-height: 1.4; color: color-mix(in srgb, var(--color-text) 62%, transparent)';
 const NOTE = 'font-size: 13px; line-height: 1.4; margin-top: 7px; color: color-mix(in srgb, var(--color-text) 64%, transparent)';
+/** Поле шага по ключу ошибки (contactsMissing, validateProfile, ответ сервера) — к нему прокручиваем. */
+const FIELD_IDS: Record<string, string> = {
+  name: 'su-name', email: 'su-email', login: 'su-login', pass: 'su-pass', city: 'su-city',
+  skills: 'su-skills', cities: 'su-cities', access: 'su-access', tools: 'su-tools'
+};
 const ALERT = 'font-size: 13.5px; font-weight: 600; line-height: 1.4; margin-top: 16px; color: var(--color-accent-900); border: 2px solid var(--color-accent-700); padding: 9px 11px; background: var(--color-accent-100)';
 const DRAFT_INPUT = 'flex: 1; min-width: 0; height: 40px; font-size: 14px; border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 8%, transparent); color: var(--color-accent-900); --placeholder-color: var(--color-accent-700)';
 const PRIMARY = 'height: 46px; font-size: 14px; letter-spacing: .08em; text-transform: uppercase';
@@ -174,6 +179,13 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
 
   // Новый шаг — с начала: иначе на телефоне он открывается там, куда долистали предыдущий (у кнопки «Далее»).
   useEffect(() => { scroller.current?.scrollTo({ top: 0 }); }, [step, mode]);
+  // Ошибка шага — прокрутить к полю, которое нужно поправить (на телефоне оно часто за краем экрана);
+  // сам текст ошибки — в закреплённой полосе над «Далее», его видно при любой прокрутке.
+  useEffect(() => {
+    if (!errTick) return;
+    const id = offerError ? 'su-offer' : FIELD_IDS[missFields[0]];
+    if (id) document.getElementById(id)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [errTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Режим в адресной строке — чтобы «Назад» в браузере и ссылки работали.
   useEffect(() => {
@@ -570,7 +582,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
               <div>
                 <div className={sty.c471c66a}>
                   {['Роль', 'Контакты', 'Профиль', skipCode ? 'Согласие' : 'Код'].map((label, i) => (
-                    <div key={label} aria-current={step === i + 1 ? 'step' : undefined} style={css('flex: 1; min-width: 0; padding: 8px 9px; border: 1px solid ' + (step === i + 1 ? 'var(--color-accent)' : 'var(--color-divider)') +
+                    <div key={label} className={sty.stepBox} aria-current={step === i + 1 ? 'step' : undefined} style={css('flex: 1; min-width: 0; padding: 8px 9px; border: 1px solid ' + (step === i + 1 ? 'var(--color-accent)' : 'var(--color-divider)') +
                       '; background: ' + (step > i + 1 ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : step === i + 1 ? 'color-mix(in srgb, var(--color-accent) 18%, transparent)' : 'transparent') +
                       '; color: ' + (step >= i + 1 ? 'var(--color-accent-900)' : 'color-mix(in srgb, var(--color-text) 64%, transparent)'))}>
                       <div className={'fh ' + sty.c7ebe848}>0{i + 1}</div>
@@ -605,7 +617,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
 
                 {step === 2 && (
                   <div>
-                    <h3 style={css(H3)}>Контакты</h3>
+                    <h3 className={sty.stepTitle} style={css(H3)}>Контакты</h3>
                     <div className={sty.c82a9418}>
                       <div className="field">
                         <label htmlFor="su-name">{isEmp ? 'Контактное лицо' : 'Имя и фамилия'} <span style={css(REQ)}>обязательно</span></label>
@@ -643,7 +655,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
 
                 {step === 3 && !isEmp && (
                   <div>
-                    <h3 style={css(H3)}>Профиль исполнителя</h3>
+                    <h3 className={sty.stepTitle} style={css(H3)}>Профиль исполнителя</h3>
                     <div style={css(NOTE + '; margin: -6px 0 16px')}>Всё это можно поменять потом в профиле.</div>
                     {/* Навыки — своими словами; подсказки — виды работ площадки (components/SkillInput, lib/skills.ts). */}
                     <div className={sty.cfd1ed7d}>
@@ -713,7 +725,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
 
                 {step === 3 && isEmp && (
                   <div>
-                    <h3 style={css(H3)}>Профиль работодателя</h3>
+                    <h3 className={sty.stepTitle} style={css(H3)}>Профиль работодателя</h3>
                     <div style={css(NOTE + '; margin: -6px 0 16px')}>Всё это можно поменять потом в профиле.</div>
                     <div style={css(LABEL + '; margin-bottom: 8px')}>Тип работодателя</div>
                     <select className={'input ' + sty.c66998fc} aria-label="Тип работодателя" value={orgType} onChange={e => setOrgType(e.target.value)}>
@@ -743,7 +755,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                         <div style={css(LABEL)}>Доступ на объект</div>
                         <span className={sty.c347d421}>обязательно</span>
                       </div>
-                      <div style={css('display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding: 4px; ' + missStyle('access', false))}>
+                      <div id="su-access" style={css('display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding: 4px; ' + missStyle('access', false))}>
                         {ACCESS.map(a => <Chip key={a} active={access.includes(a)} onClick={() => { toggle(access, setAccess, a); setStepError(''); }}>{a}</Chip>)}
                       </div>
                     </div>
@@ -753,7 +765,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                         <div style={css(LABEL)}>Инвентарь на объекте</div>
                         <span className={sty.c347d421}>обязательно</span>
                       </div>
-                      <div style={css('display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding: 4px; ' + missStyle('tools', false))}>
+                      <div id="su-tools" style={css('display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding: 4px; ' + missStyle('tools', false))}>
                         {TOOLS.map(t => <Chip key={t} active={tools === t} onClick={() => { setTools(t); setStepError(''); }}>{t}</Chip>)}
                       </div>
                     </div>
@@ -803,10 +815,10 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                     <div className={sty.cd2d7539}>
                       Код из шести цифр отправлен на <b>{sentTo}</b> · действует 10 минут. Письма нет — проверьте «Спам» (в Gmail — ещё «Промоакции»).
                     </div>
-                    <div className={sty.c318e55a}>
-                      <div className={sty.cb9b7b53}>
+                    <div className={sty.c318e55a + ' ' + sty.codeWrap}>
+                      <div className={sty.cb9b7b53 + ' ' + sty.codeBoxes}>
                         {Array.from({ length: CODE_LEN }, (_, i) => i).map(i => (
-                          <div key={i} style={css('width: 42px; height: 52px; display: grid; place-items: center; font-family: var(--font-heading); font-size: 24px; border: 1px solid ' +
+                          <div key={i} className={sty.codeBox} style={css('width: 42px; height: 52px; display: grid; place-items: center; font-family: var(--font-heading); font-size: 24px; border: 1px solid ' +
                             (code.length === i ? 'var(--color-accent)' : 'var(--color-divider)') + '; color: ' + (code[i] ? 'var(--color-text)' : 'color-mix(in srgb, var(--color-text) 35%, transparent)'))}>{code[i] || '·'}</div>
                         ))}
                       </div>
@@ -831,7 +843,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                     <OAuthButtons providers={oauthProviders} apply={pending?.num} orEmail={false} lead="Письмо не приходит? Зарегистрируйтесь без него — через ваш аккаунт:" />
                     {challenge?.devCode && <div className={sty.cf8e1b45}>Режим разработки: код {challenge.devCode} (письма не отправляются, а пишутся в журнал)</div>}
                     </>)}
-                    <label className={sty.c2ff6e93}>
+                    <label id="su-offer" className={sty.c2ff6e93}>
                       <input type="checkbox" checked={offerAccepted} onChange={e => { setOfferAccepted(e.target.checked); if (e.target.checked && pdConsent) setOfferError(''); }} className={sty.cdf98b21} />
                       <span>Мне есть 18 лет, принимаю <Link href="/legal/offer" target="_blank">оферту</Link> и <Link href="/legal/rules" target="_blank">правила площадки</Link>. Площадка — посредник: договор о работах стороны заключают между собой.</span>
                     </label>
@@ -839,18 +851,17 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                       <input type="checkbox" checked={pdConsent} onChange={e => { setPdConsent(e.target.checked); if (e.target.checked && offerAccepted) setOfferError(''); }} className={sty.cdf98b21} />
                       <span>Даю <Link href="/legal/consent" target="_blank">согласие на обработку персональных данных</Link> на условиях <Link href="/legal/personal-data" target="_blank">политики</Link>.</span>
                     </label>
-                    {offerError && <div role="alert" style={{ ...css('font-size: 13.5px; font-weight: 600; line-height: 1.4; margin-top: 8px; color: var(--color-accent-900); border: 2px solid var(--color-accent-700); padding: 8px 10px; background: var(--color-accent-100)'), animation: stepErrAnim }}>{offerError}</div>}
                   </div>
                 )}
 
-                {stepError && <div role="alert" style={{ ...css(ALERT), animation: stepErrAnim }}>{stepError}</div>}
                 <div className={sty.c115257a + ' ' + sty.stepNav}>
+                  {(stepError || (step === 4 && offerError)) && <div role="alert" className={sty.navAlert} style={{ ...css(ALERT), animation: stepErrAnim }}>{stepError || offerError}</div>}
                   {step > 1 && <button className={'btn btn-secondary ' + sty.c61fef2d} onClick={() => { setStep(s => Math.max(1, s - 1)); setStepError(''); }}>Назад</button>}
                   <button className="btn btn-primary blueprint" onClick={nextStep} disabled={busy} style={css('flex: 1; ' + PRIMARY)}>
                     <Corners />{nextLabel}
                   </button>
                 </div>
-                <button onClick={() => switchMode('recover')} style={css(LINK_BTN)}>Восстановление аккаунта →</button>
+                <button className={sty.linkBtn} onClick={() => switchMode('recover')} style={css(LINK_BTN)}>Восстановление аккаунта →</button>
               </div>
             )}
 
@@ -909,7 +920,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                   <Corners />{recoverStep === 2 ? 'Подтвердить код' : recoverStep === 3 ? 'Сохранить пароль и войти' : 'Прислать код восстановления'}
                 </button>
                 {recoverStep === 2 && <button onClick={() => recoverSend()} disabled={busy} style={css('margin-top: 12px; ' + UNDERLINE_BTN)}>Прислать код ещё раз</button>}
-                <div><button onClick={() => switchMode('login')} style={css(LINK_BTN)}>← Вернуться ко входу</button></div>
+                <div><button className={sty.linkBtn} onClick={() => switchMode('login')} style={css(LINK_BTN)}>← Вернуться ко входу</button></div>
               </div>
             )}
 

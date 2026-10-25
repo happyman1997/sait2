@@ -438,3 +438,23 @@
 @media (max-width: 719.98px) {
   .cc5e75b6 { text-transform: none !important; letter-spacing: normal !important; }
 }
+
+/* Ошибка шага — в полосе с «Назад / Далее» (на телефоне она закреплена внизу): текст виден при любой прокрутке. */
+.stepNav { flex-wrap: wrap; }
+.navAlert { flex: 1 0 100%; margin: 0 0 2px !important; }
+
+@media (max-width: 719.98px) {
+  /* Шаги: у текущего — номер и подпись, у остальных — только номер (на 320 px подписи наезжали друг на друга). */
+  .stepBox { padding: 7px 8px !important; }
+  .stepBox[aria-current] { flex: 3 1 0 !important; }
+  .stepBox:not([aria-current]) .c67978cf { display: none; }
+  .stepBox .c67978cf { text-transform: none !important; letter-spacing: normal !important; font-size: 14px !important; }
+  /* Заголовки шагов «Контакты», «Профиль …» — обычным регистром, как «Кто вы» и «Подтверждение». */
+  .stepTitle { text-transform: none !important; letter-spacing: normal !important; }
+  /* Шесть клеток кода — по ширине экрана (на 320 px шестая вылезала за край). */
+  .codeWrap { display: block !important; }
+  .codeBoxes { display: grid !important; grid-template-columns: repeat(6, minmax(0, 42px)); gap: 6px !important; }
+  .codeBox { width: auto !important; }
+  /* Ссылки «Восстановление аккаунта →», «← Вернуться ко входу» — обычным регистром и с запасом по высоте для пальца. */
+  .linkBtn { text-transform: none !important; letter-spacing: normal !important; font-family: var(--font-body) !important; font-size: 14.5px !important; font-weight: 600; min-height: 40px; }
+}

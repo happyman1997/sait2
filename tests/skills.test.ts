@@ -39,7 +39,7 @@ describe('навыки своими словами', () => {
 
   it('через запятую — несколько; своё остаётся своим, повторы пропускаются', () => {
     expect(parseSkills('грузчик, колка дров; покос, Грузчик', { skills: [], customSkills: [] }))
-      .toEqual({ skills: ['load', 'grass'], customSkills: ['колка дров'] });
+      .toEqual({ skills: ['load', 'grass'], customSkills: ['Колка дров'] });
     expect(parseSkills('колка дров', { skills: ['load'], customSkills: ['Колка дров'] }))
       .toEqual({ skills: ['load'], customSkills: ['Колка дров'] });
   });
