@@ -13,14 +13,18 @@
 :where(.input) {
   flex: 1 !important;
   min-width: 0 !important;
-  height: 38px !important;
-  min-height: 38px !important;
+  height: 40px !important;
+  min-height: 40px !important;
   font-size: 13px !important;
   padding: 0 10px !important;
 }
+/* Как «Добавить» и «Проверить» рядом в профиле: прописными на компьютере (на телефоне .btn — обычным регистром). */
 :where(.btn) {
-  height: 38px !important;
+  height: 40px !important;
   font-size: 13px !important;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: 0 16px !important;
   flex: none !important;
 }
 :where(.err) {
