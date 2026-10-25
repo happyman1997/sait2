@@ -5,7 +5,7 @@ import { findBadField } from '@/lib/moderation';
 import { loadProfile, publicUser } from './auth';
 import { one, query, tx } from './db';
 import { AppError, ModerationError } from './errors';
-import { geoSearch } from './geo';
+import { geoSearch, placeLabel } from './geo';
 import { limitOrThrow } from './rate-limit';
 import { shortName } from './jobs';
 import type { SessionUser } from './session';
@@ -71,7 +71,7 @@ export async function getProfile(viewer: U | null) {
     complaint: 'Жалоба подтверждена', demoted: 'Понижение в выдаче', blocked: 'Блокировка'
   };
   return {
-    user: { ...publicUser(u), baseLabel: u.base_label || u.city, emailVerified: !!u.email_verified_at },
+    user: { ...publicUser(u), baseLabel: u.base_label || u.city, baseSet: u.base_lat != null, emailVerified: !!u.email_verified_at },
     profile,
     stats: { done: stats!.done, rating: stats!.rating == null ? null : Math.round(stats!.rating * 10) / 10, reviews: stats!.reviews, jobs: stats!.jobs, noShows: stats!.no_shows },
     inn: stats!.inn,
@@ -177,7 +177,7 @@ export async function setBase(viewer: U | null, raw: unknown) {
     await limitOrThrow(`base:${u.id}`, 20, 3600, 'Слишком часто меняете базу — попробуйте через час.');
     const hit = (await geoSearch(q, 1))[0];
     if (!hit) throw new AppError(404, 'Не нашли это место — уточните населённый пункт.', 'query');
-    lat = hit.lat; lng = hit.lng; label = (hit.district || hit.label.split(',')[0]).trim();
+    lat = hit.lat; lng = hit.lng; label = placeLabel(hit);
   }
   if (!(Math.abs(lat) <= 90 && Math.abs(lng) <= 180)) throw new AppError(422, 'Укажите место на карте или адрес.', 'query');
   const hit = findBadField([{ field: 'label', label: 'База', value: label }]);

@@ -177,7 +177,13 @@ export class SeasonMapView {
       maxZoom: 17,
       dragRotate: false,
       pitchWithRotate: false,
-      attributionControl: false
+      attributionControl: false,
+      // Подсказки кнопок и единицы на линейке — по-русски (по умолчанию «Zoom in», «500 m»).
+      locale: {
+        'Map.Title': 'Карта', 'Marker.Title': 'Метка', 'Popup.Close': 'Закрыть',
+        'NavigationControl.ZoomIn': 'Приблизить', 'NavigationControl.ZoomOut': 'Отдалить', 'NavigationControl.ResetBearing': 'Вернуть север наверх',
+        'ScaleControl.Meters': 'м', 'ScaleControl.Kilometers': 'км'
+      }
     });
     this.map = map;
     map.touchZoomRotate.disableRotation();

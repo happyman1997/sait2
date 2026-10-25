@@ -1,5 +1,5 @@
 // Интеграционные тесты авторизации на настоящем Postgres (TEST_DATABASE_URL, по умолчанию arena_test).
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL || 'postgres://arena:arena@localhost:5432/arena_test';
 process.env.DEV_FIXED_CODE = '';
@@ -84,6 +84,32 @@ describe('регистрация', () => {
     await expectErr(auth.checkContacts(freelancer({ email: 'ivan@PROTONMAIL.com' })), 'email', /Proton/);
     await expectErr(auth.startRecover('ivan@pm.me', ctx), 'identifier', /поддержку/);
     expect(mails).toEqual([]);
+  });
+
+  it('посёлка нет в списке городов: база — по геокодеру, с регионом; геокодер недоступен — без базы', async () => {
+    const village = {
+      value: 'Московская обл, Раменский р-н, п Ильинский',
+      data: { geo_lat: '55.62', geo_lon: '38.11', region: 'Московская', region_with_type: 'Московская обл', area_with_type: 'Раменский р-н', settlement: 'Ильинский', settlement_with_type: 'п Ильинский' }
+    };
+    let down = false;
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ suggestions: [village] }), { status: down ? 500 : 200 }));
+    process.env.DADATA_API_KEY = 'k'.repeat(40);
+    const base = (id: string) => one<{ base_lat: number | null; base_label: string | null }>('SELECT base_lat, base_label FROM users WHERE id = $1', [id]);
+    try {
+      const { user } = await register(freelancer({ city: 'п. Ильинский' }));
+      expect(await base(user.id)).toEqual({ base_lat: 55.62, base_label: 'Ильинский, Московская обл' });
+      // Город из списка — его центр без запроса к геокодеру, подпись — сам город.
+      const { user: emp } = await register(employer({ city: 'Химки' }));
+      expect(await base(emp.id)).toMatchObject({ base_label: null });
+      expect((await base(emp.id))!.base_lat).toBeCloseTo(55.89, 1);
+      // Геокодер не ответил — регистрация проходит, базы нет (в профиле попросим указать).
+      down = true;
+      const { user: other } = await register(freelancer({ city: 'д. Глухово', login: 'gluhovo_1', email: 'g@mail.ru' }));
+      expect(await base(other.id)).toEqual({ base_lat: null, base_label: null });
+    } finally {
+      delete process.env.DADATA_API_KEY;
+      vi.unstubAllGlobals();
+    }
   });
 
   it('полный цикл исполнителя: код в письме → аккаунт с подтверждённой почтой, профиль, сессия', async () => {

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, api } from '@/lib/api';
 import { css } from '@/lib/css';
-import { crewOf, dateLabel, isOnCall, jobNum, jobStatus, localISO, money, plural, shortTitle, type MyJob } from '@/lib/jobs';
+import { crewOf, dateLabel, isOnCall, jobNum, jobStatus, localISO, money, plural, ratingLabel, shortTitle, type MyJob } from '@/lib/jobs';
 import { useFlash } from '@/components/Toast';
 import { ApplicantReviews } from './ApplicantReviews';
 import { useLiveEvent } from './Live';
@@ -105,7 +105,7 @@ export function ApplicantsPage() {
                             <span className={sty.c999a5b0}>{ago(p.appliedAt)}</span>
                           </div>
                           <div className={sty.ccf142d6}>
-                            {fact('рейтинг', p.rating != null ? p.rating.toFixed(1) + ' · ' + p.reviews + ' ' + plural(p.reviews, 'отзыв', 'отзыва', 'отзывов') : 'пока нет')}
+                            {fact('рейтинг', p.rating != null ? ratingLabel(p.rating) + ' · ' + p.reviews + ' ' + plural(p.reviews, 'отзыв', 'отзыва', 'отзывов') : 'пока нет')}
                             {fact('смен', String(p.done))}
                             {fact('невыходов за год', p.noShows ? String(p.noShows) : 'ни разу', p.noShows > 0)}
                             {fact('транспорт', p.ownCar ? 'свой' : 'нет')}

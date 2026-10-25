@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { useRef, useState } from 'react';
 import { css } from '@/lib/css';
-import { crewOf, dateLabel, jobNum, jobStatus, localISO, money, type JobDetail, type JobSummary } from '@/lib/jobs';
+import { crewOf, dateLabel, jobNum, jobStatus, kmLabel, localISO, money, plural, ratingLabel, type JobDetail, type JobSummary } from '@/lib/jobs';
 import { ApplicantsBlock, LeaveShiftForm, MoveDateForm, reveal, ShiftBlock, type Act, type ReviewOpen } from './ShiftBlock';
 import { SeriesBlock } from './SeriesBlock';
 import { ShareJob } from './ShareJob';
@@ -70,6 +70,7 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
 
+  const { me } = useLive();
   const isEmp = role === 'employer';
   const s = jobStatus(job, role);
   const st = applyState(job, role, reqOk);
@@ -87,7 +88,8 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
     { label: 'Способ оплаты', value: job.payType || 'по договорённости' },
     { label: 'Доступ на объект', value: job.access.length ? job.access.join(', ') : 'уточняется у работодателя' },
     { label: 'Инвентарь', value: job.tools || 'уточняется у работодателя' },
-    ...(job.distanceKm != null && !isEmp ? [{ label: 'От базы', value: (job.distanceKm < 10 ? job.distanceKm.toFixed(1) : Math.round(job.distanceKm)) + ' км' }] : []),
+    // Без своей базы (гость, посёлок не нашёлся) расстояние — от центра Москвы: так и пишем.
+    ...(job.distanceKm != null && !isEmp ? [{ label: me?.baseLat != null ? 'От базы' : 'От центра Москвы', value: kmLabel(job.distanceKm) }] : []),
     { label: 'Откликов', value: String(job.applicants) }
   ];
 
@@ -222,17 +224,21 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
         </div>
       )}
 
-      <div className={'hr ' + sty.cd13d540} />
-
-      <div className={sty.cb264e9d}>
-        <div className={'fh ' + sty.c2d881fc}>{job.employer.initials}</div>
-        <div className={sty.c33f2a66}>
-          <button onClick={() => setPerson(true)} title="Открыть профиль" className={'fh ' + sty.c0929946}>{job.employer.name}</button>
-          <div className={sty.cdde3848}>
-            {job.employer.rating != null ? 'рейтинг ' + job.employer.rating.toFixed(1) : 'пока без оценок'} · {job.employer.jobs} заказ{job.employer.jobs % 10 === 1 && job.employer.jobs % 100 !== 11 ? '' : job.employer.jobs % 10 >= 2 && job.employer.jobs % 10 <= 4 && (job.employer.jobs % 100 < 12 || job.employer.jobs % 100 > 14) ? 'а' : 'ов'}
+      {/* Заказчик — для исполнителя и гостя; в своём заказе работодателю показывать самого себя незачем. */}
+      {!job.mine && (
+        <>
+          <div className={'hr ' + sty.cd13d540} />
+          <div className={sty.cb264e9d}>
+            <div className={'fh ' + sty.c2d881fc}>{job.employer.initials}</div>
+            <div className={sty.c33f2a66}>
+              <button onClick={() => setPerson(true)} title="Открыть профиль" className={'fh ' + sty.c0929946}>{job.employer.name}</button>
+              <div className={sty.cdde3848}>
+                {(job.employer.rating != null ? 'рейтинг ' + ratingLabel(job.employer.rating) : 'пока без оценок') + ' · ' + job.employer.jobs + ' ' + plural(job.employer.jobs, 'заказ', 'заказа', 'заказов')}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
 
       {role === 'freelancer' && job.myStatus === 'sent' && (
         <div className={sty.c8800ce9}>Чат откроется, когда работодатель наймёт вас на этот заказ.</div>
@@ -284,7 +290,7 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
           {job.status === 'open' && job.hired === 0 && (
             <button className={'btn btn-secondary ' + sty.c98c3d34} onClick={onEdit}>Изменить условия</button>
           )}
-          <button className={'btn btn-ghost ' + sty.c98c3d34} onClick={() => { setCancelOpen(true); setMoveOpen(false); }}>Отменить смену</button>
+          <button className={'btn btn-ghost ' + sty.c98c3d34} onClick={() => { setCancelOpen(true); setMoveOpen(false); }}>{job.hired > 0 ? 'Отменить смену' : 'Отменить заказ'}</button>
           {!moveOpen && <button className={'btn btn-ghost ' + sty.c98c3d34} onClick={() => setMoveOpen(true)}>Перенести дату выхода</button>}
         </div>
       )}
@@ -293,7 +299,7 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
       {cancelOpen && (
         <div ref={reveal} className={'blueprint ' + sty.c0a5aa83}>
           <Corners />
-          <div style={css(LABEL)}>Отмена смены</div>
+          <div style={css(LABEL)}>{job.hired > 0 ? 'Отмена смены' : 'Отмена заказа'}</div>
           <div className={'field ' + sty.ce5a6d3c}>
             <label htmlFor="cancel-reason">Причина</label>
             <select id="cancel-reason" className="input" value={reason} onChange={e => setReason(e.target.value)}>
@@ -329,7 +335,7 @@ function PersonModal({ job, onClose }: { job: JobDetail; onClose: () => void }) 
   const e = job.employer;
   const facts = [
     { label: 'Заказов размещено', value: String(e.jobs) },
-    { label: 'Рейтинг', value: e.rating != null ? e.rating.toFixed(1) + ' из 5 · отзывов ' + e.reviews : 'пока без оценок' },
+    { label: 'Рейтинг', value: e.rating != null ? ratingLabel(e.rating) + ' из 5 · отзывов ' + e.reviews : 'пока без оценок' },
     { label: 'Тип', value: e.orgType },
     { label: 'Расчёт', value: job.payType || 'по договорённости' }
   ];

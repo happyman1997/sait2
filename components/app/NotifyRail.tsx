@@ -5,9 +5,10 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { css } from '@/lib/css';
-import { localISO, money, type JobSummary } from '@/lib/jobs';
+import { kmLabel, localISO, money, type JobSummary } from '@/lib/jobs';
 import { disablePush, enablePush, pushState, type PushState } from '@/lib/push-client';
 import { useFlash } from '@/components/Toast';
+import { BaseForm } from './BaseForm';
 import { useLive, useLiveEvent } from './Live';
 import { Corners, LABEL } from './ui';
 import sty from './NotifyRail.module.css';
@@ -46,8 +47,6 @@ export function NotifyRail() {
   const [events, setEvents] = useState<Ev[] | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [near, setNear] = useState<JobSummary[] | null>(null);
-  const [baseQ, setBaseQ] = useState('');
-  const [baseErr, setBaseErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [emailVerified, setEmailVerified] = useState(true);
   const [push, setPush] = useState<PushState | null>(null);
@@ -71,13 +70,15 @@ export function NotifyRail() {
 
   // «Рядом сейчас» — открытые смены в радиусе оповещений.
   const radius = settings?.radiusKm;
+  // Без базы расстояния считаются от центра Москвы — «рядом» тогда ничего не значит.
+  const hasBase = me?.baseLat != null;
   useEffect(() => {
-    if (rail !== 'settings' || !isFree || !radius) return;
+    if (rail !== 'settings' || !isFree || !radius || !hasBase) return;
     let stop = false;
     api<{ jobs: JobSummary[] }>('/api/jobs?' + new URLSearchParams({ today: localISO(), km: String(radius) }))
       .then(r => { if (!stop) setNear(r.jobs.filter(j => j.status === 'open' && !j.myStatus)); }).catch(() => {});
     return () => { stop = true; };
-  }, [rail, isFree, radius]);
+  }, [rail, isFree, radius, hasBase]);
 
   useEffect(() => {
     if (!rail) return;
@@ -112,21 +113,6 @@ export function NotifyRail() {
     if (!href) return;
     setRail(null);
     router.push(href);
-  };
-
-  const changeBase = async () => {
-    const q = baseQ.trim();
-    if (!q) { setBaseErr('Впишите населённый пункт или адрес.'); return; }
-    setBusy(true); setBaseErr('');
-    try {
-      const r = await api<{ base: { label: string } }>('/api/me/base', { query: q }, 'PUT');
-      setBaseQ('');
-      flash('База — ' + r.base.label + '. Расстояния и оповещения считаются от неё.');
-      router.refresh();
-      window.dispatchEvent(new Event('arena:reload'));
-    } catch (e) {
-      setBaseErr(e instanceof ApiError ? e.message : 'Не удалось сменить базу');
-    } finally { setBusy(false); }
   };
 
   const s = settings;
@@ -218,21 +204,24 @@ export function NotifyRail() {
                     <div>
                       <div className={'hr ' + sty.ce4bd369} />
                       <div className="field">
-                        <label htmlFor="notify-radius">Радиус от дома</label>
+                        <label htmlFor="notify-radius">Радиус от базы</label>
                         <select id="notify-radius" className="input" value={s.radiusKm} onChange={e => save({ radiusKm: Number(e.target.value) })}>
                           {[10, 30, 50, 100, 300].map(r => <option key={r} value={r}>{'до ' + r + ' км'}</option>)}
                         </select>
                       </div>
-                      <div className={sty.cd5c0860}>{'Рядом сейчас — ' + (near ? near.length : '…')}</div>
-                      <div className={sty.cfcfa205}>
-                        {(near || []).slice(0, 4).map(j => (
-                          <button key={j.num} onClick={() => open('/?job=' + j.num)} className={sty.cf1cae7a}>
-                            <span className={'fh ' + sty.c532e21a}>{j.title}</span>
-                            <span style={css('display: block; ' + NOTE)}>{(j.distanceKm != null ? j.distanceKm.toFixed(1).replace('.', ',') + ' км · ' : '') + money(j.pay, j.unit)}</span>
-                          </button>
-                        ))}
-                      </div>
-                      {near?.length === 0 && <div style={css(NOTE + '; margin-top: 6px')}>В радиусе пока ничего — увеличьте радиус.</div>}
+                      {!hasBase && <div style={css(NOTE + '; margin-top: 8px')}>Оповещения о сменах рядом начнут приходить, когда вы укажете свою базу — ниже, в блоке «Моя база».</div>}
+                      {hasBase && <>
+                        <div className={sty.cd5c0860}>{'Рядом сейчас — ' + (near ? near.length : '…')}</div>
+                        <div className={sty.cfcfa205}>
+                          {(near || []).slice(0, 4).map(j => (
+                            <button key={j.num} onClick={() => open('/?job=' + j.num)} className={sty.cf1cae7a}>
+                              <span className={'fh ' + sty.c532e21a}>{j.title}</span>
+                              <span style={css('display: block; ' + NOTE)}>{(j.distanceKm != null ? kmLabel(j.distanceKm) + ' · ' : '') + money(j.pay, j.unit)}</span>
+                            </button>
+                          ))}
+                        </div>
+                        {near?.length === 0 && <div style={css(NOTE + '; margin-top: 6px')}>В радиусе пока ничего — увеличьте радиус.</div>}
+                      </>}
                     </div>
                   )}
 
@@ -289,16 +278,8 @@ export function NotifyRail() {
 
             <div className={'blueprint ' + sty.cfddee99}>
               <Corners />
-              <div style={css(LABEL)}>База для поиска</div>
-              <div className={sty.c7275f29}>
-                {'Сейчас: ' + me.baseLabel + '. От неё считаются расстояния на карте' + (isFree ? ' и оповещения о сменах рядом.' : '.')}
-              </div>
-              <div className={sty.ce4947c8}>
-                <input className={'input ' + sty.c168acf6} value={baseQ} onChange={e => { setBaseQ(e.target.value); setBaseErr(''); }} onKeyDown={e => { if (e.key === 'Enter') changeBase(); }}
-                  aria-label="Новая база" placeholder="город, посёлок или адрес" />
-                <button className={'btn btn-secondary ' + sty.c07b4ee6} onClick={changeBase} disabled={busy}>{busy ? 'Ищем…' : 'Сменить'}</button>
-              </div>
-              {baseErr && <div role="alert" className={sty.ca8c5b3d}>{baseErr}</div>}
+              <div style={css(LABEL)}>Моя база</div>
+              <BaseForm label={me.baseLabel} set={me.baseLat != null} free={isFree} />
             </div>
 
             <div className={'blueprint ' + sty.c8562f72}>

@@ -317,6 +317,16 @@ export function moneyShort(v: number, unit?: string | null): string {
   return n + ' ₽' + (!u || u === 'за заказ' ? '' : '/' + (short[u] || u.replace(/^за\s+/, '')));
 }
 
+/** Расстояние: «0,7 км», «22 км» — дробь через запятую, как пишут по-русски. */
+export function kmLabel(km: number): string {
+  return (km < 10 ? km.toFixed(1).replace('.', ',') : String(Math.round(km))) + ' км';
+}
+
+/** Рейтинг: «4,8». */
+export function ratingLabel(r: number): string {
+  return r.toFixed(1).replace('.', ',');
+}
+
 export function dateLabel(iso: string): string {
   const p = String(iso || '').split('-');
   if (p.length !== 3) return String(iso || '');

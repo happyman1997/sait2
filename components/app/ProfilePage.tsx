@@ -10,7 +10,7 @@ import { api, ApiError } from '@/lib/api';
 import { css } from '@/lib/css';
 import { uploadForm } from '@/lib/image';
 import { disablePush } from '@/lib/push-client';
-import { dateLabel, money, plural } from '@/lib/jobs';
+import { dateLabel, money, plural, ratingLabel } from '@/lib/jobs';
 import { normCity } from '@/lib/cities';
 import { CityInput } from '@/components/CityInput';
 import { SkillInput } from '@/components/SkillInput';
@@ -20,12 +20,13 @@ import { DocLinks } from '@/components/DocLinks';
 import { useFlash } from '@/components/Toast';
 import { SELF_HOSTED_MAP } from '@/components/map/style';
 import { AdSlot } from './AdSlot';
+import { BaseForm } from './BaseForm';
 import { useLive } from './Live';
 import { Chip, Corners, FIELD_ERR, LABEL, MUTED, initialsOf } from './ui';
 import sty from './ProfilePage.module.css';
 
 type Profile = {
-  user: { id: string; role: 'freelancer' | 'employer'; login: string; email: string; name: string; city: string; avatarUrl: string | null; baseLabel: string; emailVerified: boolean };
+  user: { id: string; role: 'freelancer' | 'employer'; login: string; email: string; name: string; city: string; avatarUrl: string | null; baseLabel: string; baseSet: boolean; emailVerified: boolean };
   profile: {
     skills?: string[]; customSkills?: string[]; gear?: string[]; customGear?: string[]; ownCar?: boolean; workCities?: string[];
     orgType?: string; orgName?: string; objectKind?: string; objectOther?: string; access?: string[]; tools?: string;
@@ -142,6 +143,9 @@ export function ProfilePage() {
 
           <div className={sty.ce5a6d3c}>
             <Contacts p={p} onEmail={load} />
+            <Section title="Моя база" note={isEmp ? undefined : 'На карте — значок «моя база».'}>
+              <BaseForm label={p.user.baseLabel} set={p.user.baseSet} free={!isEmp} onDone={load} />
+            </Section>
             {p.oauth && (p.oauth.providers.length > 0 || p.oauth.linked.length > 0) && <Services oauth={p.oauth} onChange={load} />}
 
             {isEmp ? <Organization p={p} patch={patch} busy={busy} fieldErr={fieldErr} /> : (
@@ -221,7 +225,7 @@ export function ProfilePage() {
             <div className={sty.ce186e08}>
               {[
                 { v: String(p.stats.done), l: isEmp ? 'принято работ' : 'смен закрыто' },
-                { v: p.stats.rating == null ? '—' : p.stats.rating.toFixed(1).replace('.', ','), l: 'рейтинг' },
+                { v: p.stats.rating == null ? '—' : ratingLabel(p.stats.rating), l: 'рейтинг' },
                 { v: String(p.stats.reviews), l: plural(p.stats.reviews, 'отзыв', 'отзыва', 'отзывов') },
                 isEmp ? { v: String(p.stats.jobs), l: 'заказов всего' } : { v: String(p.stats.noShows), l: 'неявок' }
               ].map(s => (
@@ -359,7 +363,7 @@ function HeaderCard({ p, setP, patch, busy, err }: {
               </div>
             </div>
           )}
-          <div style={css('font-size: 14.5px; margin-top: 8px; ' + MUTED)}>{(isEmp ? 'Работодатель' : 'Исполнитель') + ' · ' + p.user.city}</div>
+          <div style={css('font-size: 14.5px; margin-top: 8px; ' + MUTED)}>{(isEmp ? 'Работодатель' : 'Исполнитель') + ' · ' + (p.user.baseSet ? p.user.baseLabel.split(',')[0] : p.user.city)}</div>
           <div className={sty.c81a29e9}>
             {tags.map(t => (
               <span key={t.label} className={'tag tag-outline ' + sty.c687e3e0}>
@@ -396,7 +400,6 @@ function HeaderCard({ p, setP, patch, busy, err }: {
 // ───────────────────────── Вход и контакты ─────────────────────────
 
 function Contacts({ p, onEmail }: { p: Profile; onEmail: () => void }) {
-  const { setRail } = useLive();
   const [emailOpen, setEmailOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
 
@@ -417,13 +420,6 @@ function Contacts({ p, onEmail }: { p: Profile; onEmail: () => void }) {
             <button className={'btn btn-ghost ' + sty.c28cbbc4} onClick={() => setEmailOpen(o => !o)}>{emailOpen ? 'Отменить' : 'Сменить'}</button>
           </div>
           <EmailStatus verified={p.user.emailVerified} />
-        </div>
-        <div className="field">
-          <label>Город базы</label>
-          <div className={sty.c1120df7}>
-            {p.user.baseLabel}
-            <button className={'btn btn-ghost ' + sty.c28cbbc4} onClick={() => setRail('settings')}>меняется в настройках</button>
-          </div>
         </div>
       </div>
       {emailOpen && <EmailChange current={p.user.email} onDone={() => { setEmailOpen(false); onEmail(); }} />}
@@ -686,7 +682,7 @@ function Organization({ p, patch, busy, fieldErr }: {
           {fieldErr('inn')}
         </div>
         <div className="field">
-          <label htmlFor="org-object">Обычный объект</label>
+          <label htmlFor="org-object">Объекты обслуживания</label>
           <select id="org-object" className="input" value={objectKind} onChange={e => setObjectKind(e.target.value)}>
             <option value="">не указан</option>
             {OBJECT_KINDS.map(o => <option key={o} value={o}>{o}</option>)}
@@ -740,7 +736,7 @@ function GearEditor({ gear, customGear, ownCar, patch, fieldErr }: {
     <>
       <div className={sty.c2bf69bb}>
         {all.map(g => <Chip key={g} active={gear.includes(g)} onClick={() => toggle(g)}>{g}</Chip>)}
-        <Chip active={ownCar} onClick={() => patch({ freelancer: { ownCar: !ownCar } })}>своя машина</Chip>
+        <Chip active={ownCar} onClick={() => patch({ freelancer: { ownCar: !ownCar } })}>Своя машина</Chip>
       </div>
       <div className={sty.cf4bfb50}>
         <input className={'input ' + sty.c8b4ab7f} value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') add(); }} aria-label="Свой инвентарь" maxLength={60}

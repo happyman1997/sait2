@@ -5,7 +5,7 @@
 import { useId, useState } from 'react';
 import { css } from '@/lib/css';
 import { uploadForm } from '@/lib/image';
-import { ACCEPT_CONFIRM, COMPLAINT_KINDS, crewOf, dateLabel, DISPUTE_REASONS, isOnCall, isSeries, LEAVE_REASONS, localISO, money, plural, type DisputeInfo, type JobDetail } from '@/lib/jobs';
+import { ACCEPT_CONFIRM, COMPLAINT_KINDS, crewOf, dateLabel, DISPUTE_REASONS, isOnCall, isSeries, LEAVE_REASONS, localISO, money, plural, ratingLabel, type DisputeInfo, type JobDetail } from '@/lib/jobs';
 import { ApplicantReviews } from './ApplicantReviews';
 import { Corners, LABEL } from './ui';
 import sty from './ShiftBlock.module.css';
@@ -46,7 +46,7 @@ export function ApplicantsBlock({ job, act, onChat, busy }: { job: JobDetail; ac
                 {a.status === 'hired' && <span className="tag tag-accent" style={{ whiteSpace: 'nowrap' }}>{a.isLead ? 'старший' : 'нанят'}</span>}
                 {a.npd && <span className="tag tag-outline" title="Статус НПД подтверждён ФНС" style={{ whiteSpace: 'nowrap' }}>самозанятый ✓</span>}
               </div>
-              <div style={css('font-size: 13px; ' + MUTED)}>{a.rating != null ? 'рейтинг ' + a.rating.toFixed(1) + ' (' + a.reviews + ')' : 'пока без оценок'} · {a.done} {plural(a.done, 'смена', 'смены', 'смен')}{a.noShows ? ' · невыходов за год ' + a.noShows : ''}</div>
+              <div style={css('font-size: 13px; ' + MUTED)}>{a.rating != null ? 'рейтинг ' + ratingLabel(a.rating) + ' (' + a.reviews + ')' : 'пока без оценок'} · {a.done} {plural(a.done, 'смена', 'смены', 'смен')}{a.noShows ? ' · невыходов за год ' + a.noShows : ''}</div>
               <div style={css('font-size: 13px; ' + MUTED)}>{a.gear}</div>
               <ApplicantReviews num={job.num} appId={a.id} count={a.reviews} />
             </div>

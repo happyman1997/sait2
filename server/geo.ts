@@ -105,6 +105,18 @@ async function dadata(method: 'suggest/address' | 'geolocate/address', body: Rec
     .filter((h): h is GeoHit => !!h && !seen.has(h.label) && !!seen.add(h.label));
 }
 
+/**
+ * Подпись базы пользователя по ответу геокодера: населённый пункт и регион, без улицы и дома — чтобы было видно,
+ * та ли это Ивановка. Регион — первая часть подписи «ниже» (у DaData — «Московская обл»; почтовый индекс и
+ * федеральный округ из OSM не годятся).
+ */
+export function placeLabel(h: GeoHit): string {
+  const place = (h.district || h.label.split(',')[0]).trim();
+  const region = h.sub.split(',')[0].trim();
+  const withRegion = region && !/\d|федеральный/i.test(region) && !region.toLowerCase().includes(place.toLowerCase());
+  return (withRegion ? place + ', ' + region : place).slice(0, 120);
+}
+
 // ───────────────────────── Поиск и обратный поиск ─────────────────────────
 
 const OFF = 'Поиск адреса пока не подключён — поставьте метку нажатием на карту.';

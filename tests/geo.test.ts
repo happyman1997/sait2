@@ -36,6 +36,14 @@ describe('DaData', () => {
     expect(fromDadata({ value: 'г Москва', data: { city: 'Москва', geo_lat: null, geo_lon: null } })).toBeNull();
   });
 
+  it('подпись базы: населённый пункт и регион, без улицы и дома; индекс и федеральный округ не берём', async () => {
+    const { fromDadata, placeLabel } = await import('@/server/geo');
+    expect(placeLabel(fromDadata(moscow)!)).toBe('Москва');
+    expect(placeLabel(fromDadata(village)!)).toBe('Ильинский, Московская обл');
+    expect(placeLabel({ lat: 1, lng: 1, label: 'Москва, Тверская улица, 18', sub: 'Центральный федеральный округ, 125009', district: 'Москва' })).toBe('Москва');
+    expect(placeLabel({ lat: 1, lng: 1, label: 'Химки, ул Ленина, д 5', sub: 'Московская обл', district: 'Химки' })).toBe('Химки, Московская обл');
+  });
+
   it('с ключом поиск и обратный поиск идут в DaData: POST, ключ в заголовке, без данных пользователя', async () => {
     const calls: { url: string; init: RequestInit }[] = [];
     vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {

@@ -641,7 +641,7 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
         </div>
       )}
 
-      {filtersOpen && <FiltersPanel filters={filters} setFilters={setFilters} types={types} found={found} baseLabel={(base?.label || 'Москва') + (me ? ' · город из профиля' : ' · войдите, чтобы искать от своего города')} onClose={() => setFiltersOpen(false)} />}
+      {filtersOpen && <FiltersPanel filters={filters} setFilters={setFilters} types={types} found={found} baseLabel={me?.baseLat != null ? base?.label || me.baseLabel : 'центр Москвы' + (me ? ' · свою базу укажите в профиле' : ' · войдите, чтобы искать от своего города')} onClose={() => setFiltersOpen(false)} />}
 
       <div style={css(shellStyle)}>
         {listOpen && (
@@ -718,7 +718,7 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
               </button>
             </div>
           )}
-          <SeasonMap ref={mapRef} pins={pins} draft={draftPoint} mode={isEmp ? 'employer' : 'view'} highlight={hover} anchor={isEmp || !me ? null : anchor}
+          <SeasonMap ref={mapRef} pins={pins} draft={draftPoint} mode={isEmp ? 'employer' : 'view'} highlight={hover} anchor={isEmp || me?.baseLat == null ? null : anchor}
             radiusKm={isEmp ? 0 : filters.km} onMapClick={onMapClick} onPinClick={onPinClick} onStackClick={onStackClick} />
           {stackPick && stackPick.length > 0 && !form && (
             <div className={'blueprint ' + sty.c030d8ff}>

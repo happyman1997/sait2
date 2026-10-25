@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { CREW_ANY, MONTHS_GEN } from '@/lib/catalog';
 import {
   autoTitle, daysAhead, emptyJobForm, isKnownPayType, isKnownRepeat, isKnownTools, isKnownUnit, jobAllErrors, JOB_FIELD_STEP,
-  isOnCall, jobNum, MAX_CALLS, payNumber, seriesDates, seriesDayLabel, SERIES_STEP, AUTO_ACCEPT_DAYS, type AppStatus, type Applicant, type JobDetail, type JobForm, type JobStatus, type JobSummary, type SeriesInfo, type ShiftInfo
+  isOnCall, jobNum, kmLabel, MAX_CALLS, money, payNumber, seriesDates, seriesDayLabel, SERIES_STEP, AUTO_ACCEPT_DAYS, type AppStatus, type Applicant, type JobDetail, type JobForm, type JobStatus, type JobSummary, type SeriesInfo, type ShiftInfo
 } from '@/lib/jobs';
 import { badWordIn, findBadField } from '@/lib/moderation';
 import { searchSkills } from '@/lib/skills';
@@ -879,7 +879,7 @@ export async function withdrawApplication(num: number, viewer: Viewer): Promise<
 
 
 /**
- * «Новая смена рядом»: исполнителям, у кого база в радиусе оповещений (настройка «Радиус от дома»).
+ * «Новая смена рядом»: исполнителям, у кого база в радиусе оповещений (настройка «Радиус от базы»).
  * Навыки не отсекают — только ставят выше. С выключенными оповещениями событие остаётся в журнале без доставки.
  */
 export async function notifyNearby(num: number, db: Db = pool()) {
@@ -896,10 +896,10 @@ export async function notifyNearby(num: number, db: Db = pool()) {
       ORDER BY ($3 = ANY(coalesce(fp.skills, '{}'))) DESC, km
       LIMIT 500`,
     [j.lat, j.lng, j.type_id], db);
-  const price = j.pay.toLocaleString('ru-RU') + ' ₽' + (j.unit === 'за заказ' ? '' : ' ' + j.unit);
+  // С номером заказа, как в остальных событиях журнала: два заказа на одной улице иначе выглядят одинаково.
   await addEvents(people.rows.map(p => ({
     userId: p.id, kind: 'nearby', jobId: j.id, num, deliver: true, urgent: j.urgent,
-    text: (j.urgent ? 'Срочная смена' : 'Новая смена') + ' в ' + (p.km < 10 ? p.km.toFixed(1) : Math.round(p.km)) + ' км: ' + j.title + ' · ' + price
+    text: (j.urgent ? 'Срочная смена' : 'Новая смена') + ' в ' + kmLabel(p.km) + ' · заказ № ' + jobNum(num) + ' «' + j.title + '» · ' + money(j.pay, j.unit)
   })), db);
   return people.rows.length;
 }

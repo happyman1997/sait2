@@ -11,6 +11,7 @@ import {
 import { config } from './config';
 import { one, pool, query, tx, type Db } from './db';
 import { AppError, ModerationError } from './errors';
+import { geoSearch, placeLabel } from './geo';
 import { passwordProblem } from '@/lib/password-policy';
 import { dummyHash, hashPassword, verifyPassword } from './password';
 import { hit, limitOrThrow, refund, used } from './rate-limit';
@@ -235,17 +236,32 @@ function assertAccepted(accepted: { offer?: unknown; pd?: unknown }) {
   if (accepted.pd !== true) throw new AppError(422, 'Без согласия на обработку персональных данных аккаунт создать нельзя — отметьте галочку.', 'pdConsent');
 }
 
+type Base = { lat: number; lng: number; label: string | null };
+
+/**
+ * База нового пользователя — от неё расстояния на карте и оповещения «рядом». Город из списка — его центр;
+ * посёлка в списке нет — ищем геокодером (подпись с регионом: видно, та ли Ивановка). Не нашли или геокодер
+ * недоступен — без базы: в профиле попросим указать её самим. Вызывается до транзакции — запрос до 5 секунд.
+ */
+async function signupBase(city: string): Promise<Base | null> {
+  const pt = cityPoint(city);
+  if (pt) return { lat: pt[0], lng: pt[1], label: null };
+  try {
+    const hit = (await geoSearch(city, 1))[0];
+    return hit ? { lat: hit.lat, lng: hit.lng, label: placeLabel(hit) } : null;
+  } catch { return null; }
+}
+
 /** Аккаунт, профиль, настройки уведомлений — в транзакции регистрации. Почта уже подтверждена: кодом или сервисом входа. */
-async function createAccount(p: StoredSignup, db: Db) {
+async function createAccount(p: StoredSignup, base: Base | null, db: Db) {
   await assertUnique(p.email, p.login, db);
-  const pt = cityPoint(p.city);
   let user;
   try {
     user = await one<Parameters<typeof publicUser>[0]>(
-      `INSERT INTO users (role, login, email, email_verified_at, password_hash, name, city, base_lat, base_lng, offer_accepted_at, offer_version, pd_consent_at, pd_consent_version)
-       VALUES ($1, $2, $3, now(), $4, $5, $6, $7, $8, now(), $9, now(), $10)
+      `INSERT INTO users (role, login, email, email_verified_at, password_hash, name, city, base_lat, base_lng, base_label, offer_accepted_at, offer_version, pd_consent_at, pd_consent_version)
+       VALUES ($1, $2, $3, now(), $4, $5, $6, $7, $8, $9, now(), $10, now(), $11)
        RETURNING ${USER_COLS}`,
-      [p.role, p.login, p.email, p.passwordHash, p.name, p.city, pt?.[0] ?? null, pt?.[1] ?? null, config.offerVersion, config.pdConsentVersion],
+      [p.role, p.login, p.email, p.passwordHash, p.name, p.city, base?.lat ?? null, base?.lng ?? null, base?.label ?? null, config.offerVersion, config.pdConsentVersion],
       db
     );
   } catch (e) {
@@ -283,13 +299,14 @@ export async function verifySignup(challengeId: unknown, code: unknown, accepted
   assertAccepted(accepted);
   const pre = await loadChallenge(challengeId, 'signup', pool());
   await checkCode(pre, code, pool());
+  const base = await signupBase(pre.payload!.city);
 
   return tx(async (db) => {
     const ch = await loadChallenge(challengeId, 'signup', db, true);
     const p = ch.payload!;
     // Регистрация после «Войти через…» с другой почтой: билет проверен при отправке кода, здесь — ещё жив?
     const ticket = p.oauthFlow ? await ticketById(p.oauthFlow, db) : null;
-    const user = await createAccount(p, db);
+    const user = await createAccount(p, base, db);
     if (ticket) await consumeTicket(ticket, user.id, db);
     await query('UPDATE auth_challenges SET consumed_at = now(), verified_at = now(), payload = NULL WHERE id = $1', [ch.id], db);
     const session = await createSession(user.id, ctx, db);
@@ -330,9 +347,10 @@ export async function oauthSignup(raw: unknown, accepted: { offer?: unknown; pd?
   if (ctx.ip) await limitOrThrow(`oauthsignup:ip:${ctx.ip}`, 20, 3600, 'Слишком много регистраций — попробуйте позже.');
   const { password, ...rest } = s;
   const p: StoredSignup = { ...rest, passwordHash: await hashPassword(password) };
+  const base = await signupBase(p.city);
   return tx(async (db) => {
     const ticket = await loadTicket(r.oauthTicket, nonce, db, true);
-    const user = await createAccount(p, db);
+    const user = await createAccount(p, base, db);
     await consumeTicket(ticket, user.id, db);
     const session = await createSession(user.id, ctx, db);
     return { user: publicUser(user), session };
