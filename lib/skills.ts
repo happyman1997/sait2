@@ -79,11 +79,12 @@ export function rankTypes<T extends { id: string; label: string; count?: number 
   const words = (x: string) => x.split(/[\s-]+/);
   const known = new Map(NAMES.map(n => [n.id, n.names]));
   const find = (s: string) => {
-    const tier = (names: string[]) => names[0].startsWith(s) ? 0
-      : names.some(x => x.startsWith(s)) ? 1
-      : names.some(x => words(x).some(w => w.startsWith(s))) ? 2
+    // Слово целиком совпало с названием или синонимом («снег» — «Уборка снега», а не «снег с крыши») — первым.
+    const tier = (names: string[]) => names.includes(s) ? 0 : names[0].startsWith(s) ? 1
+      : names.some(x => x.startsWith(s)) ? 2
+      : names.some(x => words(x).some(w => w.startsWith(s))) ? 3
       // Середина слова — с трёх букв: «рузк» найдёт «Погрузка», а одна-две буквы совпадали бы почти со всем.
-      : s.length >= 3 && names.some(x => x.includes(s)) ? 3 : -1;
+      : s.length >= 3 && names.some(x => x.includes(s)) ? 4 : -1;
     return pool
       .map(t => [tier(known.get(t.id) ?? [normSkill(t.label)]), t] as const)
       .filter(([r]) => r >= 0)

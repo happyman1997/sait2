@@ -754,7 +754,7 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
             </>
           ))}
           {!me && !form && !selected && !objEdit && (
-            <WorkLinks types={types} value={filters.types} onChange={ids => setFilters({ ...filters, types: ids })} found={foundText} onList={() => setListOpen(true)} />
+            <WorkLinks types={types} value={filters.types} onChange={ids => setFilters({ ...filters, types: ids })} found={foundText} n={found} onList={() => setListOpen(true)} />
           )}
           {!form && !selected && !objEdit && <DocLinks style="margin-top: 22px" />}
         </div>

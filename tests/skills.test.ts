@@ -67,6 +67,8 @@ describe('rankTypes — поиск видов работ (фильтр карт�
     expect(ids('грузчик')).toEqual(['load']);
     expect(ids('дворник')).toEqual(['street']);
     expect(ids('снег')[0]).toBe('snow');
+    // Синоним целиком важнее начала другого синонима: «снег» — сначала «Уборка снега», а не «снег с крыши».
+    expect(rankTypes([{ id: 'roof', label: 'Очистка крыш' }, { id: 'snow', label: 'Уборка снега' }], 'снег').map(t => t.id)).toEqual(['snow', 'roof']);
   });
   it('свои виды работодателей — по названию, с любого слова и с середины слова от трёх букв', () => {
     expect(ids('колка')).toEqual(['c_firewood']);

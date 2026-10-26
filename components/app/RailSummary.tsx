@@ -77,8 +77,8 @@ export function GuestGuide() {
  * «Какая работа?» на главной: поиск по видам работ (и по тому, как их называют, и по своим видам работодателей)
  * сразу фильтрует карту — раньше здесь был длинный список ссылок. Каталог по видам и городам — ссылкой ниже.
  */
-export function WorkLinks({ types, value, onChange, found, onList }: {
-  types: JobTypeRow[]; value: string[]; onChange: (ids: string[]) => void; found: string; onList: () => void;
+export function WorkLinks({ types, value, onChange, found, n, onList }: {
+  types: JobTypeRow[]; value: string[]; onChange: (ids: string[]) => void; found: string; n: number; onList: () => void;
 }) {
   return (
     <section aria-label="Подработка по видам работ" className={sty.workLinks}>
@@ -86,12 +86,18 @@ export function WorkLinks({ types, value, onChange, found, onList }: {
       <div className={sty.workSearch}>
         <TypeSearch types={types} value={value} onChange={onChange} label="Какую работу ищете" placeholder="Какая работа? Например: снег, грузчик, покос" />
       </div>
-      {value.length > 0 && (
+      {value.length > 0 && (n > 0 ? (
         <p className={sty.workFound}>
           На карте — только {value.length > 1 ? 'эти виды' : 'этот вид'}: найдено {found}.{' '}
           <button type="button" className={sty.workList} onClick={onList}>Показать списком</button>
         </p>
-      )}
+      ) : (
+        // Таких заказов сейчас нет — не тупик: они появляются в сезон, о новых рядом можно узнавать первым.
+        <p className={sty.workFound}>
+          Сейчас таких заказов нет — они появляются в сезон, часто за день до выхода.{' '}
+          <Link href="/auth?role=freelancer" className={sty.workList}>Создайте профиль</Link> — о новых рядом придёт уведомление.
+        </p>
+      ))}
       <Link href="/raboty" className={sty.workAll}>Все виды работ и города →</Link>
     </section>
   );
