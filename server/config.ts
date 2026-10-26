@@ -56,6 +56,7 @@ export const config = {
   vkClientId: () => env('VK_CLIENT_ID', ''),
   // Токен для /api/metrics (Prometheus). Пусто — метрики закрыты.
   metricsToken: () => env('METRICS_TOKEN', ''),
-  offerVersion: '2026-10',
+  // Новая редакция оферты и Правил — новая дата (её видно внизу документов и она сохраняется при регистрации).
+  offerVersion: '2026-10-26',
   pdConsentVersion: '2026-10'
 };

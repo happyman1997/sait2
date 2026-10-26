@@ -108,7 +108,7 @@ export type DisputeInfo = {
 
 /** Серия выходов регулярного заказа (для карточки). */
 export type SeriesInfo = {
-  rule: string;                 // «ежедневно, будни · до 9 утра»
+  rule: string;                 // «по будням · к 9 утра»
   onCall: boolean;              // по снегопаду — дни серии это вызовы работодателя на дату
   days: {
     i: number; date: string | null; label: string; skipped: boolean; skippedBy: number; past: boolean;
@@ -132,18 +132,19 @@ export const SERIES_STEP = 4;   // «Продлить серию на месяц
 const WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
 
 /**
- * Даты серии по правилу повтора: будни — пн–пт, 2/2 — два дня через два, раз в неделю — каждые 7 дней,
- * иначе ежедневно. «По снегопаду» — null: выходы по вызову.
+ * Даты серии по правилу повтора: по будням — пн–пт, два дня через два, раз в неделю — каждые 7 дней,
+ * иначе каждый день. «По снегопаду» — null: выходы по вызову. Прежние названия («ежедневно, будни», «график 2/2») —
+ * так же: до миграции 027 они были в заказах.
  */
 export function seriesDates(repeat: string, startISO: string, count: number): string[] | null {
   if (/снегопад/.test(repeat)) return null;
   const out: string[] = [];
   const d = new Date(startISO + 'T12:00:00Z');
-  const weekdays = /будни/.test(repeat);
+  const weekdays = /будн/.test(repeat);
   if (weekdays) while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() + 1);
   for (let k = 0; out.length < count && k < 800; k++) {
     const dow = d.getUTCDay();
-    const ok = weekdays ? dow !== 0 && dow !== 6 : /2\/2/.test(repeat) ? k % 4 < 2 : /неделю/.test(repeat) ? k % 7 === 0 : true;
+    const ok = weekdays ? dow !== 0 && dow !== 6 : /через два|2\/2/.test(repeat) ? k % 4 < 2 : /неделю/.test(repeat) ? k % 7 === 0 : true;
     if (ok) out.push(d.toISOString().slice(0, 10));
     d.setUTCDate(d.getUTCDate() + 1);
   }
@@ -321,7 +322,7 @@ export function jobStepErrors(step: number, f: JobForm): Record<string, string> 
     if (!(payNumber(f.pay) > 0)) e.pay = 'Укажите ставку — без неё заказ не смотрят.';
     else if (payNumber(f.pay) > 10_000_000) e.pay = 'Проверьте ставку — слишком большая сумма.';
     if (!f.dateISO.trim()) e.date = 'Выберите дату выхода.';
-    if (f.regular && !f.repeat.trim()) e.repeat = 'Заполните график серии — без него заказ не опубликовать.';
+    if (f.regular && !f.repeat.trim()) e.repeat = 'Выберите, как часто повторять заказ, — без этого его не опубликовать.';
   } else if (step === 4) {
     if (!f.access.length) e.access = 'Впишите, как попасть на объект, и нажмите «Добавить» — это первый вопрос исполнителя.';
     if (!f.tools) e.tools = 'Отметьте, чей инвентарь на смене.';

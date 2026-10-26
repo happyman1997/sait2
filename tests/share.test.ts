@@ -11,7 +11,7 @@ const job = (over: Partial<JobDetail> = {}) => ({
 describe('поделиться заказом', () => {
   it('текст — что, сколько, где, когда', () => {
     expect(shareText(job())).toBe('Покосить траву — ' + money(5000, 'за сотку') + ' · Химки, ул. Ленина · 25 октября');
-    expect(shareText(job({ repeat: 'ежедневно, будни' }))).toMatch(/· с 25 октября$/);
+    expect(shareText(job({ repeat: 'по будням' }))).toMatch(/· с 25 октября$/);
   });
 
   it('ссылки мессенджеров: адрес и текст закодированы', () => {

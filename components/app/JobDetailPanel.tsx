@@ -80,7 +80,7 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
   const specs = [
     { label: 'Адрес', value: job.addressHidden ? job.address + ' (частный заказчик: дом и точная метка — после найма)' : job.address },
     { label: 'Дата выхода', value: when },
-    { label: 'График', value: job.repeat ? job.repeat + (job.repeatNote ? ' · ' + job.repeatNote : '') : 'разовый выход' },
+    { label: 'Повтор', value: job.repeat ? job.repeat + (job.repeatNote ? ' · ' + job.repeatNote : '') : 'разовый выход' },
     ...(crew > 1 ? [{ label: 'Людей в смене', value: (crew === Infinity ? 'сколько угодно' : crew + ' чел.') + ' · набрано ' + job.hired }] : []),
     { label: 'Объём', value: job.volume || 'по договорённости' },
     { label: 'Оплата', value: money(job.pay, job.unit) },

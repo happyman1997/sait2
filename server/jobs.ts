@@ -704,7 +704,7 @@ function validateJobForm(f: JobForm, today: string) {
   if (f.lat != null && f.lng != null && (Math.abs(f.lat) > 90 || Math.abs(f.lng) > 180)) errs.address = 'Метка вне карты — поставьте её заново.';
   if (!isKnownUnit(f.unit)) errs.unit = 'Выберите, за что платите.';
   if (f.payType && !isKnownPayType(f.payType)) errs.payType = 'Выберите способ оплаты из списка.';
-  if (f.regular && f.repeat && !isKnownRepeat(f.repeat)) errs.repeat = 'Выберите график из списка.';
+  if (f.regular && f.repeat && !isKnownRepeat(f.repeat)) errs.repeat = 'Выберите из списка, как часто повторять заказ.';
   if (f.tools && !isKnownTools(f.tools)) errs.tools = 'Отметьте, чей инвентарь на смене.';
   if (f.dateISO) {
     const ahead = daysAhead(f.dateISO, today);
@@ -723,7 +723,7 @@ function validateJobForm(f: JobForm, today: string) {
     { field: 'desc', label: 'Что нужно сделать', value: f.desc },
     { field: 'volume', label: 'Объём работ', value: f.volume },
     { field: 'req', label: 'Своё условие для отклика', value: f.req },
-    { field: 'repeat', label: 'График', value: f.repeatNote },
+    { field: 'repeat', label: 'Как часто', value: f.repeatNote },
     { field: 'access', label: 'Доступ на объект', value: f.access },
     { field: 'meetName', label: 'Кто встречает на объекте', value: f.meetName }
   ]);

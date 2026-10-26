@@ -94,7 +94,7 @@ describe('публикация', () => {
     await expectErr(jobs.createJob(form({ lat: null }), emp, today), 'address', /метку/);
     await expectErr(jobs.createJob(form({ type: '', typeOther: '' }), emp, today), 'type', /тип работы/);
     await expectErr(jobs.createJob(form({ dateISO: plusDays(-2) }), emp, today), 'date', /прошла/);
-    await expectErr(jobs.createJob(form({ regular: true, repeat: '' }), emp, today), 'repeat', /график/);
+    await expectErr(jobs.createJob(form({ regular: true, repeat: '' }), emp, today), 'repeat', /как часто/);
     await expectErr(jobs.createJob(form({ tools: '' }), emp, today), 'tools');
     await expectErr(jobs.createJob(form({ crew: '40' }), emp, today), 'crew');
     await expectErr(jobs.createJob(form({ unit: 'за всё' }), emp, today), 'unit');
@@ -192,7 +192,7 @@ describe('поиск', () => {
     jobs.invalidateSearch();   // прямой SQL в обход приложения — кэш выдачи о нём не знает
     expect((await jobs.listJobs({ today }, fl)).jobs.map(j => j.typeId)).toEqual(['snow']);
     // серия с прошедшей первой датой остаётся в поиске
-    await query(`UPDATE jobs SET repeat = 'график 2/2' WHERE type_id = 'load'`);
+    await query(`UPDATE jobs SET repeat = 'два дня через два' WHERE type_id = 'load'`);
     jobs.invalidateSearch();
     expect((await jobs.listJobs({ today }, fl)).jobs).toHaveLength(2);
   });

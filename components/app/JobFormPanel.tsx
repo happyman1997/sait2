@@ -221,16 +221,16 @@ export function JobFormPanel({ form, setForm, step, goStep, errs, formError, onN
             </label>
             <label className={sty.c78f23aa}>
               <input type="checkbox" checked={form.regular} onChange={e => setForm({ regular: e.target.checked }, 'repeat')} className={sty.ca42a1ef} />
-              Повторять — серия смен
+              Повторять — серия выходов
             </label>
             {form.regular && (
               <div className="field">
-                <label htmlFor="jf-repeat">График</label>
+                <label htmlFor="jf-repeat">Как часто</label>
                 <select id="jf-repeat" className="input" value={form.repeat} onChange={e => setForm({ repeat: e.target.value }, 'repeat')} style={css(errs.repeat ? errFieldStyle : '')}>
-                  <option value="">— выберите график —</option>
+                  <option value="">— выберите, как часто —</option>
                   {REPEATS.map(r => <option key={r}>{r}</option>)}
                 </select>
-                <input className={'input ' + sty.c0d69e4b} aria-label="График — время и условия" value={form.repeatNote} onChange={e => setForm({ repeatNote: e.target.value })} placeholder="например, с 7:00, пока лежит снег" />
+                <input className={'input ' + sty.c0d69e4b} aria-label="Как часто — уточнение" value={form.repeatNote} onChange={e => setForm({ repeatNote: e.target.value })} placeholder="например: к 9 утра, пока лежит снег" />
                 <FieldError text={errs.repeat} />
               </div>
             )}

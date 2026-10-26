@@ -83,7 +83,7 @@ describe('проверка формы заказа по шагам', () => {
     expect(jobStepErrors(1, { ...f, address: 'Тверская, 18' }).address).toMatch(/метку/);
     expect(Object.keys(jobStepErrors(2, f))).toEqual(['desc', 'type']);
     expect(jobStepErrors(3, f)).toMatchObject({ pay: 'Укажите ставку — без неё заказ не смотрят.', date: 'Выберите дату выхода.' });
-    expect(jobStepErrors(3, { ...f, pay: '100', dateISO: '2030-01-01', regular: true }).repeat).toMatch(/график/);
+    expect(jobStepErrors(3, { ...f, pay: '100', dateISO: '2030-01-01', regular: true }).repeat).toMatch(/как часто/);
     expect(Object.keys(jobStepErrors(4, f))).toEqual(['access', 'tools']);
     expect(Object.keys(jobAllErrors(f))).toHaveLength(7);
   });

@@ -56,7 +56,7 @@ export default async function JobPage({ params }: Props) {
   const specs: [string, string][] = [
     ['Адрес', j.addressHidden ? j.address + ' (частный заказчик: дом и точная метка — после найма)' : j.address],
     ['Дата выхода', when],
-    ['График', j.repeat ? j.repeat + (j.repeatNote ? ' · ' + j.repeatNote : '') : 'разовый выход'],
+    ['Повтор', j.repeat ? j.repeat + (j.repeatNote ? ' · ' + j.repeatNote : '') : 'разовый выход'],
     ...(crew > 1 ? [['Людей в смене', crew === Infinity ? 'сколько угодно' : crew + ' чел.'] as [string, string]] : []),
     ['Объём', j.volume || 'по договорённости'],
     ['Оплата', money(j.pay, j.unit)],

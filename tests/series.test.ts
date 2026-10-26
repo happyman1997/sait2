@@ -21,13 +21,16 @@ const today = localClock().day;
 const plus = (iso: string, n: number) => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 
 describe('даты серии', () => {
-  it('будни, 2/2, раз в неделю, ежедневно; по снегопаду — по вызову', () => {
+  it('по будням, два дня через два, раз в неделю, каждый день; по снегопаду — по вызову', () => {
     // 2026-10-02 — пятница
-    expect(seriesDates('ежедневно, будни', '2026-10-02', 3)).toEqual(['2026-10-02', '2026-10-05', '2026-10-06']);
+    expect(seriesDates('по будням', '2026-10-02', 3)).toEqual(['2026-10-02', '2026-10-05', '2026-10-06']);
+    expect(seriesDates('по будням', '2026-10-03', 1)).toEqual(['2026-10-05']);
+    expect(seriesDates('два дня через два', '2026-10-01', 4)).toEqual(['2026-10-01', '2026-10-02', '2026-10-05', '2026-10-06']);
+    // Прежние названия (до миграции 027) дают те же даты.
     expect(seriesDates('ежедневно, будни', '2026-10-03', 1)).toEqual(['2026-10-05']);
     expect(seriesDates('график 2/2', '2026-10-01', 4)).toEqual(['2026-10-01', '2026-10-02', '2026-10-05', '2026-10-06']);
     expect(seriesDates('раз в неделю', '2026-10-01', 3)).toEqual(['2026-10-01', '2026-10-08', '2026-10-15']);
-    expect(seriesDates('ежедневно до конца сезона', '2026-12-31', 2)).toEqual(['2026-12-31', '2027-01-01']);
+    expect(seriesDates('каждый день до конца сезона', '2026-12-31', 2)).toEqual(['2026-12-31', '2027-01-01']);
     expect(seriesDates('по снегопаду', '2026-10-01', 5)).toBeNull();
     expect(seriesDayLabel('2026-10-05')).toBe('5 октября, пн');
   });
@@ -43,7 +46,7 @@ async function mkUser(role: 'freelancer' | 'employer', login: string, phoneKey: 
 const form = (over: Record<string, unknown> = {}) => ({
   ...MOSCOW, address: 'Москва, ул. Тверская, 18', district: 'Москва', type: 'snow', desc: 'Двор 320 м²', crew: '1', pay: '3000',
   unit: 'за смену', payType: 'перевод на карту', dateISO: plus(today, 2), access: ['домофон'], tools: 'нужен свой инвентарь',
-  regular: true, repeat: 'ежедневно до конца сезона', ...over
+  regular: true, repeat: 'каждый день до конца сезона', ...over
 });
 async function expectErr(p: Promise<unknown>, text: RegExp) {
   try { await p; } catch (e) { expect(e).toBeInstanceOf(AppError); expect((e as Error).message).toMatch(text); return; }
