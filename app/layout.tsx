@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { connection } from 'next/server';
 import type { ReactNode } from 'react';
+import { ServiceWorkerSetup } from '@/components/AppInstall';
 import { ModerationGuard } from '@/components/ModerationGuard';
 import { ToastProvider } from '@/components/Toast';
 import { config } from '@/server/config';
@@ -18,6 +19,12 @@ export function generateMetadata(): Metadata {
     metadataBase: new URL(config.publicUrl()),
     title: 'Подработка рядом с домом: разовые смены на карте — Арена Работ',
     description: 'Сезонная подработка и разовые смены: уборка снега, покос травы, благоустройство, погрузка. Ставка, дата и место видны сразу, отклик без резюме.',
+    applicationName: 'Арена Работ',
+    // iPhone: «На экран „Домой“» — запуск как приложение (app/manifest.ts), имя под иконкой. Строка состояния —
+    // тёмная, страница начинается под ней (не заходит под часы и вырез экрана).
+    appleWebApp: { capable: true, title: 'Арена Работ', statusBarStyle: 'black' },
+    // Next.js пишет только mobile-web-app-capable; iOS до 16.4 без этого тега открывал иконку в Safari, а не приложением.
+    other: { 'apple-mobile-web-app-capable': 'yes' },
     // Коды Яндекс.Вебмастера и Google Search Console — из окружения сервера (пустые — тегов нет).
     verification: {
       ...(config.yandexVerification() ? { yandex: config.yandexVerification() } : {}),
@@ -40,6 +47,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         <ToastProvider>
           {children}
           <ModerationGuard />
+          <ServiceWorkerSetup />
         </ToastProvider>
       </body>
     </html>

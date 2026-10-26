@@ -17,8 +17,9 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     {
-      // Только страницы: API, статика, воркеры карты и сервис-воркер — без неё (у них общая CSP из next.config).
-      source: '/((?!api|_next/static|_next/image|favicon.ico|icon.svg|sw.js|maplibre/).*)',
+      // Только страницы: API, статика, воркеры карты, сервис-воркер и страница «Нет интернета» (своя CSP в ней) — без неё
+      // (у них общая CSP из next.config).
+      source: '/((?!api|_next/static|_next/image|favicon.ico|icon.svg|sw.js|offline.html|maplibre/).*)',
       missing: [
         { type: 'header', key: 'next-router-prefetch' },
         { type: 'header', key: 'purpose', value: 'prefetch' }

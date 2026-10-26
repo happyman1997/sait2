@@ -17,6 +17,7 @@ import { SkillInput } from '@/components/SkillInput';
 import { matchSkill, parseSkills } from '@/lib/skills';
 import { PasswordInput } from '@/components/PasswordInput';
 import { DocLinks } from '@/components/DocLinks';
+import { InstallBlock, useInstallVisible } from '@/components/AppInstall';
 import { useFlash } from '@/components/Toast';
 import { SELF_HOSTED_MAP } from '@/components/map/style';
 import { AdSlot } from './AdSlot';
@@ -95,6 +96,7 @@ export function ProfilePage() {
     url.searchParams.delete('linked'); url.searchParams.delete('oauth_error');
     window.history.replaceState(null, '', url);
   }, [flash]);
+  const installVisible = useInstallVisible();
 
   /** Сохранение части профиля; ответ — свежий профиль целиком. */
   const patch = async (body: Record<string, unknown>, ok?: string, key = 'patch') => {
@@ -147,6 +149,11 @@ export function ProfilePage() {
               <BaseForm label={p.user.baseLabel} set={p.user.baseSet} free={!isEmp} onDone={load} />
             </Section>
             {p.oauth && (p.oauth.providers.length > 0 || p.oauth.linked.length > 0) && <Services oauth={p.oauth} onChange={load} />}
+            {installVisible && (
+              <Section title="Приложение на телефон" note="Иконка на экране, открывается без браузера, уведомления — как в приложении.">
+                <InstallBlock />
+              </Section>
+            )}
 
             {isEmp ? <Organization p={p} patch={patch} busy={busy} fieldErr={fieldErr} /> : (
               <>

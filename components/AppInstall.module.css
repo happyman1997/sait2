@@ -1,0 +1,25 @@
+.card {
+  position: relative;
+  margin-bottom: 18px;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--color-divider);
+  background: var(--color-surface);
+}
+.title { font-weight: 700; font-size: 15px; margin-bottom: 4px; padding-right: 36px; }
+.text { font-size: 14px; line-height: 1.4; color: color-mix(in srgb, var(--color-text) 72%, transparent); margin-bottom: 10px; }
+.close {
+  position: absolute; top: 4px; right: 4px;
+  width: 44px; height: 44px; border: 0; background: none; color: inherit;
+  font-size: 22px; line-height: 1; cursor: pointer; opacity: .6;
+}
+.cta { min-height: 40px; }
+.steps { margin: 4px 0 0; padding-left: 22px; font-size: 14px; line-height: 1.5; }
+.steps li + li { margin-top: 4px; }
+.icon { vertical-align: -3px; color: var(--color-accent-900); }
+.note { margin-top: 10px; font-size: 13px; line-height: 1.4; color: color-mix(in srgb, var(--color-text) 66%, transparent); }
+.done { font-size: 14px; }
+
+@media (max-width: 719.98px) {
+  .card { border-radius: 14px; }
+  .cta { min-height: 44px; }
+}

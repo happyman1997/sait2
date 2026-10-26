@@ -1,6 +1,31 @@
-// Service Worker «Арены Работ»: только веб-пуш (без кэширования страниц).
-self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+// Service Worker «Арены Работ»: веб-пуш и страница «Нет интернета» вместо ошибки браузера, когда сайт открыт
+// как приложение (или вкладкой) без связи. Страницы и данные не кэшируются: всё всегда свежее с сервера.
+const CACHE = 'arena-offline-1';
+const OFFLINE = '/offline.html';
+
+self.addEventListener('install', (e) => e.waitUntil(
+  // Без страницы «Нет интернета» воркер всё равно ставится — пуш важнее.
+  caches.open(CACHE).then((c) => c.add(new Request(OFFLINE, { cache: 'reload' }))).catch(() => {}).then(() => self.skipWaiting())
+));
+
+self.addEventListener('activate', (e) => e.waitUntil((async () => {
+  for (const k of await caches.keys()) if (k !== CACHE) await caches.delete(k);
+  // Запрос страницы уходит сразу, не дожидаясь запуска воркера.
+  if (self.registration.navigationPreload) await self.registration.navigationPreload.enable();
+  await self.clients.claim();
+})()));
+
+// Только переходы по страницам (GET): ответ сервера как есть; нет сети — страница «Нет интернета».
+self.addEventListener('fetch', (e) => {
+  if (e.request.mode !== 'navigate' || e.request.method !== 'GET') return;
+  e.respondWith((async () => {
+    try {
+      return (await e.preloadResponse) || (await fetch(e.request));
+    } catch (_) {
+      return (await caches.match(OFFLINE)) || Response.error();
+    }
+  })());
+});
 
 self.addEventListener('push', (e) => {
   let m = { title: 'Арена Работ', body: '', url: '/' };

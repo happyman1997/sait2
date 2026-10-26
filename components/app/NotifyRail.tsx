@@ -8,6 +8,7 @@ import { css } from '@/lib/css';
 import { kmLabel, localISO, money, plural, type JobSummary } from '@/lib/jobs';
 import { disablePush, enablePush, pushState, type PushState } from '@/lib/push-client';
 import { useFlash } from '@/components/Toast';
+import { useInstall } from '@/components/AppInstall';
 import { BaseForm } from './BaseForm';
 import { useLive, useLiveEvent } from './Live';
 import { Corners, LABEL } from './ui';
@@ -50,6 +51,8 @@ export function NotifyRail() {
   const [busy, setBusy] = useState(false);
   const [emailVerified, setEmailVerified] = useState(true);
   const [push, setPush] = useState<PushState | null>(null);
+  // iPhone: пуш есть только у сайта, установленного на экран «Домой», — в Safari браузер его не даёт.
+  const iosTab = useInstall().mode === 'ios';
   const isFree = me?.role === 'freelancer';
 
   const loadEvents = useCallback(async () => {
@@ -192,6 +195,11 @@ export function NotifyRail() {
                     ))}
                   </div>
 
+                  {s.push && push === 'unsupported' && iosTab && (
+                    <div className={sty.c9e6b1c6}>
+                      <span style={css(NOTE)}>На iPhone пуш приходит только в установленном приложении: в Safari «Поделиться» → «На экран „Домой“», затем откройте его с экрана и включите пуш здесь.</span>
+                    </div>
+                  )}
                   {s.push && push && push !== 'unsupported' && (
                     <div className={sty.c9e6b1c6}>
                       {push === 'on' && <span className="tag tag-accent">пуш на этом устройстве включён</span>}

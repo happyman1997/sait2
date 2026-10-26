@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-OyHIFQhOVzWRIdt81thQHT44IjYjRzF3Syqq5kKyFdg='">
+<meta name="theme-color" content="#22282e">
+<meta name="robots" content="noindex">
+<title>Нет интернета — Арена Работ</title>
+<!-- Показывает Service Worker (public/sw.js), когда страница не открылась без связи. Без внешних файлов: их нечем загрузить.
+     Скрипт разрешён по хешу в CSP выше — после правки скрипта хеш нужно пересчитать. -->
+<style>
+  html, body { height: 100%; margin: 0; }
+  body { display: flex; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box;
+    background: #22282e; color: #fff; font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; text-align: center; }
+  main { max-width: 340px; }
+  h1 { font-size: 22px; margin: 20px 0 8px; font-weight: 600; }
+  p { margin: 0 0 24px; color: rgba(255, 255, 255, .75); }
+  button { font: inherit; font-weight: 600; min-height: 48px; padding: 0 28px; border: 0; border-radius: 12px; background: #fff; color: #22282e; cursor: pointer; }
+</style>
+</head>
+<body>
+<main>
+<svg width="72" height="72" aria-hidden="true" viewBox="80 140 691 570"><path fill="#fff" d="M767.69,669.45l-231.48-511.86c-4.59-10.15-14.69-16.67-25.83-16.67h-169.62c-11.12,0-21.22,6.51-25.81,16.63l-232.23,511.86c-8.51,18.77,5.21,40.06,25.81,40.06h81.36l10.04-21.01c9.94-20.79,26-36.81,45.92-48.09l33.25-15.79,15.6-39.39c1-2.53,3.77-4.42,6.59-4.43l20.92-.12,6.49-22.3c-9.18-20.16-12.08-41.91-8.81-63.96l203.56,13.8c2.87,6.73-1.83,13.43-2.9,19.37l8.31,38.22c.62,2.86.49,5.37-1.4,7.62-1.25,1.5-3.81,2.94-7,3.04l-13.03.43-5.26,15.01c-1.85,5.28-5.05,9.67-6.33,15.4-2.27,10.15-9.25,17.93-18.84,20.6,4.82,4.19,11.52,6.21,14.14,11.53,2.93,5.95,1.98,13.12,3.69,19.58l61.59,25.22,27.5,12.57c5.88,3.68,11.71,7.69,16.44,12.7h141.5c20.59,0,34.31-21.26,25.83-40.03ZM576.13,482.7c-.3,2.44-1.98,5.87-6.08,5.6l-228.75-15.01-50.62-3.18c-2.87-.18-4.85-2.63-4.74-5.49.34-8.69,5.99-15.42,14.03-18.18l8.33-2.86c7.05-41.35,29.67-77.59,67.93-95.77,45.66-21.69,99.94-13.49,137.09,20.56,26.64,24.42,34.62,56.55,36.8,92.26l20.49,10.43c4.26,2.17,6.14,6.52,5.52,11.64Z"/></svg>
+<h1>Нет подключения к интернету</h1>
+<p>Проверьте мобильную связь или Wi-Fi. Страница откроется сама, как только связь появится.</p>
+<button type="button" id="r">Попробовать снова</button>
+</main>
+<script>addEventListener('online',function(){location.reload()});document.getElementById('r').onclick=function(){location.reload()};</script>
+</body>
+</html>

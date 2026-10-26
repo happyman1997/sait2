@@ -24,6 +24,7 @@ import { useLive, useLiveEvent } from './Live';
 import { NAV_H } from './MobileShell';
 import { ObjectCardPanel, ObjectsList, type ObjectCard, type OrderDefaults } from './ObjectsBlock';
 import { ActionBox } from './ActionBox';
+import { InstallCard } from '@/components/AppInstall';
 import { GuestGuide, StartSteps, WorkLinks } from './RailSummary';
 import { DocLinks } from '@/components/DocLinks';
 import { Corners, LABEL } from './ui';
@@ -746,6 +747,7 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
           {!form && !selected && !objEdit && (!me ? <GuestGuide /> : (
             <>
               <ActionBox />
+              <InstallCard />
               <StartSteps isEmp={isEmp} addr={isEmp ? {
                 query: addrQuery, setQuery: v => { setAddrQuery(v); setAddrError(''); setAddrManual(false); }, busy: addrBusy,
                 note: addrError || 'Найденный адрес станет черновиком заказа. Можно просто нажать на карту.', error: !!addrError, onFind: findAddress
