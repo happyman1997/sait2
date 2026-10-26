@@ -6,9 +6,11 @@ import { dateLabel, jobNum, jobStatus, kmLabel, money, shortTitle, type JobSumma
 import { AdSlot } from './AdSlot';
 import sty from './JobListOverlay.module.css';
 
-export function JobListOverlay({ jobs, q, setQ, onClose, onOpen, onHover, role }: {
+export function JobListOverlay({ jobs, q, setQ, onClose, onOpen, onHover, role, filtered }: {
   jobs: JobSummary[]; q: string; setQ: (q: string) => void; onClose: () => void; onOpen: (num: number) => void;
   onHover: (num: number | null) => void; role: 'freelancer' | 'employer' | null;
+  /** Включён хоть один фильтр из панели — пустой список объясняем им, а не отсутствием заказов. */
+  filtered: boolean;
 }) {
   return (
     <div style={{ display: 'contents' }}>
@@ -48,7 +50,10 @@ export function JobListOverlay({ jobs, q, setQ, onClose, onOpen, onHover, role }
         </div>
         {!jobs.length && (
           <div className={sty.c9c9e240}>
-            Под фильтр ничего не попало — снимите «сегодня и завтра», порог оплаты или расстояние в панели фильтров сверху.
+            {q.trim() ? 'По этому запросу ничего не нашлось — попробуйте другое слово или нажмите «Сброс».'
+              : filtered ? 'Под фильтр ничего не попало — уберите лишние условия в «Фильтрах»: вид работы, оплату, расстояние или «сегодня и завтра».'
+                : role === 'employer' ? 'Заказов пока нет — закройте список и нажмите на карту, чтобы опубликовать первый.'
+                  : 'Открытых заказов пока нет — загляните позже.'}
           </div>
         )}
       </div>

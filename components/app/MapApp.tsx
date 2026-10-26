@@ -698,7 +698,7 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
 
       <div style={css(shellStyle)}>
         {listOpen && (
-          <JobListOverlay jobs={jobs} q={filters.q} setQ={q => setFiltersState(f => ({ ...f, q }))} role={role}
+          <JobListOverlay jobs={jobs} q={filters.q} setQ={q => setFiltersState(f => ({ ...f, q }))} role={role} filtered={nFilters > 0}
             onClose={() => setListOpen(false)} onOpen={n => { select(n); setListOpen(false); }} onHover={setHover} />
         )}
 
