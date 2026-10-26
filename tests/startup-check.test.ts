@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { productionProblems } from '@/server/startup-check';
+import { processors } from '@/server/operator';
 
 const full = {
   OPERATOR_NAME: 'Петров Пётр Петрович', OPERATOR_OGRNIP: '300000000000000', OPERATOR_INN: '770000000000',
@@ -34,5 +35,25 @@ describe('проверка настроек перед запуском', () => 
     expect(productionProblems({ ...full, YANDEX_CLIENT_ID: 'abc' })[0]).toMatch(/^YANDEX_CLIENT_SECRET/);
     expect(productionProblems({ ...full, YANDEX_CLIENT_SECRET: 'def' })[0]).toMatch(/^YANDEX_CLIENT_ID/);
     expect(productionProblems({ ...full, VK_CLIENT_ID: 'app-1' })[0]).toMatch(/^VK_CLIENT_ID/);
+  });
+
+  it('обработчики в политике: «ИНН» дописывается, кавычки — ёлочки, защита у хостинга — одной строкой', () => {
+    const keep = { ...process.env };
+    try {
+      Object.assign(process.env, {
+        PROCESSOR_HOSTING: 'ООО «РЕГ.РУ», ИНН 7733568767', PROCESSOR_PROTECTION: 'ООО "РЕГ.РУ" 7733568767',
+        PROCESSOR_MAIL: 'Яндекс 360 для Бизнеса, 9704259180', DADATA_API_KEY: 'k', PROCESSOR_GEO: 'ООО "Дейта Кью", ИНН 7721581040'
+      });
+      expect(processors()).toEqual([
+        ['хостинг и защита от DDoS-атак', 'ООО «РЕГ.РУ», ИНН 7733568767'],
+        ['почта', 'Яндекс 360 для Бизнеса, ИНН 9704259180'],
+        ['поиск адреса', 'ООО «Дейта Кью», ИНН 7721581040']
+      ]);
+      process.env.PROCESSOR_PROTECTION = 'ООО «Защита», ИНН 7700000009';
+      expect(processors()[1]).toEqual(['защита от DDoS-атак', 'ООО «Защита», ИНН 7700000009']);
+    } finally {
+      for (const k of Object.keys(process.env)) if (!(k in keep)) delete process.env[k];
+      Object.assign(process.env, keep);
+    }
   });
 });
