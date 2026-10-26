@@ -81,50 +81,76 @@ export function InstallSteps({ mode }: { mode: 'ios' | 'android' }) {
   );
 }
 
+type Phone = 'android' | 'ios';
+const detected = (mode: InstallMode): Phone | null => (mode === 'ios' ? 'ios' : mode === 'android' || mode === 'prompt' ? 'android' : null);
+const COARSE = '(pointer: coarse)';
+const useTouch = () => useSyncExternalStore(() => () => {}, () => window.matchMedia(COARSE).matches, () => false);
+
+/**
+ * Выбор телефона — «Android» или «iPhone» — и как установить на нём. Свой телефон подсвечен (если узнали), другой —
+ * одним нажатием. На Android с кнопкой браузера — сразу «Установить приложение», шаги через меню — запасной путь.
+ */
+function InstallChooser({ preselect, note }: { preselect: boolean; note?: boolean }) {
+  const { mode, install } = useInstall();
+  const touch = useTouch();
+  const [pick, setPick] = useState<Phone | null>(null);
+  // На компьютере свой телефон не угадать — ждём выбора.
+  const phone = pick ?? (preselect && touch ? detected(mode) : null);
+  // Кнопка браузера на компьютере поставила бы приложение на компьютер — там только шаги для телефона.
+  const canPrompt = mode === 'prompt' && touch;
+  const choose = (p: Phone) => {
+    // Android с кнопкой браузера: выбор «Android» в карточке — сразу системное окно установки.
+    if (p === 'android' && canPrompt && !preselect) void install();
+    setPick(p);
+  };
+  return (
+    <div>
+      <div className={sty.pick} role="group" aria-label="Какой у вас телефон">
+        {(['android', 'ios'] as const).map(p => (
+          <button key={p} type="button" aria-pressed={phone === p} className={'btn ' + (phone === p ? 'btn-primary ' : 'btn-secondary ') + sty.pickBtn} onClick={() => choose(p)}>
+            {p === 'android' ? 'Android' : 'iPhone'}
+          </button>
+        ))}
+      </div>
+      {phone && !touch && <div className={sty.note}>Откройте {typeof window === 'undefined' ? 'сайт' : window.location.host} на телефоне и:</div>}
+      {phone === 'android' && canPrompt && (
+        <>
+          <button className={'btn btn-primary ' + sty.cta + ' ' + sty.install} onClick={() => { void install(); }}>Установить приложение</button>
+          <div className={sty.note}>Или вручную, через меню браузера:</div>
+        </>
+      )}
+      {phone && <InstallSteps mode={phone} />}
+      {phone === 'ios' && note && <div className={sty.note}>На iPhone уведомления приходят только в установленном приложении: откройте его с экрана «Домой» и включите пуш: «Настройки» вверху профиля → «Оповещения».</div>}
+    </div>
+  );
+}
+
 // Карточка на главной: один раз «×» — не показываем 60 дней (запоминается в браузере).
 const HIDE_KEY = 'arena.installHidden';
 const HIDE_DAYS = 60;
 const readHidden = () => { try { return Date.now() - Number(localStorage.getItem(HIDE_KEY) || 0) < HIDE_DAYS * 86400_000; } catch { return false; } };
 const onHide = (cb: () => void) => { window.addEventListener(EV, cb); return () => window.removeEventListener(EV, cb); };
-const COARSE = '(pointer: coarse)';
 
-/** Предложение установить на главной — вошедшим, на телефоне, где установка возможна. */
+/** Предложение установить на главной — вошедшим, на телефоне, пока не установлено: выбор Android / iPhone. */
 export function InstallCard() {
-  const { mode, install } = useInstall();
+  const { mode } = useInstall();
   const hidden = useSyncExternalStore(onHide, readHidden, () => true);
-  const touch = useSyncExternalStore(() => () => {}, () => window.matchMedia(COARSE).matches, () => false);
-  const [steps, setSteps] = useState(false);
-  if (hidden || !touch || (mode !== 'prompt' && mode !== 'ios')) return null;
+  const touch = useTouch();
+  if (hidden || !touch || mode === 'installed') return null;
   const hide = () => { try { localStorage.setItem(HIDE_KEY, String(Date.now())); } catch { /* приватный режим */ } changed(); };
   return (
     <section className={sty.card} aria-label="Приложение на телефон">
       <button className={sty.close} onClick={hide} aria-label="Скрыть">×</button>
       <div className={sty.title}>Приложение на телефон</div>
-      <div className={sty.text}>Иконка на экране, открывается без браузера, уведомления о сменах и откликах приходят как в приложении.</div>
-      {mode === 'prompt'
-        ? <button className={'btn btn-primary ' + sty.cta} onClick={() => { void install(); }}>Установить</button>
-        : steps ? <InstallSteps mode="ios" /> : <button className={'btn btn-primary ' + sty.cta} onClick={() => setSteps(true)}>Как установить</button>}
+      <div className={sty.text}>Иконка на экране, открывается без браузера, уведомления о сменах и откликах приходят как в приложении. Какой у вас телефон?</div>
+      <InstallChooser preselect={false} />
     </section>
   );
 }
 
-/** Раздел профиля: установить приложение (или как это сделать). На компьютере без кнопки браузера — ничего. */
+/** Раздел профиля: выбор Android / iPhone (свой — подсвечен) и как установить; в самом приложении — «установлено». */
 export function InstallBlock() {
-  const { mode, install } = useInstall();
+  const { mode } = useInstall();
   if (mode === 'installed') return <div className={sty.done}>Приложение установлено — вы сейчас в нём.</div>;
-  if (mode === 'prompt') return <button className={'btn btn-primary ' + sty.cta} onClick={() => { void install(); }}>Установить приложение</button>;
-  if (mode === 'ios' || mode === 'android') {
-    return (
-      <>
-        <InstallSteps mode={mode} />
-        {mode === 'ios' && <div className={sty.note}>На iPhone уведомления приходят только в установленном приложении: откройте его с экрана «Домой» и включите пуш: «Настройки» вверху профиля → «Оповещения».</div>}
-      </>
-    );
-  }
-  return null;
-}
-
-/** Есть что показать в разделе профиля (на компьютере без кнопки браузера — нечего). */
-export function useInstallVisible() {
-  return useInstall().mode !== 'none';
+  return <InstallChooser preselect note />;
 }

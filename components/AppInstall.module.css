@@ -23,3 +23,8 @@
   .card { border-radius: 14px; }
   .cta { min-height: 44px; }
 }
+
+.pick { display: flex; gap: 8px; }
+.pickBtn { flex: 1; min-height: 44px; }
+.install { margin-top: 12px; }
+.pick + .steps, .pick + .note { margin-top: 12px; }
