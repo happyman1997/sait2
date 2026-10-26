@@ -4,6 +4,7 @@
 import { useState, type KeyboardEvent } from 'react';
 import { KM_STEPS } from '@/lib/catalog';
 import { css } from '@/lib/css';
+import { rankTypes } from '@/lib/skills';
 import { Chip } from './ui';
 import sty from './FiltersPanel.module.css';
 
@@ -21,24 +22,6 @@ const SCALE = 'display: flex; justify-content: space-between; font-size: 12px; c
 export function FiltersPanel({ filters, setFilters, types, found, baseLabel, onClose }: {
   filters: Filters; setFilters: (f: Filters) => void; types: JobTypeRow[]; found: number | string; baseLabel: string; onClose: () => void;
 }) {
-  const [typeQuery, setTypeQuery] = useState('');
-  const [typeOpen, setTypeOpen] = useState(false);
-  const q = typeQuery.trim().toLowerCase();
-  const typeOf = (id: string) => types.find(t => t.id === id);
-
-  const suggest = types
-    .filter(t => !filters.types.includes(t.id) && (!q || t.label.toLowerCase().includes(q)))
-    .sort((a, b) => (q ? (a.label.toLowerCase().indexOf(q) === 0 ? 0 : 1) - (b.label.toLowerCase().indexOf(q) === 0 ? 0 : 1) : 0) || b.count - a.count)
-    .slice(0, 10);
-
-  const pick = (id: string) => { setFilters({ ...filters, types: filters.types.includes(id) ? filters.types : filters.types.concat(id) }); setTypeQuery(''); };
-  const typeKey = (e: KeyboardEvent<HTMLInputElement>) => {
-    // Enter — выбрать первый вариант, Backspace в пустом поле — удалить последний выбранный.
-    if (e.key === 'Enter') { e.preventDefault(); if (suggest[0]) pick(suggest[0].id); }
-    else if (e.key === 'Backspace' && !typeQuery && filters.types.length) setFilters({ ...filters, types: filters.types.slice(0, -1) });
-    else if (e.key === 'Escape') setTypeOpen(false);
-  };
-
   const kmIndex = Math.max(0, KM_STEPS.indexOf(filters.km || 0));
   const has = filtersCount(filters) > 0;
 
@@ -55,43 +38,7 @@ export function FiltersPanel({ filters, setFilters, types, found, baseLabel, onC
 
         <div style={css(SEC + '; gap: 8px')}>
           <div className={sty.cd286696}><span style={css(SEC_LABEL)}>Тип работы</span><span style={{ flex: 1 }} /><span style={css(SEC_VALUE)}>{filters.types.length ? filters.types.length + ' выбрано' : 'любой'}</span></div>
-          <div style={{ position: 'relative' }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={sty.c251ed59}><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-            <input className={'input ' + sty.cd66c52e} value={typeQuery} onChange={e => { setTypeQuery(e.target.value); setTypeOpen(true); }} onFocus={() => setTypeOpen(true)} onBlur={() => setTypeOpen(false)} onKeyDown={typeKey}
-              autoComplete="off" aria-label="Тип работы" placeholder="Начните вводить: снег, газон…" />
-          </div>
-          {typeOpen && (
-            <div role="listbox" className={sty.c0fa607f}>
-              {suggest.map(t => {
-                const i = q ? t.label.toLowerCase().indexOf(q) : -1;
-                return (
-                  <button key={t.id} role="option" aria-selected={false} onMouseDown={e => { e.preventDefault(); pick(t.id); }}
-                    className={sty.c043f9fd}>
-                    <span className={sty.c51bfbf5}>
-                      {i >= 0 ? <>{t.label.slice(0, i)}<b className={sty.ce0dcfb9}>{t.label.slice(i, i + q.length)}</b>{t.label.slice(i + q.length)}</> : t.label}
-                      {t.custom ? ' · свой' : ''}
-                    </span>
-                    <span className={sty.ce33f94a}>{t.count ? t.count + ' зак.' : 'нет заказов'}</span>
-                  </button>
-                );
-              })}
-              {!suggest.length && (
-                <div className={sty.cd556c46}>
-                  {q ? 'Нет типа «' + typeQuery.trim() + '». Типы берутся из опубликованных заказов.' : 'Все типы уже выбраны.'}
-                </div>
-              )}
-            </div>
-          )}
-          {filters.types.length > 0 && (
-            <div className={sty.c2bf69bb}>
-              {filters.types.map(id => (
-                <span key={id} className={'tag tag-accent ' + sty.c687e3e0}>
-                  {typeOf(id)?.label || id}
-                  <button onClick={() => setFilters({ ...filters, types: filters.types.filter(x => x !== id) })} aria-label="Убрать" className={sty.c3846a47}>×</button>
-                </span>
-              ))}
-            </div>
-          )}
+          <TypeSearch types={types} value={filters.types} onChange={ids => setFilters({ ...filters, types: ids })} />
         </div>
 
         <div style={css(SEC)}>
@@ -127,6 +74,70 @@ export function FiltersPanel({ filters, setFilters, types, found, baseLabel, onC
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Поиск видов работ с подсказками: понимает, как работу называют («грузчик», «дворник»), и свои виды работодателей.
+ * Выбранные — метками с ×. Пустое поле в фокусе — самые частые виды по числу заказов. Общий для «Фильтров» и главной.
+ */
+export function TypeSearch({ types, value, onChange, placeholder = 'Начните вводить: снег, газон…', label = 'Тип работы' }: {
+  types: JobTypeRow[]; value: string[]; onChange: (ids: string[]) => void; placeholder?: string; label?: string;
+}) {
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const q = query.trim().toLowerCase();
+  const typeOf = (id: string) => types.find(t => t.id === id);
+  const suggest = rankTypes(types, query, value, 10);
+  // Выбрали — подсказки закрываем, чтобы была видна метка выбранного (и строка «найдено» на главной); ввод откроет снова.
+  const pick = (id: string) => { onChange(value.includes(id) ? value : value.concat(id)); setQuery(''); setOpen(false); };
+  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    // Enter — выбрать первый вариант, Backspace в пустом поле — удалить последний выбранный.
+    if (e.key === 'Enter') { e.preventDefault(); if (suggest[0]) pick(suggest[0].id); }
+    else if (e.key === 'Backspace' && !query && value.length) onChange(value.slice(0, -1));
+    else if (e.key === 'Escape') setOpen(false);
+  };
+  return (
+    <>
+      <div style={{ position: 'relative' }}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={sty.c251ed59}><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+        <input className={'input ' + sty.cd66c52e} value={query} onChange={e => { setQuery(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onClick={() => setOpen(true)} onBlur={() => setOpen(false)} onKeyDown={onKey}
+          autoComplete="off" aria-label={label} placeholder={placeholder} />
+      </div>
+      {open && (
+        <div role="listbox" className={sty.c0fa607f}>
+          {suggest.map(t => {
+            // Подсветка — если запрос есть в самом названии (по синониму «грузчик» название другое).
+            const i = q ? t.label.toLowerCase().indexOf(q) : -1;
+            return (
+              <button key={t.id} role="option" aria-selected={false} onMouseDown={e => { e.preventDefault(); pick(t.id); }}
+                className={sty.c043f9fd}>
+                <span className={sty.c51bfbf5}>
+                  {i >= 0 ? <>{t.label.slice(0, i)}<b className={sty.ce0dcfb9}>{t.label.slice(i, i + q.length)}</b>{t.label.slice(i + q.length)}</> : t.label}
+                  {t.custom ? ' · свой' : ''}
+                </span>
+                <span className={sty.ce33f94a}>{t.count ? t.count + ' зак.' : 'нет заказов'}</span>
+              </button>
+            );
+          })}
+          {!suggest.length && (
+            <div className={sty.cd556c46}>
+              {q ? 'Нет вида работ «' + query.trim() + '». Попробуйте сказать иначе: «снег», «грузчик», «покос».' : 'Все виды уже выбраны.'}
+            </div>
+          )}
+        </div>
+      )}
+      {value.length > 0 && (
+        <div className={sty.c2bf69bb}>
+          {value.map(id => (
+            <span key={id} className={'tag tag-accent ' + sty.c687e3e0}>
+              {typeOf(id)?.label || id}
+              <button onClick={() => onChange(value.filter(x => x !== id))} aria-label={'Убрать «' + (typeOf(id)?.label || id) + '»'} className={sty.c3846a47}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 

@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { useState, useSyncExternalStore, type KeyboardEvent } from 'react';
 import { css } from '@/lib/css';
-import { WORK_PAGES } from '@/lib/seo';
+import { TypeSearch, type JobTypeRow } from './FiltersPanel';
 import { Corners, LABEL } from './ui';
 import sty from './RailSummary.module.css';
 
@@ -73,13 +73,27 @@ export function GuestGuide() {
 }
 
 /** Гостю под картой: виды подработки ссылками на их страницы — и людям, и поисковикам путь к каталогу. */
-export function WorkLinks() {
+/**
+ * «Какая работа?» на главной: поиск по видам работ (и по тому, как их называют, и по своим видам работодателей)
+ * сразу фильтрует карту — раньше здесь был длинный список ссылок. Каталог по видам и городам — ссылкой ниже.
+ */
+export function WorkLinks({ types, value, onChange, found, onList }: {
+  types: JobTypeRow[]; value: string[]; onChange: (ids: string[]) => void; found: string; onList: () => void;
+}) {
   return (
-    <nav aria-label="Виды подработки" className={sty.workLinks}>
+    <section aria-label="Подработка по видам работ" className={sty.workLinks}>
       <div style={css(LABEL)}>Подработка по видам работ</div>
-      <p>{WORK_PAGES.map((w, i) => <span key={w.id}>{i > 0 && ' · '}<Link href={'/raboty/' + w.slug}>{w.label}</Link></span>)}</p>
+      <div className={sty.workSearch}>
+        <TypeSearch types={types} value={value} onChange={onChange} label="Какую работу ищете" placeholder="Какая работа? Например: снег, грузчик, покос" />
+      </div>
+      {value.length > 0 && (
+        <p className={sty.workFound}>
+          На карте — только {value.length > 1 ? 'эти виды' : 'этот вид'}: найдено {found}.{' '}
+          <button type="button" className={sty.workList} onClick={onList}>Показать списком</button>
+        </p>
+      )}
       <Link href="/raboty" className={sty.workAll}>Все виды работ и города →</Link>
-    </nav>
+    </section>
   );
 }
 

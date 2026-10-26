@@ -753,7 +753,9 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
               {isEmp && <ObjectsList objects={objects} onMark={fromObject} onEdit={o => { setObjEdit(o); mapRef.current?.flyTo(o.lat, o.lng, 14); }} />}
             </>
           ))}
-          {!me && !form && !selected && !objEdit && <WorkLinks />}
+          {!me && !form && !selected && !objEdit && (
+            <WorkLinks types={types} value={filters.types} onChange={ids => setFilters({ ...filters, types: ids })} found={foundText} onList={() => setListOpen(true)} />
+          )}
           {!form && !selected && !objEdit && <DocLinks style="margin-top: 22px" />}
         </div>
 

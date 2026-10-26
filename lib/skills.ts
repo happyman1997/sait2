@@ -67,6 +67,36 @@ export function searchSkills(query: string, exclude: string[] = [], limit = 6): 
 }
 
 /**
+ * Виды работ для поля поиска (фильтр карты, «Какая работа?» на главной): справочные — по названию и по тому, как
+ * работу называют («грузчик» → «Погрузка и разгрузка»), свои виды работодателей — по названию. Выше — совпавшие
+ * началом, при равенстве — где больше открытых заказов. Пустой запрос — самые частые по заказам.
+ */
+export function rankTypes<T extends { id: string; label: string; count?: number }>(types: T[], query: string, exclude: string[] = [], limit = 10): T[] {
+  const q = normSkill(query);
+  const pool = types.filter(t => !exclude.includes(t.id));
+  const byCount = (a: T, b: T) => (b.count || 0) - (a.count || 0);
+  if (!q) return pool.slice().sort(byCount).slice(0, limit);
+  const words = (x: string) => x.split(/[\s-]+/);
+  const known = new Map(NAMES.map(n => [n.id, n.names]));
+  const find = (s: string) => {
+    const tier = (names: string[]) => names[0].startsWith(s) ? 0
+      : names.some(x => x.startsWith(s)) ? 1
+      : names.some(x => words(x).some(w => w.startsWith(s))) ? 2
+      // Середина слова — с трёх букв: «рузк» найдёт «Погрузка», а одна-две буквы совпадали бы почти со всем.
+      : s.length >= 3 && names.some(x => x.includes(s)) ? 3 : -1;
+    return pool
+      .map(t => [tier(known.get(t.id) ?? [normSkill(t.label)]), t] as const)
+      .filter(([r]) => r >= 0)
+      .sort((a, b) => a[0] - b[0] || byCount(a[1], b[1]))
+      .map(([, t]) => t);
+  };
+  const hits = find(q);
+  // Не нашлось — без окончания: «дрова» найдёт «Колка дров», «бассейны» — «Чистка бассейна».
+  const stem = q.length >= 4 ? q.replace(/[аеиоуыэюяйь]+$/, '') : q;
+  return (hits.length || stem === q || stem.length < 3 ? hits : find(stem)).slice(0, limit);
+}
+
+/**
  * Вписанное через запятую — на виды работ и свои навыки: «грузчик, колка дров» → ['load'] и ['колка дров'].
  * Повторы и уже отмеченное пропускаются.
  */
