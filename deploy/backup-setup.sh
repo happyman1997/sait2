@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.." || exit 1
 ENV=.env.production
 [ "$(id -u)" = 0 ] || { echo "Запустите от root: sudo bash deploy/backup-setup.sh"; exit 1; }
 [ -f "$ENV" ] || { echo "Нет $ENV — сначала: bash deploy/setup.sh"; exit 1; }
-get() { grep -E "^$1=" "$ENV" | tail -1 | cut -d= -f2- || true; }
+get() { grep -aE "^$1=" "$ENV" | tail -1 | cut -d= -f2- || true; }
 # Замена строки KEY=… целиком (как в configure.sh); нет строки — добавляется в конец. Права файла сохраняются.
 set_kv() {
   local tmp; tmp=$(mktemp)

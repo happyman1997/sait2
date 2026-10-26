@@ -6,10 +6,13 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 ENV=.env.production
 [ -f "$ENV" ] || { echo "Нет $ENV — сначала: bash deploy/setup.sh"; exit 1; }
-DOMAIN=$(grep -E '^SERVER_NAME=' "$ENV" | tail -1 | cut -d= -f2- || true)
+DOMAIN=$(grep -aE '^SERVER_NAME=' "$ENV" | tail -1 | cut -d= -f2- || true)
 DOMAIN=${DOMAIN:-arenarabot.ru}
 
-get() { grep -E "^$1=" "$ENV" | tail -1 | cut -d= -f2- || true; }
+get() { grep -aE "^$1=" "$ENV" | tail -1 | cut -d= -f2- || true; }
+# Испорченные буквы: при наборе стёрли половину русской буквы или текст пришёл в другой кодировке — на сайте
+# это было бы «�» в оферте и политике, а grep пишет «binary file matches» вместо значения.
+broken() { command -v iconv >/dev/null && ! printf '%s' "$1" | iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1; }
 # Замена строки KEY=… целиком (значение — любой текст в одну строку); повторы строки убираются,
 # нет строки — добавляется в конец.
 set_kv() {
@@ -39,8 +42,13 @@ looks_cmd() { case "$1" in *'/opt/'*|*'.env'*|*'&&'*|*'grep '*|*'bash '*|*'sudo 
 ask() {
   local k=$1 q=$2 re=${3:-} bad=${4:-} deny=${5:-} cur v
   cur=$(get "$k")
+  if [ -n "$cur" ] && broken "$cur"; then
+    set_kv "$k" ''; cur=''
+    echo "  Здесь было записано с испорченными буквами — стёрто, введите заново."
+  fi
   while :; do
-    read -r -p "$q${cur:+ [$cur]}: " v || v=''
+    # -e: строка ввода со стрелками и стиранием по буквам (без него стирание русской буквы оставляло половину).
+    read -e -r -p "$q${cur:+ [$cur]}: " v || v=''
     v=$(trim "$v")
     if [ -z "$v" ]; then
       # Enter оставляет прежнее — но не то, что проверку не проходит (например, вставленную команду).
@@ -54,6 +62,7 @@ ask() {
     [ "$k" = OPERATOR_NAME ] && v=${v#ИП }
     if [[ "$v" == *'#'* || "$v" == *'$'* ]]; then echo "  Символы # и \$ нельзя — введите без них."; continue; fi
     if looks_cmd "$v"; then echo "  Похоже, сюда вставилась команда, а не ответ на вопрос. Введите ответ."; continue; fi
+    if broken "$v"; then echo "  Часть букв записалась с ошибкой. Введите ещё раз — или скопируйте текст из договора и вставьте."; continue; fi
     if [ -n "$re" ] && ! [[ "$v" =~ $re ]]; then echo "  $bad"; continue; fi
     if [ -n "$deny" ] && printf '%s' "$v" | LC_ALL=C grep -q "$deny"; then echo "  $bad"; continue; fi
     set_kv "$k" "$v"; return 0
@@ -85,7 +94,7 @@ echo "── Почта, с которой сайт отправляет пис�
 # Почта уже настроена — по умолчанию её ящик; иначе info@ (один платный ящик, support@ и privacy@ — его алиасы).
 cur_from=info@$DOMAIN
 [[ "$(get SMTP_URL)" == *ПАРОЛЬ* || -z "$(get SMTP_URL)" ]] || cur_from=$(get EMAIL_FROM | sed -n 's/.*<\(.*\)>.*/\1/p')
-read -r -p "Ящик [${cur_from:-info@$DOMAIN}]: " box || box=''
+read -e -r -p "Ящик [${cur_from:-info@$DOMAIN}]: " box || box=''
 box=$(trim "${box:-${cur_from:-info@$DOMAIN}}")
 if ! [[ "$box" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]]; then echo "  Это не адрес почты — запустите скрипт ещё раз."; exit 1; fi
 set_kv EMAIL_FROM "Арена Работ <$box>"
@@ -131,7 +140,9 @@ done
 echo
 echo "Сохранено. Сейчас в настройках (пароли не показываются):"
 for k in OPERATOR_NAME OPERATOR_OGRNIP OPERATOR_INN OPERATOR_ADDRESS OPERATOR_EMAIL OPERATOR_RKN_NUMBER PROCESSOR_HOSTING PROCESSOR_PROTECTION PROCESSOR_MAIL PROCESSOR_GEO EMAIL_FROM SUPPORT_EMAIL; do
-  printf '  %-18s %s\n' "$k" "$(get "$k")"
+  v=$(get "$k")
+  if broken "$v"; then v='испорченные буквы — запустите скрипт ещё раз'; fi
+  printf '  %-18s %s\n' "$k" "$v"
 done
 if [[ "$(get SMTP_URL)" == *ПАРОЛЬ* || -z "$(get SMTP_URL)" ]]; then echo "  SMTP_URL           НЕ ЗАДАН"; else echo "  SMTP_URL           задан"; fi
 if [ -n "$(get DADATA_API_KEY)" ]; then echo "  DADATA_API_KEY     задан"; else echo "  DADATA_API_KEY     не задан (поиск адреса выключен)"; fi

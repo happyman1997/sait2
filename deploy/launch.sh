@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 DIR=$(pwd)
 ENV=.env.production
 [ -f "$ENV" ] || { echo "Нет $ENV — сначала: bash deploy/setup.sh"; exit 1; }
-get() { grep -E "^$1=" "$ENV" | tail -1 | cut -d= -f2- || true; }
+get() { grep -aE "^$1=" "$ENV" | tail -1 | cut -d= -f2- || true; }
 dc() { docker compose -f docker-compose.prod.yml --env-file "$ENV" "$@"; }
 DOMAIN=$(get SERVER_NAME)
 MAIL=$(get OPERATOR_EMAIL)
@@ -26,6 +26,12 @@ for k in OPERATOR_NAME OPERATOR_ADDRESS OPERATOR_EMAIL PROCESSOR_HOSTING PROCESS
 done
 n=$(get OPERATOR_NAME)
 if [ -n "$n" ] && ! looks_cmd "$n" && printf '%s' "$n" | LC_ALL=C grep -q '[A-Za-z0-9/=]'; then miss+=("OPERATOR_NAME — ФИО русскими буквами, сейчас: «$n»"); fi
+# Испорченные буквы (стёрли половину русской буквы при наборе) — на сайте было бы «�» в оферте и политике.
+if command -v iconv >/dev/null; then
+  for k in OPERATOR_NAME OPERATOR_ADDRESS OPERATOR_RKN_NUMBER PROCESSOR_HOSTING PROCESSOR_PROTECTION PROCESSOR_MAIL PROCESSOR_STORAGE PROCESSOR_GEO EMAIL_FROM; do
+    printf '%s' "$(get "$k")" | iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1 || miss+=("$k — испорченные буквы, введите заново")
+  done
+fi
 if [ ${#miss[@]} -gt 0 ]; then
   echo "Не заполнено или заполнено неверно в $ENV:"; printf '  - %s\n' "${miss[@]}"
   echo "Заполните: bash $DIR/deploy/configure.sh — и запустите этот скрипт снова."; exit 1

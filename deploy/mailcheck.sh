@@ -6,7 +6,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 ENV=.env.production
 [ -f "$ENV" ] || { echo "Нет $ENV — сначала: bash deploy/setup.sh"; exit 1; }
-get() { grep -E "^$1=" "$ENV" | tail -1 | cut -d= -f2- || true; }
+get() { grep -aE "^$1=" "$ENV" | tail -1 | cut -d= -f2- || true; }
 dc() { docker compose -f docker-compose.prod.yml --env-file "$ENV" "$@"; }
 
 to="${1:-}"
