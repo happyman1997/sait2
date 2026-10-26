@@ -72,11 +72,14 @@ case "$(get OPERATOR_NAME)" in 'ИП '*) set_kv OPERATOR_NAME "$(get OPERATOR_NA
 [ "$(get OPERATOR_NAME)" = "Иванов Иван Иванович" ] && echo "  ВНИМАНИЕ: осталось имя из примера — запустите скрипт ещё раз и впишите своё."
 ask OPERATOR_OGRNIP  "ОГРНИП (15 цифр)" '^[0-9]{15}$' "ОГРНИП — ровно 15 цифр, без пробелов."
 ask OPERATOR_INN     "ИНН (12 цифр)" '^[0-9]{12}$' "ИНН физлица и ИП — ровно 12 цифр, без пробелов."
+ask OPERATOR_RKN_NUMBER "Номер в реестре операторов персональных данных Роскомнадзора, если уже есть (pd.rkn.gov.ru; Enter — пропустить)" '^[0-9][0-9-]{5,20}$' "Номер из реестра — цифры и дефисы, например 77-26-012345."
 ask OPERATOR_ADDRESS "Почтовый адрес с индексом, например «101000, Москва, а/я 123» — ВИДЕН ВСЕМ на сайте" '(^|[^0-9])[0-9]{6}([^0-9]|$).*[^0-9 ,.]' "Нужен полный почтовый адрес: индекс из 6 цифр, город, улица и дом (или а/я). Пример: 101000, Москва, а/я 123"
 echo
 echo "── Кто хранит и передаёт данные по вашему поручению (из их договоров-оферт)"
 ask PROCESSOR_HOSTING "Хостинг: название и ИНН (ООО «Хостинг», ИНН 7700000000)" '[0-9]{10}' "Нужны название и ИНН из 10 цифр."
 ask PROCESSOR_MAIL    "Почтовый сервис: название и ИНН (из оферты Яндекс 360)" '[0-9]{10}' "Нужны название и ИНН из 10 цифр."
+# Защита от DDoS-атак: если весь трафик идёт через неё (например, DDoS-Guard), она тоже обрабатывает данные посетителей.
+ask PROCESSOR_PROTECTION "Защита от DDoS-атак, если подключали отдельно от хостинга: название и ИНН из договора (Enter — пропустить)" '[0-9]{10}' "Нужны название и ИНН из 10 цифр."
 echo
 echo "── Почта, с которой сайт отправляет письма с кодами"
 # Почта уже настроена — по умолчанию её ящик; иначе info@ (один платный ящик, support@ и privacy@ — его алиасы).
@@ -122,10 +125,12 @@ while :; do
 done
 [ -n "$key" ] && set_kv DADATA_API_KEY "$key"
 [ -n "$(get DADATA_API_KEY)" ] || echo "  Без ключа поиск адреса не работает: работодатели ставят метку кликом по карте. Ключ можно добавить позже — запустите этот скрипт ещё раз."
+# DaData получает адреса заказов — в политике она указана обработчиком.
+[ -n "$(get DADATA_API_KEY)" ] && ask PROCESSOR_GEO "DaData: название и ИНН из договора (dadata.ru → личный кабинет → «Договор»)" '[0-9]{10}' "Нужны название и ИНН из 10 цифр."
 
 echo
 echo "Сохранено. Сейчас в настройках (пароли не показываются):"
-for k in OPERATOR_NAME OPERATOR_OGRNIP OPERATOR_INN OPERATOR_ADDRESS OPERATOR_EMAIL PROCESSOR_HOSTING PROCESSOR_MAIL EMAIL_FROM SUPPORT_EMAIL; do
+for k in OPERATOR_NAME OPERATOR_OGRNIP OPERATOR_INN OPERATOR_ADDRESS OPERATOR_EMAIL OPERATOR_RKN_NUMBER PROCESSOR_HOSTING PROCESSOR_PROTECTION PROCESSOR_MAIL PROCESSOR_GEO EMAIL_FROM SUPPORT_EMAIL; do
   printf '  %-18s %s\n' "$k" "$(get "$k")"
 done
 if [[ "$(get SMTP_URL)" == *ПАРОЛЬ* || -z "$(get SMTP_URL)" ]]; then echo "  SMTP_URL           НЕ ЗАДАН"; else echo "  SMTP_URL           задан"; fi

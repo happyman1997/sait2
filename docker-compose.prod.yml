@@ -1,9 +1,19 @@
 # Продакшен: docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 # Подробно — DEPLOY.md.
+
+# Журналы контейнеров — не больше 3 файлов по 10 МБ на сервис, старые записи перезаписываются: без этого журнал
+# с IP-адресами и ошибками рос бы бесконечно (диск и политика ПДн: технические данные — ограниченного объёма).
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   db:
     image: postgres:16
     restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_USER: arena
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD}
@@ -24,6 +34,7 @@ services:
         # Карта — через свой nginx (/ofm/…, deploy/nginx.conf.template): браузер не ходит на зарубежные серверы.
         NEXT_PUBLIC_MAP_STYLE_URL: ${NEXT_PUBLIC_MAP_STYLE_URL:-/ofm/styles/liberty}
     restart: unless-stopped
+    logging: *logging
     env_file: .env.production
     environment:
       DATABASE_URL: postgres://arena:${POSTGRES_PASSWORD}@db:5432/arena
@@ -39,6 +50,7 @@ services:
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
+    logging: *logging
     ports:
       - "${HTTP_PORT:-80}:80"
       - "${HTTPS_PORT:-443}:443"

@@ -17,6 +17,10 @@ export function operator() {
     mail: v('PROCESSOR_MAIL', 'почтовый сервис, ИНН'),
     // Облачное хранилище — обработчик, если в нём фото (S3_BUCKET) или резервные копии (BACKUP_S3_BUCKET); иначе всё у хостинга.
     storage: usesCloudStorage() ? v('PROCESSOR_STORAGE', 'облачное хранилище, ИНН') : process.env.PROCESSOR_STORAGE?.trim() || '',
+    // Поиск адреса (DaData) — обработчик, когда он включён ключом; защита от DDoS-атак — если подключена отдельно от хостинга.
+    // Без PROCESSOR_GEO — название сервиса без реквизитов (не «[заглушка]» на сайте); точнее — deploy/configure.sh.
+    geocoder: process.env.DADATA_API_KEY?.trim() ? process.env.PROCESSOR_GEO?.trim() || 'DaData (dadata.ru)' : '',
+    protection: process.env.PROCESSOR_PROTECTION?.trim() || '',
     site: config.publicUrl().replace(/^https?:\/\//, '').replace(/\/$/, ''),
     edition: config.offerVersion
   };
@@ -24,10 +28,11 @@ export function operator() {
 
 export const usesCloudStorage = () => !!(config.s3Bucket() || process.env.BACKUP_S3_BUCKET?.trim());
 
-/** Обработчики по поручению оператора (хостинг, почта, облачное хранилище) — [название, кто] без пустых. */
+/** Обработчики по поручению оператора (хостинг, защита от атак, почта, хранилище, поиск адреса) — [название, кто] без пустых. */
 export function processors(): [string, string][] {
   const o = operator();
-  return ([['хостинг', o.hosting], ['почта', o.mail], ['облачное хранилище фото и резервных копий', o.storage]] as [string, string][]).filter(p => p[1]);
+  return ([['хостинг', o.hosting], ['защита от DDoS-атак', o.protection], ['почта', o.mail], ['облачное хранилище фото и резервных копий', o.storage],
+    ['поиск адреса', o.geocoder]] as [string, string][]).filter(p => p[1]);
 }
 
 /** «ИП Иванов Иван Иванович, ОГРНИП …, ИНН …» */

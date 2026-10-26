@@ -33,6 +33,8 @@ export async function runDueTasks(): Promise<{ skipped: boolean; autoAccepted: n
         `DELETE FROM events WHERE created_at < now() - interval '180 days'`,
         `DELETE FROM email_verifications WHERE expires_at < now() - interval '7 days'`,
         `DELETE FROM oauth_flows WHERE expires_at < now() - interval '1 day'`,
+        // Отметки в профиле действуют 90 дней (Правила) — истёкшие не храним (политика ПДн, раздел 3).
+        `DELETE FROM user_marks WHERE coalesce(until, created_at + interval '90 days') < now()`,
         // Срок хранения из политики ПДн: переписка, фото, споры и жалобы — 3 года после смены (общий срок исковой давности).
         // Файлы фото уходят следом, в sweepFiles. Бессрочная серия без конца — только когда закрыта.
         ...['messages', 'photos', 'disputes', 'complaints'].map(t =>

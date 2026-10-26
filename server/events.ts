@@ -5,6 +5,7 @@ import { pool, query, type Db } from './db';
 import { publishMany } from './live';
 import { getMailer } from './mail';
 import { deliverPush } from './push';
+import { jobNum } from '@/lib/jobs';
 
 export type EventRow = {
   userId: string | null | undefined;
@@ -38,14 +39,30 @@ export function inQuiet(hour: number, from: number, to: number) {
  * Лимит в сутки: уже отправленное за 24 ч + порядковый номер события в пачке; сверх лимита — «без доставки».
  * Тихие часы: отправка сдвигается на их конец (срочное — сразу, если пользователь разрешил).
  */
-async function enqueue(rows: { id: string; userId: string; text: string; num: number | null; urgent: boolean; path: string | null }[], db: Db) {
+/**
+ * Текст пуша — без имён и подробностей: пуш доставляет сервис производителя браузера (Google, Apple, Mozilla), за
+ * рубежом. Он зашифрован, но персональных данных в нём не держим (политика ПДн) — подробности на сайте по ссылке.
+ * Оповещения без чужих данных — новый заказ рядом, вызов, перенос даты, изменение условий — как есть.
+ */
+const PUSH_AS_IS = new Set(['nearby', 'job', 'move']);
+const PUSH_WHAT: Record<string, string> = {
+  application: 'Отклики', hire: 'Найм', withdrawal: 'Отказ от выхода', cancel: 'Отмена заказа', report: 'Работа сдана',
+  accept: 'Работа принята', settle: 'Отметка об оплате', dispute: 'Спор по расчёту', no_show: 'Отметка «не вышел»',
+  review: 'Новый отзыв', complaint: 'Жалоба', support: 'Поддержка'
+};
+export function pushText(kind: string, text: string, num: number | null): string {
+  if (PUSH_AS_IS.has(kind)) return text.slice(0, 300);
+  return (PUSH_WHAT[kind] || 'Новое уведомление') + (num ? ' · заказ № ' + jobNum(num) : '') + ' — откройте, чтобы посмотреть.';
+}
+
+async function enqueue(rows: { id: string; userId: string; kind: string; text: string; num: number | null; urgent: boolean; path: string | null }[], db: Db) {
   if (!rows.length) return;
   const { hour, minute } = localClock();
   const url = config.publicUrl();
   await query(
     `WITH ev AS (
        SELECT x.*, coalesce(x.path, '/?job=' || x.num) AS link
-         FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::bigint[], $5::bool[], $9::text[]) WITH ORDINALITY AS x(id, user_id, text, num, urgent, path, ord)
+         FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::bigint[], $5::bool[], $9::text[], $10::text[]) WITH ORDINALITY AS x(id, user_id, text, num, urgent, path, push, ord)
      ), s0 AS (
        SELECT ev.*, ns.email AND u.email_verified_at IS NOT NULL AS email, ns.daily_cap, u.email AS addr,
               ns.push AND EXISTS (SELECT 1 FROM push_subscriptions p WHERE p.user_id = ev.user_id) AS webpush,
@@ -72,8 +89,9 @@ async function enqueue(rows: { id: string; userId: string; text: string; num: nu
             text || CASE WHEN link IS NULL THEN '' ELSE E'\n' || $8 || link END || E'\n\nНастроить уведомления: ' || $8 || '/profile', at
        FROM ok WHERE email AND addr <> ''
      UNION ALL
-     SELECT user_id, id, 'push', 'push', coalesce(link, '/'), left(text, 300), at FROM ok WHERE webpush`,
-    [rows.map(r => r.id), rows.map(r => r.userId), rows.map(r => r.text), rows.map(r => r.num), rows.map(r => r.urgent), hour, minute, url, rows.map(r => r.path)], db);
+     SELECT user_id, id, 'push', 'push', coalesce(link, '/'), push, at FROM ok WHERE webpush`,
+    [rows.map(r => r.id), rows.map(r => r.userId), rows.map(r => r.text), rows.map(r => r.num), rows.map(r => r.urgent), hour, minute, url, rows.map(r => r.path),
+      rows.map(r => pushText(r.kind, r.text, r.num))], db);
 }
 
 /** Запись событий пачкой: журнал, живое уведомление, очередь доставки. Константное число запросов на любую пачку. */
@@ -87,7 +105,7 @@ export async function addEvents(rows: EventRow[], db: Db = pool()) {
        FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::text[], $5::uuid[], $6::bool[], $7::bool[]) AS x(id, u, k, t, j, g, s)`,
     [list.map(r => r.id), list.map(r => r.userId), list.map(r => r.kind), list.map(r => r.text), list.map(r => r.jobId ?? null), list.map(r => !!r.urgent), list.map(r => !!r.silent)], db);
   await publishMany(list.filter(r => !r.silent).map(r => ({ userIds: [r.userId], e: { t: 'event' as const, text: r.text, num: r.num ?? null } })), db);
-  await enqueue(list.filter(r => r.deliver).map(r => ({ id: r.id, userId: r.userId, text: r.text, num: r.num ?? null, urgent: !!r.urgent, path: r.path ?? null })), db);
+  await enqueue(list.filter(r => r.deliver).map(r => ({ id: r.id, userId: r.userId, kind: r.kind, text: r.text, num: r.num ?? null, urgent: !!r.urgent, path: r.path ?? null })), db);
 }
 
 /** Письмо в поддержку (жалобы). */

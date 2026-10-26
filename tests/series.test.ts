@@ -13,6 +13,7 @@ const { doneSql } = await import('@/server/stats');
 const { AppError } = await import('@/server/errors');
 const { seriesDates, seriesDayLabel } = await import('@/lib/jobs');
 const { localClock } = await import('@/server/events');
+const cron = await import('@/server/cron');
 
 type U = NonNullable<Parameters<typeof jobs.listJobs>[1]>;
 const MOSCOW = { lat: 55.7558, lng: 37.6173 };
@@ -95,6 +96,13 @@ describe('серия в заказе', () => {
     await sh.toggleSeriesDay(j.num, { day: plus(today, 4) }, fl);
     await sh.toggleSeriesDay(j.num, { day: plus(today, 5) }, fl);
     expect((await one<{ n: number }>(`SELECT count(*)::int AS n FROM user_marks WHERE user_id = $1 AND kind = 'late_withdrawal'`, [fl.id]))!.n).toBe(1);
+    // Через 90 дней пометка истекает и уборка её удаляет; один новый снятый день старый ряд не воскрешает.
+    await query(`UPDATE jobs SET series_len = 10 WHERE num = $1`, [j.num]);
+    await query(`UPDATE user_marks SET until = now() - interval '1 day' WHERE user_id = $1`, [fl.id]);
+    await cron.runDueTasks();
+    expect((await one<{ n: number }>(`SELECT count(*)::int AS n FROM user_marks WHERE user_id = $1`, [fl.id]))!.n).toBe(0);
+    await sh.toggleSeriesDay(j.num, { day: plus(today, 8) }, fl);
+    expect((await one<{ n: number }>(`SELECT count(*)::int AS n FROM user_marks WHERE user_id = $1`, [fl.id]))!.n).toBe(0);
   });
 
   it('продление: +4 выхода, нанятым — предложение; разовый и «по снегопаду» — без снятия дней', async () => {

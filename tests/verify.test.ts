@@ -214,4 +214,26 @@ describe('веб-пуш', () => {
     expect((await ev.processOutbox()).sent).toBe(0);
     push.setPushSender(null);
   });
+
+  it('пуш — без имён: отклик приходит работодателю как «Отклики · заказ № …», имя исполнителя — только на сайте', async () => {
+    const got: string[] = [];
+    push.setPushSender(async (_s, m) => { got.push(m.body); return true; });
+    await push.subscribePush(emp, sub(3));
+    await prof.saveSettings(emp, { email: false });
+    const j = await jobs.createJob(form(), emp, today);
+    await ev.processOutbox();
+    got.length = 0;
+    await jobs.applyToJob(j.num, { reqConfirmed: true }, fl, today);
+    await ev.processOutbox();
+    const name = (await one<{ name: string }>('SELECT name FROM users WHERE id = $1', [fl.id]))!.name;
+    expect(got.length).toBeGreaterThan(0);
+    for (const b of got) {
+      expect(b).toMatch(/^Отклики · заказ № .+ — откройте, чтобы посмотреть\.$/);
+      expect(b).not.toContain(name.split(' ')[0]);
+    }
+    // В журнале на сайте — с именем, как раньше.
+    const ev1 = await one<{ text: string }>(`SELECT text FROM events WHERE user_id = $1 AND kind = 'application' ORDER BY created_at DESC LIMIT 1`, [emp.id]);
+    expect(ev1!.text).toContain(name.split(' ')[0]);
+    push.setPushSender(null);
+  });
 });

@@ -16,17 +16,30 @@ limit_conn_status 429;
 # Браузер посетителя обращается только к нашему сайту; наружу уходит лишь адрес тайла — без IP, cookie и заголовков.
 proxy_cache_path /var/cache/nginx/map levels=1:2 keys_zone=map:20m max_size=5g inactive=90d use_temp_path=off;
 
+# Журнал запросов — без полного IP (последняя часть обнулена), без строки запроса (?q=… — что искали) и без
+# X-Forwarded-For: для разбора сбоев хватает, а персональных данных меньше (политика ПДн). Объём журнала ограничен
+# в docker-compose.prod.yml (logging), старые записи перезаписываются. Задаётся в каждом server — иначе nginx писал бы
+# ещё и стандартный журнал с полным IP.
+map $remote_addr $ip_anon {
+  ~^(?<a>\d+\.\d+\.\d+)\.\d+$ $a.0;
+  ~^(?<b>[0-9a-fA-F]*:[0-9a-fA-F]*:[0-9a-fA-F]*): $b::;
+  default -;
+}
+log_format anon '$ip_anon [$time_local] "$request_method $uri $server_protocol" $status $body_bytes_sent $request_time "$http_user_agent"';
+
 # Запросы на IP или чужое имя (сканеры, подмена Host) — без ответа; на 443 — даже без рукопожатия TLS.
 server {
   listen 80 default_server;
   listen 443 ssl default_server;
   ssl_reject_handshake on;
+  access_log off;
   return 444;
 }
 
 server {
   listen 80;
   server_name ${SERVER_NAME} www.${SERVER_NAME};
+  access_log off;
   # Продление сертификата Let's Encrypt (certbot renew --webroot).
   location /.well-known/acme-challenge/ { root /var/www/certbot; }
   location / { return 301 https://${SERVER_NAME}$request_uri; }
@@ -38,6 +51,7 @@ server {
   listen 443 ssl;
   http2 on;
   server_name www.${SERVER_NAME};
+  access_log off;
   ssl_certificate     /etc/letsencrypt/live/${SERVER_NAME}/fullchain.pem;
   ssl_certificate_key /etc/letsencrypt/live/${SERVER_NAME}/privkey.pem;
   return 301 https://${SERVER_NAME}$request_uri;
@@ -47,6 +61,7 @@ server {
   listen 443 ssl;
   http2 on;
   server_name ${SERVER_NAME};
+  access_log /var/log/nginx/access.log anon;
 
   ssl_certificate     /etc/letsencrypt/live/${SERVER_NAME}/fullchain.pem;
   ssl_certificate_key /etc/letsencrypt/live/${SERVER_NAME}/privkey.pem;

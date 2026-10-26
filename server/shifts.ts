@@ -863,11 +863,15 @@ export async function toggleSeriesDay(num: number, raw: unknown, viewer: Viewer)
         : name + ' снова выходит ' + seriesDayLabel(day) + ' · серия заказа № ' + jobNum(num)
     }], db);
     if (skipping) {
-      // Больше двух снятых дней подряд — пометка в профиле (один раз на серию).
+      // Этот день — третий (или дальше) в ряду снятых подряд — пометка в профиле, одна на серию, пока действует.
+      // Ряд считаем вокруг этого дня: истёкшую пометку уборка удаляет (90 дней), и один новый снятый день
+      // после неё не должен ставить пометку заново из-за старого ряда.
       const mine = new Set((await query<{ day: string }>(`SELECT to_char(day, 'YYYY-MM-DD') AS day FROM series_skips WHERE job_id = $1 AND freelancer_id = $2`, [j.id, u.id], db)).rows.map(x => x.day));
-      let run = 0, worst = 0;
-      for (const d of dates) { run = mine.has(d) ? run + 1 : 0; worst = Math.max(worst, run); }
-      if (worst >= 3 && !(await one(`SELECT 1 FROM user_marks WHERE user_id = $1 AND job_id = $2 AND kind = 'late_withdrawal'`, [u.id, j.id], db))) {
+      const i = dates.indexOf(day);
+      let from = i, to = i;
+      while (from > 0 && mine.has(dates[from - 1])) from--;
+      while (to < dates.length - 1 && mine.has(dates[to + 1])) to++;
+      if (to - from >= 2 && !(await one(`SELECT 1 FROM user_marks WHERE user_id = $1 AND job_id = $2 AND kind = 'late_withdrawal'`, [u.id, j.id], db))) {
         await query(`INSERT INTO user_marks (user_id, kind, reason, job_id, until) VALUES ($1, 'late_withdrawal', $2, $3, now() + make_interval(days => $4))`,
           [u.id, 'Три выхода серии подряд сняты · заказ № ' + jobNum(num), j.id, LATE_MARK_DAYS], db);
       }
