@@ -13,7 +13,8 @@ function keyBytes(b64: string) {
   return Uint8Array.from(s, c => c.charCodeAt(0));
 }
 
-async function registration() {
+/** Service Worker сайта (public/sw.js): уже зарегистрированный или новый. */
+export async function registration() {
   return (await navigator.serviceWorker.getRegistration('/')) ?? navigator.serviceWorker.register('/sw.js', { scope: '/' });
 }
 

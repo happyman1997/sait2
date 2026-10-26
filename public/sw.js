@@ -15,12 +15,19 @@ self.addEventListener('activate', (e) => e.waitUntil((async () => {
   await self.clients.claim();
 })()));
 
+// Страница «Нет интернета» не сохранилась при установке (не было связи) — сохраняем при следующем удачном переходе.
+const keepOffline = () => caches.open(CACHE)
+  .then(async (c) => { if (!(await c.match(OFFLINE))) await c.add(new Request(OFFLINE, { cache: 'reload' })); })
+  .catch(() => {});
+
 // Только переходы по страницам (GET): ответ сервера как есть; нет сети — страница «Нет интернета».
 self.addEventListener('fetch', (e) => {
   if (e.request.mode !== 'navigate' || e.request.method !== 'GET') return;
   e.respondWith((async () => {
     try {
-      return (await e.preloadResponse) || (await fetch(e.request));
+      const res = (await e.preloadResponse) || (await fetch(e.request));
+      e.waitUntil(keepOffline());
+      return res;
     } catch (_) {
       return (await caches.match(OFFLINE)) || Response.error();
     }
@@ -31,7 +38,7 @@ self.addEventListener('push', (e) => {
   let m = { title: 'Арена Работ', body: '', url: '/' };
   try { m = Object.assign(m, e.data ? e.data.json() : {}); } catch (_) { /* пустой или не JSON */ }
   e.waitUntil(self.registration.showNotification(m.title, {
-    body: m.body, icon: '/icon-192.png', badge: '/badge-96.png', tag: m.url, renotify: true, data: { url: m.url }
+    body: m.body, icon: '/icons/icon-192.png', badge: '/badge-96.png', tag: m.url, renotify: true, data: { url: m.url }
   }));
 });
 

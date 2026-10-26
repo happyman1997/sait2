@@ -357,8 +357,9 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
     setObjEdit(null);
     placeAt({ lat: o.lat, lng: o.lng }, { lat: o.lat, lng: o.lng, label: o.address, sub: '', district: '' });
     setFormState(f => (f ? {
-      // Встречающий объекта заменяет встречающего из профиля целиком: имя одного и телефон другого — не тот человек.
-      ...f, objectId: o.id, volume: o.area, access: o.access.slice(), tools: o.tools, ...(o.contact ? { meetName: o.contact, meetPhone: '' } : {}),
+      // Встречающий объекта — другой человек: его имя без чужого телефона (из профиля); тот же — телефон остаётся.
+      ...f, objectId: o.id, volume: o.area, access: o.access.slice(), tools: o.tools,
+      ...(o.contact ? { meetName: o.contact, meetPhone: o.contact.trim() === f.meetName.trim() ? f.meetPhone : '' } : {}),
       desc: f.desc || 'Объект «' + o.name + '»' + (o.area ? ', ' + o.area : '') + '.' + (o.contact ? ' На месте: ' + o.contact + '.' : '')
     } : f));
     mapRef.current?.flyTo(o.lat, o.lng, 14);

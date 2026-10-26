@@ -197,7 +197,7 @@ export function NotifyRail() {
 
                   {s.push && push === 'unsupported' && iosTab && (
                     <div className={sty.c9e6b1c6}>
-                      <span style={css(NOTE)}>На iPhone пуш приходит только в установленном приложении: в Safari «Поделиться» → «На экран „Домой“», затем откройте его с экрана и включите пуш здесь.</span>
+                      <span style={css(NOTE)}>На iPhone (iOS 16.4 и новее) пуш приходит только в установленном приложении: в Safari «Поделиться» → «На экран „Домой“», затем откройте его с экрана, войдите и включите пуш здесь.</span>
                     </div>
                   )}
                   {s.push && push && push !== 'unsupported' && (

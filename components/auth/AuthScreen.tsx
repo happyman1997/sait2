@@ -12,6 +12,7 @@ import { passwordProblem } from '@/lib/password-policy';
 import { contactsMessage, contactsMissing, EMAIL_RE, LOGIN_RE, validateProfile, type Role } from '@/lib/validation';
 import { showModeration } from '@/components/ModerationGuard';
 import { DocLinks } from '@/components/DocLinks';
+import { useIosApp } from '@/components/AppInstall';
 import { useFlash } from '@/components/Toast';
 import { useNarrow } from '@/components/useNarrow';
 import { CityInput } from '@/components/CityInput';
@@ -75,6 +76,8 @@ const OAUTH_LABEL: Record<OAuthProvider, string> = { yandex: 'Войти чер�
 
 /** «Войти через Яндекс ID / VK ID» — переход к сервису; вернёт в аккаунт или в анкету с готовыми данными. */
 function OAuthButtons({ providers, apply, lead, orEmail = true }: { providers: OAuthProvider[]; apply?: number; lead: string; orEmail?: boolean }) {
+  // Приложение на iPhone открывает сервис входа в отдельном окне, и вход может не вернуться в приложение.
+  const iosApp = useIosApp();
   if (!providers.length) return null;
   return (
     <div style={css('margin: 4px 0 18px')}>
@@ -85,6 +88,7 @@ function OAuthButtons({ providers, apply, lead, orEmail = true }: { providers: O
             style={css('height: 44px; display: grid; place-items: center; font-size: 14px; text-decoration: none')}>{OAUTH_LABEL[p]}</a>
         ))}
       </div>
+      {iosApp && <div style={css(HINT + '; margin-top: 8px')}>Если после входа через сервис вы не вернулись в приложение — войдите по почте.</div>}
       {orEmail && <div style={css(HINT + '; margin-top: 12px; text-align: center')}>или по почте</div>}
     </div>
   );

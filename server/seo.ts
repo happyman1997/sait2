@@ -82,7 +82,7 @@ export function siteLd() {
   const base = siteUrl();
   return [
     { '@context': 'https://schema.org', '@type': 'WebSite', name: SITE_NAME, url: base + '/', inLanguage: 'ru' },
-    { '@context': 'https://schema.org', '@type': 'Organization', name: SITE_NAME, url: base + '/', logo: base + '/icon-192.png' }
+    { '@context': 'https://schema.org', '@type': 'Organization', name: SITE_NAME, url: base + '/', logo: base + '/icons/icon-192.png' }
   ];
 }
 

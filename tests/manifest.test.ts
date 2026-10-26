@@ -22,6 +22,9 @@ describe('сайт как приложение', () => {
     const script = html.match(/<script>([\s\S]*?)<\/script>/)![1];
     const hash = crypto.createHash('sha256').update(script).digest('base64');
     expect(html).toContain(`script-src 'sha256-${hash}'`);
-    expect(fs.readFileSync(pub('sw.js'), 'utf8')).toContain("'/offline.html'");
+    const sw = fs.readFileSync(pub('sw.js'), 'utf8');
+    expect(sw).toContain("'/offline.html'");
+    // Значки уведомлений на месте.
+    for (const [, f] of sw.matchAll(/(?:icon|badge): '([^']+)'/g)) expect(fs.existsSync(pub(f))).toBe(true);
   });
 });

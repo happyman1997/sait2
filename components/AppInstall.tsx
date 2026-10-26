@@ -3,32 +3,40 @@
 // Сайт как приложение на телефоне (app/manifest.ts): регистрация Service Worker на каждой странице, кнопка
 // «Установить» там, где браузер её даёт (Android, Chrome), и шаги «На экран „Домой“» для iPhone — там кнопки нет.
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { INSTALL_EVENT } from '@/lib/install';
+import { INSTALL_EVENT, INSTALLED_KEY } from '@/lib/install';
+import { registration } from '@/lib/push-client';
 import sty from './AppInstall.module.css';
 
 type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }> };
-export type InstallMode = 'installed' | 'prompt' | 'ios' | 'android' | 'none';
+/** installed — открыто как приложение; has — приложение уже стоит на этом телефоне, а открыта вкладка браузера. */
+export type InstallMode = 'installed' | 'has' | 'prompt' | 'ios' | 'android' | 'none';
 
-const EV = INSTALL_EVENT;
-const changed = () => window.dispatchEvent(new Event(EV));
+const changed = () => window.dispatchEvent(new Event(INSTALL_EVENT));
 // «Можно установить» ловит скрипт в <head> (lib/install.ts) — здесь только читаем.
 type Win = { __arenaInstall?: InstallPrompt | null };
 const pending = () => (window as Win).__arenaInstall ?? null;
 
-/** В корневом layout: Service Worker (пуш, страница «Нет интернета»). */
+// Метка «установлено» живёт 30 дней с последнего запуска приложения: удалили приложение — со временем снова предложим.
+const INSTALLED_DAYS = 30;
+const STANDALONE = '(display-mode: standalone)';
+const standalone = () => window.matchMedia(STANDALONE).matches || !!(navigator as { standalone?: boolean }).standalone;
+const hasApp = () => { try { return Date.now() - Number(localStorage.getItem(INSTALLED_KEY) || 0) < INSTALLED_DAYS * 86400_000; } catch { return false; } };
+
+/** В корневом layout: Service Worker (пуш, страница «Нет интернета»); запуск приложения обновляет метку «установлено». */
 export function ServiceWorkerSetup() {
   useEffect(() => {
     if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
-      navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => { /* без воркера сайт работает, только без пуша */ });
+      registration().catch(() => { /* без воркера сайт работает, только без пуша */ });
     }
+    if (standalone()) { try { localStorage.setItem(INSTALLED_KEY, String(Date.now())); } catch { /* приватный режим */ } }
   }, []);
   return null;
 }
 
-const STANDALONE = '(display-mode: standalone)';
 function detect(): InstallMode {
-  if (window.matchMedia(STANDALONE).matches || (navigator as { standalone?: boolean }).standalone) return 'installed';
+  if (standalone()) return 'installed';
   if (pending()) return 'prompt';
+  if (hasApp()) return 'has';
   const ua = navigator.userAgent;
   // iPad с iPadOS представляется компьютером Mac — отличаем по сенсорному экрану.
   if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'ios';
@@ -37,22 +45,32 @@ function detect(): InstallMode {
 }
 const subscribe = (cb: () => void) => {
   const m = window.matchMedia(STANDALONE);
-  window.addEventListener(EV, cb); m.addEventListener('change', cb);
-  return () => { window.removeEventListener(EV, cb); m.removeEventListener('change', cb); };
+  window.addEventListener(INSTALL_EVENT, cb); m.addEventListener('change', cb);
+  return () => { window.removeEventListener(INSTALL_EVENT, cb); m.removeEventListener('change', cb); };
 };
 
 export function useInstall() {
   const mode = useSyncExternalStore(subscribe, detect, () => 'none' as InstallMode);
+  // Окно браузера показывается один раз на событие: после ответа (или отказа браузера) — только шаги через меню.
   const install = async () => {
     const e = pending();
     if (!e) return false;
-    (window as Win).__arenaInstall = null;
-    await e.prompt();
-    const { outcome } = await e.userChoice;
-    changed();
-    return outcome === 'accepted';
+    try {
+      await e.prompt();
+      return (await e.userChoice).outcome === 'accepted';
+    } catch {
+      return false;
+    } finally {
+      (window as Win).__arenaInstall = null;
+      changed();
+    }
   };
   return { mode, install };
+}
+
+/** iPhone, сайт открыт как приложение с экрана «Домой». */
+export function useIosApp() {
+  return useSyncExternalStore(() => () => {}, () => !!(navigator as { standalone?: boolean }).standalone, () => false);
 }
 
 // Значок «Поделиться» из Safari — по нему его и узнают.
@@ -66,9 +84,9 @@ const ShareIcon = () => (
 export function InstallSteps({ mode }: { mode: 'ios' | 'android' }) {
   return mode === 'ios' ? (
     <ol className={sty.steps}>
-      <li>Внизу экрана Safari нажмите <ShareIcon /> «Поделиться».</li>
-      <li>Выберите «На экран „Домой“» — пункт ниже в списке.</li>
-      <li>Нажмите «Добавить». Иконка «Арена Работ» появится на экране телефона.</li>
+      <li>Откройте сайт в Safari и нажмите <ShareIcon /> «Поделиться»: на iPhone — внизу экрана (в iOS 26 — сначала «⋯» рядом с адресом), на iPad — вверху.</li>
+      <li>Выберите «На экран „Домой“» — если не видно, пролистайте список ниже.</li>
+      <li>Нажмите «Добавить», откройте «Арена Работ» с экрана телефона и войдите: вход в приложении на iPhone — отдельный от Safari.</li>
     </ol>
   ) : (
     <ol className={sty.steps}>
@@ -109,7 +127,7 @@ function InstallChooser({ preselect, note }: { preselect: boolean; note?: boolea
           </button>
         ))}
       </div>
-      {phone && !touch && <div className={sty.note}>Откройте {typeof window === 'undefined' ? 'сайт' : window.location.host} на телефоне и:</div>}
+      {phone && !touch && <div className={sty.note}>Откройте {window.location.host} на телефоне и:</div>}
       {phone === 'android' && canPrompt && (
         <>
           <button className={'btn btn-primary ' + sty.cta + ' ' + sty.install} onClick={() => { void install(); }}>Установить приложение</button>
@@ -117,7 +135,7 @@ function InstallChooser({ preselect, note }: { preselect: boolean; note?: boolea
         </>
       )}
       {phone && <InstallSteps mode={phone} />}
-      {phone === 'ios' && note && <div className={sty.note}>На iPhone уведомления приходят только в установленном приложении: откройте его с экрана «Домой» и включите пуш: «Настройки» вверху профиля → «Оповещения».</div>}
+      {phone === 'ios' && note && <div className={sty.note}>На iPhone (iOS 16.4 и новее) уведомления приходят только в установленном приложении: откройте его с экрана «Домой» и включите пуш: «Настройки» вверху профиля → «Оповещения».</div>}
     </div>
   );
 }
@@ -126,14 +144,14 @@ function InstallChooser({ preselect, note }: { preselect: boolean; note?: boolea
 const HIDE_KEY = 'arena.installHidden';
 const HIDE_DAYS = 60;
 const readHidden = () => { try { return Date.now() - Number(localStorage.getItem(HIDE_KEY) || 0) < HIDE_DAYS * 86400_000; } catch { return false; } };
-const onHide = (cb: () => void) => { window.addEventListener(EV, cb); return () => window.removeEventListener(EV, cb); };
+const onHide = (cb: () => void) => { window.addEventListener(INSTALL_EVENT, cb); return () => window.removeEventListener(INSTALL_EVENT, cb); };
 
 /** Предложение установить на главной — вошедшим, на телефоне, пока не установлено: выбор Android / iPhone. */
 export function InstallCard() {
   const { mode } = useInstall();
   const hidden = useSyncExternalStore(onHide, readHidden, () => true);
   const touch = useTouch();
-  if (hidden || !touch || mode === 'installed') return null;
+  if (hidden || !touch || mode === 'installed' || mode === 'has') return null;
   const hide = () => { try { localStorage.setItem(HIDE_KEY, String(Date.now())); } catch { /* приватный режим */ } changed(); };
   return (
     <section className={sty.card} aria-label="Приложение на телефон">
@@ -149,5 +167,6 @@ export function InstallCard() {
 export function InstallBlock() {
   const { mode } = useInstall();
   if (mode === 'installed') return <div className={sty.done}>Приложение установлено — вы сейчас в нём.</div>;
+  if (mode === 'has') return <div className={sty.done}>Приложение уже установлено на этом телефоне — откройте «Арена Работ» с экрана.</div>;
   return <InstallChooser preselect note />;
 }
