@@ -41,7 +41,10 @@ describe('подписи и доступ', () => {
     expect(kmLabel(0.46)).toBe('0,5 км');
     expect(kmLabel(22.4)).toBe('22 км');
     expect(ratingLabel(4.75)).toBe('4,8');
-    expect(dayLabel('2026-10-25T09:30:00')).toBe('25 октября');
+    const y = new Date().getFullYear();
+    expect(dayLabel(y + '-10-25T09:30:00')).toBe('25 октября');
+    // Прошлогодняя дата — с годом: иначе отзыв годичной давности читается как свежий.
+    expect(dayLabel((y - 1) + '-10-25T09:30:00')).toBe('25 октября ' + (y - 1));
   });
 
   it('доступ до найма — только вид, без кодов и квартир', () => {

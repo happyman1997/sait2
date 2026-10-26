@@ -183,7 +183,8 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
   // сам текст ошибки — в закреплённой полосе над «Далее», его видно при любой прокрутке.
   useEffect(() => {
     if (!errTick) return;
-    const id = offerError ? 'su-offer' : FIELD_IDS[missFields[0]];
+    // Галочки оферты — только на шаге 4: вернулись назад — к полю этого шага.
+    const id = step === 4 && offerError ? 'su-offer' : FIELD_IDS[missFields[0]];
     if (id) document.getElementById(id)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }, [errTick]); // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -96,16 +96,21 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
   // От базы приходит не больше 500 ближайших; набралось столько (more) — карта догружает то, что в кадре (ниже).
   const [more, setMore] = useState(false);
   const [jobsRev, setJobsRev] = useState(0);
+  // Фильтры, с которыми пришла последняя выдача: по ним же спрашиваем, что в кадре (ниже), — один раз после выдачи,
+  // а не на каждую букву поиска.
+  const [jobsQs, setJobsQs] = useState('');
   // Ответы могут прийти не по порядку (быстрый ввод в поиске) — применяем только последний запрос.
   const loadSeq = useRef(0);
   const loadJobs = useCallback(async () => {
     const seq = ++loadSeq.current;
+    const q = qs(filters, null);
     try {
-      const r = await api<{ jobs: JobSummary[]; base: { lat: number; lng: number; label: string }; more?: boolean }>('/api/jobs?' + qs(filters, null));
+      const r = await api<{ jobs: JobSummary[]; base: { lat: number; lng: number; label: string }; more?: boolean }>('/api/jobs?' + q);
       if (seq !== loadSeq.current) return;
       setJobs(r.jobs);
       setBase(r.base);
       setMore(!!r.more);
+      setJobsQs(q);
       setJobsRev(v => v + 1);
       setLoaded(true);
     } catch (e) {
@@ -138,19 +143,20 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
     viewTimer.current = setTimeout(() => setView(o => (o && o.w === v.w && o.s === v.s && o.e === v.e && o.n === v.n && o.zoom === v.zoom ? o : v)), 350);
   }, []);
   useEffect(() => () => clearTimeout(viewTimer.current), []);
-  const areaKey = qs(filters, null).replace(/(^|&)today=[^&]*/, '');
+  const noToday = (q: string) => q.replace(/(^|&)today=[^&]*/, '');
+  const areaKey = noToday(qs(filters, null));
   const areaSeq = useRef(0);
   useEffect(() => {
-    if (!more || !view) return;
+    if (!more || !view || !jobsQs) return;
     const seq = ++areaSeq.current;
-    const p = new URLSearchParams(qs(filters, null));
+    const p = new URLSearchParams(jobsQs);
     (['w', 's', 'e', 'n'] as const).forEach(k => p.set(k, view[k].toFixed(5)));
     p.set('z', view.zoom.toFixed(2));
     api<{ jobs: JobSummary[]; cells: Area['cells'] }>('/api/jobs/area?' + p.toString())
-      .then(r => { if (seq === areaSeq.current) setArea({ key: areaKey, box: view, jobs: r.jobs, cells: r.cells }); })
+      .then(r => { if (seq === areaSeq.current) setArea({ key: noToday(jobsQs), box: view, jobs: r.jobs, cells: r.cells }); })
       .catch(() => { /* карта остаётся с выдачей от базы */ });
-    // jobsRev — выдача обновилась (новый или закрытый заказ): кадр перечитываем, прежний пока остаётся на карте.
-  }, [more, view, filters, areaKey, jobsRev]);
+    // jobsRev — выдача обновилась (новые фильтры, новый или закрытый заказ): кадр перечитываем, прежний пока на карте.
+  }, [more, view, jobsQs, jobsRev]);
   const areaNow = more && area?.key === areaKey ? area : null;
 
   // ─── Выбранный заказ ───
@@ -351,7 +357,8 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
     setObjEdit(null);
     placeAt({ lat: o.lat, lng: o.lng }, { lat: o.lat, lng: o.lng, label: o.address, sub: '', district: '' });
     setFormState(f => (f ? {
-      ...f, objectId: o.id, volume: o.area, access: o.access.slice(), tools: o.tools, meetName: o.contact,
+      // Встречающий объекта заменяет встречающего из профиля целиком: имя одного и телефон другого — не тот человек.
+      ...f, objectId: o.id, volume: o.area, access: o.access.slice(), tools: o.tools, ...(o.contact ? { meetName: o.contact, meetPhone: '' } : {}),
       desc: f.desc || 'Объект «' + o.name + '»' + (o.area ? ', ' + o.area : '') + '.' + (o.contact ? ' На месте: ' + o.contact + '.' : '')
     } : f));
     mapRef.current?.flyTo(o.lat, o.lng, 14);

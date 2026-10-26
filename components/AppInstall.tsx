@@ -3,27 +3,24 @@
 // Сайт как приложение на телефоне (app/manifest.ts): регистрация Service Worker на каждой странице, кнопка
 // «Установить» там, где браузер её даёт (Android, Chrome), и шаги «На экран „Домой“» для iPhone — там кнопки нет.
 import { useEffect, useState, useSyncExternalStore } from 'react';
+import { INSTALL_EVENT } from '@/lib/install';
 import sty from './AppInstall.module.css';
 
 type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }> };
 export type InstallMode = 'installed' | 'prompt' | 'ios' | 'android' | 'none';
 
-const EV = 'arena:install';
-// Событие браузера «можно установить» приходит один раз за загрузку страницы — держим его до нажатия кнопки.
-let deferred: InstallPrompt | null = null;
+const EV = INSTALL_EVENT;
 const changed = () => window.dispatchEvent(new Event(EV));
+// «Можно установить» ловит скрипт в <head> (lib/install.ts) — здесь только читаем.
+type Win = { __arenaInstall?: InstallPrompt | null };
+const pending = () => (window as Win).__arenaInstall ?? null;
 
-/** В корневом layout: Service Worker (пуш, страница «Нет интернета») и событие «можно установить». */
+/** В корневом layout: Service Worker (пуш, страница «Нет интернета»). */
 export function ServiceWorkerSetup() {
   useEffect(() => {
-    const onPrompt = (e: Event) => { deferred = e as InstallPrompt; changed(); };
-    const onInstalled = () => { deferred = null; changed(); };
-    window.addEventListener('beforeinstallprompt', onPrompt);
-    window.addEventListener('appinstalled', onInstalled);
     if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
       navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => { /* без воркера сайт работает, только без пуша */ });
     }
-    return () => { window.removeEventListener('beforeinstallprompt', onPrompt); window.removeEventListener('appinstalled', onInstalled); };
   }, []);
   return null;
 }
@@ -31,7 +28,7 @@ export function ServiceWorkerSetup() {
 const STANDALONE = '(display-mode: standalone)';
 function detect(): InstallMode {
   if (window.matchMedia(STANDALONE).matches || (navigator as { standalone?: boolean }).standalone) return 'installed';
-  if (deferred) return 'prompt';
+  if (pending()) return 'prompt';
   const ua = navigator.userAgent;
   // iPad с iPadOS представляется компьютером Mac — отличаем по сенсорному экрану.
   if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'ios';
@@ -47,9 +44,9 @@ const subscribe = (cb: () => void) => {
 export function useInstall() {
   const mode = useSyncExternalStore(subscribe, detect, () => 'none' as InstallMode);
   const install = async () => {
-    const e = deferred;
+    const e = pending();
     if (!e) return false;
-    deferred = null;
+    (window as Win).__arenaInstall = null;
     await e.prompt();
     const { outcome } = await e.userChoice;
     changed();

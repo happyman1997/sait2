@@ -377,9 +377,10 @@ export function dateLabel(iso: string): string {
   return parseInt(p[2], 10) + ' ' + (MONTHS_GEN[parseInt(p[1], 10) - 1] || '');
 }
 
-/** Дата события (ISO-время) по-человечески: «25 октября». */
+/** Дата события (ISO-время) по-человечески: «25 октября»; не этого года — с годом: «25 октября 2025». */
 export function dayLabel(at: string | Date): string {
-  return dateLabel(localISO(new Date(at)));
+  const iso = localISO(new Date(at));
+  return dateLabel(iso) + (iso.slice(0, 4) !== localISO().slice(0, 4) ? ' ' + iso.slice(0, 4) : '');
 }
 
 export function jobNum(n: number): string {

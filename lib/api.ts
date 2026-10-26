@@ -15,6 +15,11 @@ export class ApiError extends Error {
   get field() { return this.body.field; }
 }
 
+// Своё действие по заказу (найм, отказ, сдача, приёмка, отзыв…) меняет «Сейчас важно» и цифры на вкладках, а события
+// об этом сервер шлёт второй стороне, не самому действующему, — сообщаем Live.tsx, пусть перечитает. Чат и фото — не то.
+export const TODO_EVENT = 'arena:todo';
+const JOB_ACTION = /^\/api\/jobs\/\d+\/(?!chat|photos)/;
+
 /** JSON-запрос; FormData уходит как multipart (загрузка фото). DELETE без тела — передайте body = null. */
 export async function api<T = unknown>(url: string, body?: unknown, method: 'POST' | 'PATCH' | 'PUT' | 'DELETE' = 'POST'): Promise<T> {
   let res: Response;
@@ -34,5 +39,6 @@ export async function api<T = unknown>(url: string, body?: unknown, method: 'POS
   const data = isJson ? await res.json().catch(() => null) : null;
   if (!res.ok) throw new ApiError(res.status, data?.error || { message: 'Ошибка сервера — попробуйте ещё раз.' });
   if (data === null) throw new ApiError(res.status, { message: 'Сервер ответил неожиданно — обновите страницу и проверьте, сохранилось ли действие.' });
+  if (body !== undefined && JOB_ACTION.test(url) && typeof window !== 'undefined') window.dispatchEvent(new Event(TODO_EVENT));
   return data as T;
 }

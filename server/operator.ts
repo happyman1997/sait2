@@ -28,11 +28,12 @@ export function operator() {
 
 export const usesCloudStorage = () => !!(config.s3Bucket() || process.env.BACKUP_S3_BUCKET?.trim());
 
-const innOf = (s: string) => s.match(/(?<!\d)\d{10}(?!\d)/)?.[0] ?? '';
+// ИНН организации — 10 цифр, ИП — 12; не кусок длинного числа.
+const innOf = (s: string) => s.match(/(?<!\d)(?:\d{12}|\d{10})(?!\d)/)?.[0] ?? '';
 /** Как вписали в настройках → как показать: «ООО "Хостинг" 7700000000» → «ООО «Хостинг», ИНН 7700000000» (слово «ИНН» часто пропускают). */
 export function processorLine(s: string): string {
   const t = s.replace(/"([^"]+)"/g, '«$1»');
-  return /ИНН/i.test(t) ? t : t.replace(/,?\s*(\d{10})\s*$/, ', ИНН $1');
+  return /ИНН/i.test(t) ? t : t.replace(/,?\s*(?<!\d)(\d{12}|\d{10})\s*$/, ', ИНН $1');
 }
 
 /** Обработчики по поручению оператора (хостинг, защита от атак, почта, хранилище, поиск адреса) — [название, кто] без пустых. */

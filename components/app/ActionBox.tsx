@@ -19,7 +19,7 @@ export function ActionBox() {
   const items: Item[] = [
     ...todo.reported.map(j => ({ key: 'r' + j.num, text: 'Работа сдана · заказ № ' + jobNum(j.num) + ' «' + j.title + '»', href: '/shift?job=' + j.num, cta: 'Проверить и принять' })),
     ...(todo.apps > 0 ? [{ key: 'apps', text: todo.apps + ' ' + plural(todo.apps, 'отклик ждёт', 'отклика ждут', 'откликов ждут') + ' решения', href: '/apps', cta: 'Отклики' }] : []),
-    ...(todo.shift ? [{ key: 's', text: 'Смена ' + when(todo.shift.date) + ' · «' + todo.shift.title + '»', href: '/shift?job=' + todo.shift.num, cta: 'Экран смены' }] : []),
+    ...(todo.shift ? [{ key: 's', text: (todo.shift.date ? 'Смена ' + when(todo.shift.date) : 'Смена по вызову') + ' · «' + todo.shift.title + '»', href: '/shift?job=' + todo.shift.num, cta: 'Экран смены' }] : []),
     ...todo.reviews.map(j => ({ key: 'v' + j.num, text: 'Оцените ' + (me.role === 'employer' ? 'исполнителя' : 'работодателя') + ' · заказ № ' + jobNum(j.num), href: '/?job=' + j.num, cta: 'Оставить отзыв' }))
   ].slice(0, 3);
   if (!items.length) return null;

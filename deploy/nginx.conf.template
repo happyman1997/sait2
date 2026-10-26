@@ -11,6 +11,11 @@ limit_req_zone $binary_remote_addr zone=pages:20m rate=30r/s;
 limit_req_status 429;
 limit_conn_zone $binary_remote_addr zone=conn:10m;
 limit_conn_status 429;
+# Отказ по лимиту виден в журнале запросов (код 429, без полного IP); в журнал ошибок nginx пишет его с полным IP
+# клиента — такие записи (уровень warn) не пишем: журнал ошибок — только ошибки.
+limit_req_log_level warn;
+limit_conn_log_level warn;
+error_log /var/log/nginx/error.log error;
 
 # Карта OpenFreeMap через свой сервер (/ofm/…): стиль, тайлы, шрифты и значки — с копией на диске (до 5 ГБ, том mapcache).
 # Браузер посетителя обращается только к нашему сайту; наружу уходит лишь адрес тайла — без IP, cookie и заголовков.

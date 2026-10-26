@@ -2,8 +2,8 @@
 
 // Живые данные вошедшего пользователя: поток событий (SSE), список диалогов, плашка «Сообщения», окно отзыва.
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { api } from '@/lib/api';
-import { shortTitle, type ChatThread, type JobDetail, type MyJob } from '@/lib/jobs';
+import { api, TODO_EVENT } from '@/lib/api';
+import { isOnCall, localISO, seriesDates, shortTitle, type ChatThread, type JobDetail, type MyJob } from '@/lib/jobs';
 import { useFlash } from '@/components/Toast';
 import { useBackClose } from '@/lib/backstack';
 
@@ -65,7 +65,7 @@ export type Todo = {
   apps: number;
   /** Работодатель: сданная работа ждёт приёмки. */
   reported: { num: number; title: string }[];
-  /** Исполнитель: ближайшая смена, на которую наняли. */
+  /** Исполнитель: ближайшая смена, на которую наняли; date пустая — серия по вызову (по снегопаду). */
   shift: { num: number; title: string; date: string } | null;
   /** Обе стороны: смена закрыта, отзыв ещё не оставлен. */
   reviews: { num: number; title: string }[];
@@ -79,8 +79,14 @@ function todoOf(jobs: MyJob[], emp: boolean): Todo {
     reported: jobs.filter(j => j.status === 'reported' && !j.repeat).map(j => ({ num: j.num, title: shortTitle(j.title, j.address) })),
     shift: null, reviews
   };
-  const next = jobs.filter(j => j.myStatus === 'hired' && (j.status === 'open' || j.status === 'staffed')).sort((a, b) => a.date.localeCompare(b.date))[0];
-  return { apps: 0, reported: [], shift: next ? { num: next.num, title: shortTitle(next.title, next.address), date: next.date } : null, reviews };
+  // Серия открыта весь сезон, а её date — первый день: ближайшая смена в ней — следующий день по графику (сдаются
+  // дни по одному). По вызову даты нет — такие после смен с датой.
+  const today = localISO();
+  const dayOf = (j: MyJob) => !j.repeat ? j.date : isOnCall(j.repeat) ? '' : (seriesDates(j.repeat, j.date, 800) || []).find(d => d >= today) ?? j.date;
+  const next = jobs.filter(j => j.myStatus === 'hired' && (j.status === 'open' || j.status === 'staffed'))
+    .map(j => ({ j, day: dayOf(j) }))
+    .sort((a, b) => Number(!a.day) - Number(!b.day) || a.day.localeCompare(b.day))[0];
+  return { apps: 0, reported: [], shift: next ? { num: next.j.num, title: shortTitle(next.j.title, next.j.address), date: next.day } : null, reviews };
 }
 
 const LiveCtx = createContext<Ctx | null>(null);
@@ -144,6 +150,13 @@ export function LiveProvider({ me, children }: { me: Me; children: ReactNode }) 
     api<{ jobs: MyJob[] }>('/api/me/jobs').then(r => setTodo(todoOf(r.jobs, isEmp))).catch(() => {});
   }, [meKey, isEmp]);
   useEffect(() => { reloadTodo(); }, [reloadTodo]);
+  // Своё действие по заказу (lib/api.ts) — тоже перечитываем, с той же паузой: за действием часто идёт следующее.
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const on = () => { clearTimeout(t); t = setTimeout(reloadTodo, 400); };
+    window.addEventListener(TODO_EVENT, on);
+    return () => { clearTimeout(t); window.removeEventListener(TODO_EVENT, on); };
+  }, [reloadTodo]);
 
   // Один поток на вкладку; браузер сам переподключается (retry: 5000).
   useEffect(() => {

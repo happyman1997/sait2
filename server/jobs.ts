@@ -108,7 +108,7 @@ type Search = { rows: SummaryRow[]; base: Base; guest?: { jobs: JobSummary[]; ba
 const guestSearch = new TtlCache<Search>(20_000, 200);
 const VIEWER_MAX_AGE = 5_000;
 // Страницы каталога (seoCache) — тоже: новый заказ или свой вид работ виден в каталоге сразу.
-export function invalidateSearch() { afterCommit(() => { guestSearch.clear(); guestCard.clear(); seoCache.clear(); }); }
+export function invalidateSearch() { afterCommit(() => { guestSearch.clear(); guestArea.clear(); guestCard.clear(); seoCache.clear(); }); }
 
 export async function listJobs(p: ListParams, viewer: Viewer, db: Db = pool()) {
   if (db !== pool()) return searchJobs(p, viewer, db);
@@ -118,12 +118,14 @@ export async function listJobs(p: ListParams, viewer: Viewer, db: Db = pool()) {
   const qBase = { lat: q.lat!, lng: q.lng! };
   const key = JSON.stringify([q.lat, q.lng, b.label, q.today, (q.types || []).slice().sort(), q.minPay || 0, q.km || 0, q.when, (q.q || '').trim().toLowerCase()]);
   // Считаем от округлённой точки; при промахе — сразу со статусами откликов того, кто спросил (один запрос, как без кэша).
-  let mineLoaded = false;
+  // В общий кэш строки идут без статусов: «нанят» открывает скрытый адрес частного заказчика (toSummary), и
+  // статус первого спросившего показал бы этот адрес гостям и другим зрителям того же ключа.
+  let mine: SummaryRow[] | null = null;
   const load = async (): Promise<Search> => {
-    mineLoaded = true;
     // База — округлённая (как в ключе), id зрителя — для статусов его откликов.
     const r = await searchRows(q, viewer && { ...viewer, base_lat: q.lat!, base_lng: q.lng! }, db);
-    return { rows: r.rows, base: { ...r.base, label: b.label } };
+    mine = r.rows;
+    return { rows: r.rows.map(x => (x.my_status ? { ...x, my_status: null } : x)), base: { ...r.base, label: b.label } };
   };
   if (!viewer) {
     const hit = await guestSearch.get(key, load);
@@ -131,7 +133,8 @@ export async function listJobs(p: ListParams, viewer: Viewer, db: Db = pool()) {
     return (hit.guest ??= { jobs: hit.rows.map(x => toSummary(x, null, qBase)), base: hit.base, more: hit.rows.length >= NEAR_LIMIT });
   }
   const hit = await guestSearch.get(key, load, VIEWER_MAX_AGE);
-  const own = viewer.role === 'freelancer' && !mineLoaded && hit.rows.length
+  const rows: SummaryRow[] = mine ?? hit.rows;
+  const own = viewer.role === 'freelancer' && !mine && rows.length
     ? new Map((await query<{ job_id: string; status: AppStatus }>(
       // Свои отклики на открытые заказы (в выдаче только они) — дешевле, чем передавать в запрос 500 id выдачи.
       `SELECT a.job_id, a.status FROM applications a JOIN jobs j ON j.id = a.job_id
@@ -139,7 +142,7 @@ export async function listJobs(p: ListParams, viewer: Viewer, db: Db = pool()) {
       .map(x => [x.job_id, x.status]))
     : null;
   // Выдача посчитана от округлённой точки, а своя метка базы на карте — точно на месте.
-  return { jobs: hit.rows.map(x => toSummary(own ? { ...x, my_status: own.get(x.id) ?? null } : x, viewer, qBase)), base: b, more: hit.rows.length >= NEAR_LIMIT };
+  return { jobs: rows.map(x => toSummary(own ? { ...x, my_status: own.get(x.id) ?? null } : x, viewer, qBase)), base: b, more: rows.length >= NEAR_LIMIT };
 }
 
 // ───────────────────────── Страницы для поисковиков ─────────────────────────
@@ -277,7 +280,20 @@ const FUZZ_PAD_DEG = 0.004;
  * точкам, что видит зритель (у частных заказчиков — сдвинутым): иначе подбором маленьких кадров можно было бы
  * найти настоящий адрес. Участки сводки — сетка по экрану при этом масштабе (64 px), точка участка — среднее его заказов.
  */
-export async function areaJobs(p: AreaParams, viewer: Viewer, db: Db = pool()): Promise<{ jobs: JobSummary[]; cells: AreaCell[]; total: number }> {
+type AreaResult = { jobs: JobSummary[]; cells: AreaCell[]; total: number };
+// Гостям одинаковый кадр (тот же вид карты у многих или повтор одного запроса) — из готового ответа до 20 с.
+const guestArea = new TtlCache<AreaResult>(20_000, 300);
+
+export async function areaJobs(p: AreaParams, viewer: Viewer, db: Db = pool()): Promise<AreaResult> {
+  if (viewer || db !== pool()) return scanArea(p, viewer, db);
+  const r4 = (x: number | undefined) => (x == null ? null : Math.round(x * 1e4) / 1e4);
+  const box = p.e - p.w >= 360 ? [-180, 180] : [r4(p.w), r4(p.e)];
+  const key = JSON.stringify([box, r4(p.s), r4(p.n), Math.round(p.zoom * 100) / 100, p.today, (p.types || []).slice().sort(), p.minPay || 0, p.km || 0,
+    p.when, (p.q || '').trim().toLowerCase(), r4(p.lat), r4(p.lng)]);
+  return guestArea.get(key, () => scanArea(p, null, db));
+}
+
+async function scanArea(p: AreaParams, viewer: Viewer, db: Db): Promise<AreaResult> {
   const { base, params } = filterParams(p, viewer);
   const s = Math.max(-85, p.s), n = Math.min(85, p.n);
   const whole = p.e - p.w >= 360;

@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from 'next';
 import { connection } from 'next/server';
 import type { ReactNode } from 'react';
+import Script from 'next/script';
 import { ServiceWorkerSetup } from '@/components/AppInstall';
+import { INSTALL_CATCHER } from '@/lib/install';
 import { ModerationGuard } from '@/components/ModerationGuard';
 import { ToastProvider } from '@/components/Toast';
 import { config } from '@/server/config';
@@ -48,6 +50,8 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           {children}
           <ModerationGuard />
           <ServiceWorkerSetup />
+          {/* До оживления страницы: ловит «можно установить» (lib/install.ts); nonce Next.js ставит сам. */}
+          <Script id="arena-install" strategy="beforeInteractive">{INSTALL_CATCHER}</Script>
         </ToastProvider>
       </body>
     </html>

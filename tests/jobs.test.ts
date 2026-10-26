@@ -329,6 +329,13 @@ describe('карточка и отклик', () => {
     jobs.invalidateSearch();
     const hired = await jobs.getJob(j.num, fl);
     expect([hired.address, hired.lat, hired.lng, hired.addressHidden]).toEqual(['Москва, ул. Тверская, 18, кв. 5', MOSCOW.lat, MOSCOW.lng, false]);
+    // Выдача на карте делится между зрителями с одной базой: нанятый, открывший карту первым, видит адрес,
+    // но его статус не попадает в общий кэш — гость и работодатель с той же базой адреса не видят.
+    const noBase = <T extends object>(u: T) => ({ ...u, base_lat: null, base_lng: null });
+    const onMap = async (v: Parameters<typeof jobs.listJobs>[1]) => (await jobs.listJobs({ today }, v)).jobs.find(x => x.num === j.num)!;
+    expect((await onMap(noBase(fl))).addressHidden).toBe(false);
+    expect([(await onMap(null)).address, (await onMap(null)).addressHidden]).toEqual(['Москва, ул. Тверская', true]);
+    expect((await onMap(noBase(emp))).addressHidden).toBe(true);
 
     // Организация — адрес виден всем сразу.
     const org = await jobs.createJob(form(), emp, today);
