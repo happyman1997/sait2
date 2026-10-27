@@ -181,8 +181,58 @@ echo "── Яндекс Метрика (по желанию; как завес
 ask YANDEX_METRIKA_ID "Номер счётчика Метрики (metrika.yandex.ru, цифры над кодом счётчика; Enter — пропустить)" '^[0-9]{5,12}$' "Номер счётчика — только цифры, обычно 8–9. Это число в названии счётчика, а не весь код."
 
 echo
+echo "── Telegram-канал: сводка заказов раз в день (по желанию; как создать канал и бота — DEPLOY.md, раздел 15)"
+# Адрес канала не секрет; ключ бота — секрет: ввод скрыт. «нет» — выключить сводку.
+ask TELEGRAM_CHANNEL "Адрес канала, например @arena_rabot (Enter — пропустить$( [ -n "$(get TELEGRAM_CHANNEL)" ] && echo '; «нет» — выключить сводку'))" '^(@[A-Za-z][A-Za-z0-9_]{4,31}|нет)$' "Адрес канала — @ и латинские буквы, цифры или _ (от 5 знаков), например @arena_rabot."
+if [ "$(get TELEGRAM_CHANNEL)" = нет ]; then
+  set_kv TELEGRAM_CHANNEL ''; set_kv TELEGRAM_BOT_TOKEN ''
+  echo "  Сводка в Telegram выключена."
+fi
+if [ -n "$(get TELEGRAM_CHANNEL)" ]; then
+  while :; do
+    read -r -s -p "Ключ бота от @BotFather (при вводе не виден; Enter — $( [ -n "$(get TELEGRAM_BOT_TOKEN)" ] && echo 'оставить прежний' || echo 'пропустить')): " tok || tok=''
+    echo
+    tok=${tok//[[:space:]]/}
+    # Формат ключа у Telegram один и тот же — другой сайт не примет (server/startup-check.ts), поэтому без «вставьте ещё раз».
+    [ -z "$tok" ] || [[ "$tok" =~ ^[0-9]{5,12}:[A-Za-z0-9_-]{30,}$ ]] && break
+    echo "  Введено символов: ${#tok}, а ключ бота выглядит как 123456789:AAH… (цифры, двоеточие, ещё 35 знаков). Скопируйте его у @BotFather ещё раз."
+  done
+  [ -n "$tok" ] && set_kv TELEGRAM_BOT_TOKEN "$tok"
+  # Канал без ключа сайт не запустит (server/startup-check.ts) — такой адрес не оставляем.
+  if [ -z "$(get TELEGRAM_BOT_TOKEN)" ]; then
+    set_kv TELEGRAM_CHANNEL ''
+    echo "  Без ключа бота сводка не выйдет — адрес канала не сохранён. Запустите скрипт ещё раз, когда будет ключ."
+  else
+    ask TELEGRAM_DIGEST_HOUR "Во сколько публиковать сводку — час по Москве, от 0 до 23 (Enter — 19)" '^([01]?[0-9]|2[0-3])$' "Час — число от 0 до 23, например 19."
+    ask TELEGRAM_DIGEST_CITY "Город для сводки — заказы в нём и на 50 км вокруг (Enter — $( [ -n "$(get TELEGRAM_DIGEST_CITY)" ] && echo 'оставить; «все» — все города' || echo 'все города'))" '' "Только название города, например Москва." '[0-9@<>]'
+    [ "$(get TELEGRAM_DIGEST_CITY)" = все ] && set_kv TELEGRAM_DIGEST_CITY ''
+  fi
+fi
+# Тот ли ключ, и может ли бот писать в канал — те же запросы, что делает сайт. Нет связи с Telegram — так и пишем.
+if [ -n "$(get TELEGRAM_CHANNEL)" ] && [ -n "$(get TELEGRAM_BOT_TOKEN)" ]; then
+  api="https://api.telegram.org/bot$(get TELEGRAM_BOT_TOKEN)"
+  me=$(curl -s --max-time 10 "$api/getMe" 2>/dev/null || true)
+  bot_id=$(printf '%s' "$me" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2 || true)
+  bot_name=$(printf '%s' "$me" | grep -o '"username":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+  if [ -z "$me" ]; then
+    echo "  ВНИМАНИЕ: сервер не достучался до Telegram (api.telegram.org). Сводка не сможет выходить — проверьте позже или напишите в поддержку хостинга."
+  elif [ -z "$bot_id" ]; then
+    echo "  ВНИМАНИЕ: Telegram не принял ключ бота. Скопируйте его у @BotFather ещё раз (команда /token) и запустите скрипт снова."
+  else
+    hour=$(get TELEGRAM_DIGEST_HOUR)
+    member=$(curl -s --max-time 10 "$api/getChatMember?chat_id=$(urlenc "$(get TELEGRAM_CHANNEL)")&user_id=$bot_id" 2>/dev/null || true)
+    if printf '%s' "$member" | grep -q '"status":"administrator"' && printf '%s' "$member" | grep -q '"can_post_messages":true'; then
+      echo "  Telegram: бот @$bot_name — администратор $(get TELEGRAM_CHANNEL) и может публиковать. Сводка — каждый день в ${hour:-19}:00."
+    else
+      echo "  ВНИМАНИЕ: бот @$bot_name не может публиковать в $(get TELEGRAM_CHANNEL)."
+      echo "  Откройте канал → Управление каналом → Администраторы → Добавить → найдите @$bot_name и включите «Публикация сообщений»."
+    fi
+  fi
+fi
+
+echo
 echo "Сохранено. Сейчас в настройках (пароли не показываются):"
-for k in OPERATOR_NAME OPERATOR_OGRNIP OPERATOR_INN OPERATOR_ADDRESS OPERATOR_EMAIL OPERATOR_RKN_NUMBER PROCESSOR_HOSTING PROCESSOR_PROTECTION PROCESSOR_MAIL PROCESSOR_GEO EMAIL_FROM SUPPORT_EMAIL YANDEX_CLIENT_ID VK_CLIENT_ID YANDEX_METRIKA_ID; do
+for k in OPERATOR_NAME OPERATOR_OGRNIP OPERATOR_INN OPERATOR_ADDRESS OPERATOR_EMAIL OPERATOR_RKN_NUMBER PROCESSOR_HOSTING PROCESSOR_PROTECTION PROCESSOR_MAIL PROCESSOR_GEO EMAIL_FROM SUPPORT_EMAIL YANDEX_CLIENT_ID VK_CLIENT_ID YANDEX_METRIKA_ID TELEGRAM_CHANNEL TELEGRAM_DIGEST_HOUR TELEGRAM_DIGEST_CITY; do
   v=$(get "$k")
   if broken "$v"; then v='испорченные буквы — запустите скрипт ещё раз'; fi
   printf '  %-18s %s\n' "$k" "$v"
@@ -190,5 +240,6 @@ done
 if [[ "$(get SMTP_URL)" == *ПАРОЛЬ* || -z "$(get SMTP_URL)" ]]; then echo "  SMTP_URL           НЕ ЗАДАН"; else echo "  SMTP_URL           задан"; fi
 if [ -n "$(get DADATA_API_KEY)" ]; then echo "  DADATA_API_KEY     задан"; else echo "  DADATA_API_KEY     не задан (поиск адреса выключен)"; fi
 if [ -n "$(get YANDEX_CLIENT_SECRET)" ]; then echo "  YANDEX_CLIENT_SECRET задан"; fi
+if [ -n "$(get TELEGRAM_BOT_TOKEN)" ]; then echo "  TELEGRAM_BOT_TOKEN задан"; fi
 echo
 echo "Если всё верно — запускайте сайт:  bash $(pwd)/deploy/launch.sh"

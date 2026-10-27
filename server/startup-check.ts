@@ -31,6 +31,11 @@ export function productionProblems(env: Record<string, string | undefined> = pro
   if (val('VK_CLIENT_ID') && !/^\d+$/.test(val('VK_CLIENT_ID'))) out.push('VK_CLIENT_ID — ID приложения VK ID, только цифры');
   // Иначе счётчик молча не включился бы (server/config.ts) — а владелец ждал бы статистику.
   if (val('YANDEX_METRIKA_ID') && !/^\d{5,12}$/.test(val('YANDEX_METRIKA_ID'))) out.push('YANDEX_METRIKA_ID — номер счётчика Яндекс Метрики, только цифры (или пусто)');
+  // Telegram-канал: нужны оба — иначе сводка молча не выходила бы.
+  if (val('TELEGRAM_CHANNEL') && !/^@[A-Za-z][A-Za-z0-9_]{4,31}$|^-100\d{5,15}$/.test(val('TELEGRAM_CHANNEL'))) out.push('TELEGRAM_CHANNEL — адрес канала, например @arena_rabot');
+  if (val('TELEGRAM_CHANNEL')) need('TELEGRAM_BOT_TOKEN', 'ключ бота от @BotFather (или уберите TELEGRAM_CHANNEL)');
+  if (val('TELEGRAM_BOT_TOKEN') && !val('TELEGRAM_CHANNEL')) out.push('TELEGRAM_CHANNEL — адрес канала (ключ бота указан, а канал нет)');
+  if (val('TELEGRAM_BOT_TOKEN') && !/^\d{5,12}:[A-Za-z0-9_-]{30,}$/.test(val('TELEGRAM_BOT_TOKEN'))) out.push('TELEGRAM_BOT_TOKEN — ключ бота выглядит как 123456789:AA… (скопируйте его у @BotFather ещё раз)');
   return out;
 }
 

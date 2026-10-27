@@ -1,7 +1,8 @@
 // Фоновые задачи: автоприёмка через 7 дней, очистка устаревших служебных записей и брошенных файлов,
-// напоминания поддержке о сроке ответа.
+// напоминания поддержке о сроке ответа, сводка заказов в Telegram-канал.
 // Запускаются из процесса приложения (instrumentation.ts) раз в 10 минут или внешним cron: `npm run cron`.
 // pg_try_advisory_lock не даёт двум инстансам выполнять одно и то же одновременно.
+import { postDailyDigest } from './channel';
 import { pool } from './db';
 import { processOutbox } from './events';
 import { sweepFiles } from './files';
@@ -33,6 +34,7 @@ export async function runDueTasks(): Promise<{ skipped: boolean; autoAccepted: n
         `DELETE FROM events WHERE created_at < now() - interval '180 days'`,
         `DELETE FROM email_verifications WHERE expires_at < now() - interval '7 days'`,
         `DELETE FROM oauth_flows WHERE expires_at < now() - interval '1 day'`,
+        `DELETE FROM channel_posts WHERE day < current_date - 90`,
         // Отметки в профиле действуют 90 дней (Правила) — истёкшие не храним (политика ПДн, раздел 3).
         `DELETE FROM user_marks WHERE coalesce(until, created_at + interval '90 days') < now()`,
         // Срок хранения из политики ПДн: переписка, фото, споры и жалобы — 3 года после смены (общий срок исковой давности).
@@ -44,6 +46,7 @@ export async function runDueTasks(): Promise<{ skipped: boolean; autoAccepted: n
       const { sent } = await processOutbox();
       await recheckNpd().catch(e => console.error('[npd]', (e as Error).message));
       await remindSla().catch(e => console.error('[sla]', (e as Error).message));
+      await postDailyDigest().catch(e => console.error('[telegram]', (e as Error).message));
       return { skipped: false, autoAccepted, cleaned, sent };
     } finally {
       await c.query('SELECT pg_advisory_unlock($1)', [LOCK_KEY]);

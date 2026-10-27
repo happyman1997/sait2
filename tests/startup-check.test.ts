@@ -37,6 +37,15 @@ describe('проверка настроек перед запуском', () => 
     expect(productionProblems({ ...full, VK_CLIENT_ID: 'app-1' })[0]).toMatch(/^VK_CLIENT_ID/);
   });
 
+  it('Telegram-канал: нужны и адрес, и ключ бота правильного вида', () => {
+    const tok = '123456789:AAHfakefakefakefakefakefakefakefake1';
+    expect(productionProblems({ ...full, TELEGRAM_CHANNEL: '@arena_rabot', TELEGRAM_BOT_TOKEN: tok })).toEqual([]);
+    expect(productionProblems({ ...full, TELEGRAM_CHANNEL: '@arena_rabot' })[0]).toMatch(/^TELEGRAM_BOT_TOKEN/);
+    expect(productionProblems({ ...full, TELEGRAM_BOT_TOKEN: tok })[0]).toMatch(/^TELEGRAM_CHANNEL/);
+    expect(productionProblems({ ...full, TELEGRAM_CHANNEL: 'arena', TELEGRAM_BOT_TOKEN: tok })[0]).toMatch(/^TELEGRAM_CHANNEL/);
+    expect(productionProblems({ ...full, TELEGRAM_CHANNEL: '@arena_rabot', TELEGRAM_BOT_TOKEN: 'abc' })[0]).toMatch(/^TELEGRAM_BOT_TOKEN/);
+  });
+
   it('номер счётчика Метрики — только цифры', () => {
     expect(productionProblems({ ...full, YANDEX_METRIKA_ID: '98765432' })).toEqual([]);
     expect(productionProblems({ ...full, YANDEX_METRIKA_ID: 'ym(98765432)' })[0]).toMatch(/^YANDEX_METRIKA_ID/);

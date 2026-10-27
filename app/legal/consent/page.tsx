@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { LegalPage } from '@/components/LegalPage';
+import { config } from '@/server/config';
 import { operator, operatorLine, processors } from '@/server/operator';
 
 export const metadata = { title: 'Согласие на обработку персональных данных — Арена Работ' };
@@ -9,7 +10,7 @@ export const dynamic = 'force-dynamic';
 export default function Consent() {
   const o = operator();
   return (
-    <LegalPage kicker="Документы" title="Согласие на обработку персональных данных" footer={<>Редакция {o.edition}.</>}>
+    <LegalPage kicker="Документы" title="Согласие на обработку персональных данных" footer={<>Редакция {config.pdConsentVersion}.</>}>
       <p>Я, регистрируясь в сервисе «Арена Работ» ({o.site}), свободно, своей волей и в своём интересе даю согласие {operatorLine()}, адрес: {o.address} (далее — Оператор), на обработку моих персональных данных на следующих условиях.</p>
       <ol>
         <li><b>Данные:</b> имя и фамилия, логин, адрес электронной почты, город, фотография профиля, базовая точка на карте, сведения профиля (навыки, инвентарь, название организации, адреса объектов), ИНН и статус самозанятого (если укажу), номер аккаунта Яндекс ID или VK ID и данные, которые я разрешу этому сервису передать (если войду через него), содержание переписки, отзывов, жалоб и споров, фото со смен, история смен, IP-адрес и сведения о браузере.</li>

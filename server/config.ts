@@ -56,11 +56,18 @@ export const config = {
   yandexClientId: () => env('YANDEX_CLIENT_ID', ''),
   yandexClientSecret: () => env('YANDEX_CLIENT_SECRET', ''),
   vkClientId: () => env('VK_CLIENT_ID', ''),
+  // Telegram-канал (server/channel.ts): бот раз в день публикует сводку открытых заказов. Без токена и канала — выключено.
+  // Токен бота — секрет (вписывается в deploy/configure.sh скрытым вводом). Город пустой — заказы по всей России.
+  telegramToken: () => env('TELEGRAM_BOT_TOKEN', ''),
+  telegramChannel: () => env('TELEGRAM_CHANNEL', ''),
+  telegramDigestHour: () => { const h = parseInt(env('TELEGRAM_DIGEST_HOUR', '19'), 10); return h >= 0 && h <= 23 ? h : 19; },
+  telegramDigestCity: () => env('TELEGRAM_DIGEST_CITY', '').trim(),
+  telegramDigestKm: () => Math.min(300, Math.max(5, parseInt(env('TELEGRAM_DIGEST_KM', '50'), 10) || 50)),
   // Токен для /api/metrics (Prometheus). Пусто — метрики закрыты.
   metricsToken: () => env('METRICS_TOKEN', ''),
   // Новая редакция оферты и Правил — новая дата (её видно внизу документов и она сохраняется при регистрации).
-  offerVersion: '2026-10-26',
-  // Редакция политики обработки ПДн (меняется отдельно от оферты: 2026-10-27 — статистика посещений).
+  offerVersion: '2026-10-27',
+  // Редакция политики обработки ПДн (меняется отдельно от оферты: 2026-10-27 — статистика посещений, сводка в Telegram).
   policyVersion: '2026-10-27',
   pdConsentVersion: '2026-10'
 };
