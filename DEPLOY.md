@@ -219,17 +219,17 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --no-
 **Яндекс ID**
 1. Войдите на https://oauth.yandex.ru → «Создать приложение».
 2. Название — «Арена Работ», платформа — «Веб-сервисы».
-3. Redirect URI: `https://arenarabot.ru/api/auth/oauth/yandex/callback`. Suggest Hostname: `https://arenarabot.ru`.
+3. Redirect URI: `https://arenarabot.ru/api/auth/oauth/yandex/callback`. Suggest Hostname: `https://arenarabot.ru` (поле для виджета Яндекса; сайт его не использует — можно оставить так).
 4. Доступы: «Доступ к логину, имени и фамилии, полу» и «Доступ к адресу электронной почты». Доступ к телефону не нужен.
-5. Скопируйте ClientID в `YANDEX_CLIENT_ID`, Client secret — в `YANDEX_CLIENT_SECRET` (`.env.production`).
+5. Запустите `bash deploy/configure.sh` и в конце впишите ClientID и Client secret (секрет при вводе не виден). Client secret никому не пересылайте.
 
 **VK ID**
 1. Войдите на https://id.vk.com/about/business/go → «Создать приложение», платформа — «Web».
 2. Базовый домен: `arenarabot.ru`. Доверенный Redirect URL: `https://arenarabot.ru/api/auth/oauth/vk/callback`.
 3. В разделе доступов включите почту. Телефон не нужен.
-4. Скопируйте ID приложения в `VK_CLIENT_ID`. Защищённый и сервисный ключи VK для входа не нужны — не пересылайте их никому.
+4. ID приложения впишите в `bash deploy/configure.sh` («ID приложения VK ID»). Защищённый и сервисный ключи VK для входа не нужны — не пересылайте их никому.
 
-После правки `.env.production` перезапустите приложение (раздел 5). Проверка: откройте /auth?mode=login — должны появиться кнопки; войдите своим аккаунтом Яндекса или VK.
+Затем `bash deploy/launch.sh`. Проверка: откройте /auth?mode=login — должны появиться кнопки; войдите своим аккаунтом Яндекса или VK.
 
 ## 13. Поисковики: Яндекс.Вебмастер и Google Search Console
 

@@ -138,13 +138,38 @@ done
 [ -n "$(get DADATA_API_KEY)" ] && ask PROCESSOR_GEO "DaData: название и ИНН из договора (dadata.ru → личный кабинет → «Договор»)" '[0-9]{10}' "Нужны название и ИНН из 10 цифр."
 
 echo
+echo "── Вход через Яндекс ID и VK ID (по желанию; как создать приложения — DEPLOY.md, раздел 12)"
+# ClientID не секрет (виден в адресе входа); Client secret — секрет: ввод скрыт.
+ask YANDEX_CLIENT_ID "ClientID приложения Яндекс ID (oauth.yandex.ru; Enter — пропустить)" '^[0-9a-zA-Z]{20,64}$' "ClientID — латинские буквы и цифры, обычно 32 знака. Скопируйте его ещё раз."
+if [ -n "$(get YANDEX_CLIENT_ID)" ]; then
+  bad=''
+  while :; do
+    read -r -s -p "Client secret Яндекс ID (при вводе не виден; Enter — $( [ -n "$(get YANDEX_CLIENT_SECRET)" ] && echo 'оставить прежний' || echo 'пропустить')): " sec || sec=''
+    echo
+    sec=${sec//[[:space:]]/}
+    [ -z "$sec" ] || [[ "$sec" =~ ^[0-9a-zA-Z]{20,64}$ ]] || [ "$sec" = "$bad" ] && break
+    bad=$sec
+    echo "  Введено символов: ${#sec}, а Client secret — латинские буквы и цифры, обычно 32 знака. Скопируйте его ещё раз и вставьте."
+    echo "  (Если он точно такой — вставьте тот же ещё раз.)"
+  done
+  [ -n "$sec" ] && set_kv YANDEX_CLIENT_SECRET "$sec"
+  # ClientID без секрета сайт не запустит (server/startup-check.ts) — такой ClientID не оставляем.
+  if [ -z "$(get YANDEX_CLIENT_SECRET)" ]; then
+    set_kv YANDEX_CLIENT_ID ''
+    echo "  Без Client secret вход через Яндекс не работает — ClientID не сохранён. Запустите скрипт ещё раз, когда будут оба."
+  fi
+fi
+ask VK_CLIENT_ID "ID приложения VK ID (id.vk.com; только цифры; Enter — пропустить)" '^[0-9]+$' "ID приложения VK — только цифры."
+
+echo
 echo "Сохранено. Сейчас в настройках (пароли не показываются):"
-for k in OPERATOR_NAME OPERATOR_OGRNIP OPERATOR_INN OPERATOR_ADDRESS OPERATOR_EMAIL OPERATOR_RKN_NUMBER PROCESSOR_HOSTING PROCESSOR_PROTECTION PROCESSOR_MAIL PROCESSOR_GEO EMAIL_FROM SUPPORT_EMAIL; do
+for k in OPERATOR_NAME OPERATOR_OGRNIP OPERATOR_INN OPERATOR_ADDRESS OPERATOR_EMAIL OPERATOR_RKN_NUMBER PROCESSOR_HOSTING PROCESSOR_PROTECTION PROCESSOR_MAIL PROCESSOR_GEO EMAIL_FROM SUPPORT_EMAIL YANDEX_CLIENT_ID VK_CLIENT_ID; do
   v=$(get "$k")
   if broken "$v"; then v='испорченные буквы — запустите скрипт ещё раз'; fi
   printf '  %-18s %s\n' "$k" "$v"
 done
 if [[ "$(get SMTP_URL)" == *ПАРОЛЬ* || -z "$(get SMTP_URL)" ]]; then echo "  SMTP_URL           НЕ ЗАДАН"; else echo "  SMTP_URL           задан"; fi
 if [ -n "$(get DADATA_API_KEY)" ]; then echo "  DADATA_API_KEY     задан"; else echo "  DADATA_API_KEY     не задан (поиск адреса выключен)"; fi
+if [ -n "$(get YANDEX_CLIENT_SECRET)" ]; then echo "  YANDEX_CLIENT_SECRET задан"; fi
 echo
 echo "Если всё верно — запускайте сайт:  bash $(pwd)/deploy/launch.sh"
