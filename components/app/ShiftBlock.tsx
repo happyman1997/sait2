@@ -129,7 +129,7 @@ export function ShiftBlock({ job, isOwner, act, onChat, onReview, busy }: {
         <div className={sty.c46f6613}>
           <span className={'fh ' + sty.c1e8c242}>Встречающий</span>
           {meet
-            ? <><span className={sty.c05854e5}>{meet.who}</span><a href={'tel:' + meet.phone.replace(/[^\d+]/g, '')} className={'fh ' + sty.ceec6d73}>{meet.phone}</a></>
+            ? <><span className={sty.c05854e5}>{meet.who}</span><a href={'tel:' + meet.phone.replace(/[^\d+]/g, '')} className={'fh tap ' + sty.ceec6d73}>{meet.phone}</a></>
             : <span style={css('font-size: 14px; ' + MUTED)}>{brigade ? (s.leadName ? 'телефон у старшего — ' + s.leadName : 'старший не назначен — телефон откроется ему') : 'телефон не указан — уточните в чате'}</span>}
         </div>
       )}

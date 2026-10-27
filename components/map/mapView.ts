@@ -536,12 +536,13 @@ export class SeasonMapView {
 
     if (lone) renderPin(lone, 0, 1);
 
-    // Точка базирования исполнителя.
+    // Точка базирования исполнителя. Кружок с числом заказов ложится поверх неё (z-index 4 > 3): база обычно в центре
+    // города, где и заказов больше всего, а точка поверх кружка закрывала его число («1» вместо «10»).
     if (this.anchor && this.mode !== 'employer') {
       const bp = this.pt(this.anchor.lat, this.anchor.lng);
       if (bp) {
         html.push('<div data-kind="base" title="Моя база" style="position:absolute;left:' + bp[0] + 'px;top:' + bp[1] +
-          'px;transform:translate(-50%,-50%);width:15px;height:15px;box-sizing:border-box;border-radius:50%;pointer-events:none;z-index:5;background:' + PAPER +
+          'px;transform:translate(-50%,-50%);width:15px;height:15px;box-sizing:border-box;border-radius:50%;pointer-events:none;z-index:3;background:' + PAPER +
           ';border:3px solid ' + DEEP + ';box-shadow:0 0 0 3px ' + PAPER + ',0 2px 8px rgba(31,45,58,.4)"></div>');
         html.push('<div data-kind="baselabel" style="position:absolute;left:' + (bp[0] + 13) + 'px;top:' + bp[1] +
           'px;transform:translateY(-50%);pointer-events:none;z-index:5;font-family:var(--font-heading,sans-serif);font-weight:600;font-size:11px;letter-spacing:.16em;' +

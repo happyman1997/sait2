@@ -395,3 +395,8 @@ button:not(:disabled):active { transform: translateY(1px); }
   .tag { font-size: 12px !important; }
   button.tag, a.tag { min-height: 36px !important; padding-top: 6px !important; padding-bottom: 6px !important; }
 }
+
+/* Короткая ссылка или кнопка в строке («Забыли пароль?», «Все мои смены →», телефон встречающего): поле нажатия
+   шире самой надписи — палец попадает, а вид и место в строке не меняются. */
+.tap { position: relative; }
+.tap::after { content: ''; position: absolute; inset: -12px -8px; }

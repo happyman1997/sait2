@@ -68,3 +68,11 @@
   border-top: 1px solid var(--color-divider);
   font-size: 14px;
 }
+
+/* Телефон: заголовки и кнопка «На главную» — обычным регистром, как во всём приложении; надпись над заголовком
+   («Документы», «Вопросы и ответы») — прописными, как подписи разделов. */
+@media (max-width: 719.98px) {
+  :where(.c68398ba) { font-size: 26px !important; text-transform: none !important; letter-spacing: normal !important; }
+  :where(.c68b45ae) { text-transform: none !important; letter-spacing: normal !important; font-size: 14px !important; }
+  .c996d334 h2 { text-transform: none; letter-spacing: normal; }
+}

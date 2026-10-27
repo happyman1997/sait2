@@ -881,7 +881,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
                   <div className="field">
                     <label htmlFor="li-pass">Пароль</label>
                     <PasswordInput id="li-pass" className="input" value={pass} onChange={e => { setPass(e.target.value); setStepError(''); }} placeholder="••••••••" autoComplete="current-password" />
-                    <button type="button" onClick={() => switchMode('recover')} style={css('justify-self: start; margin-top: 6px; ' + UNDERLINE_BTN)}>Забыли пароль?</button>
+                    <button type="button" onClick={() => switchMode('recover')} className="tap" style={css('justify-self: start; margin-top: 6px; ' + UNDERLINE_BTN)}>Забыли пароль?</button>
                   </div>
                 </div>
                 <div className={sty.c16b060d}>Кабинет откроется в той роли, в которой вы регистрировались. Для второй роли нужен отдельный аккаунт.</div>

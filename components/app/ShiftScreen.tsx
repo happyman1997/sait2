@@ -98,7 +98,7 @@ export function ShiftScreen({ pick = null }: { pick?: number | null }) {
           <span className={s.cls}>{s.label}</span>
           <span className={'fh ' + sty.cd653512}>{money(job.pay, job.unit)}</span>
           <span style={{ flex: 1 }} />
-          <Link href={'/?job=' + job.num} className={sty.ca541880}>Заказ на карте →</Link>
+          <Link href={'/?job=' + job.num} className={'tap ' + sty.ca541880}>Заказ на карте →</Link>
         </div>
 
         {!shift && subHired.length > 0 && (
@@ -198,7 +198,7 @@ export function ShiftScreen({ pick = null }: { pick?: number | null }) {
         )}
 
         <div className={sty.ca6b48a0}>
-          <Link href="/mine" className={sty.ce41405c}>{isEmp ? 'Все мои заказы →' : 'Все мои смены →'}</Link>
+          <Link href="/mine" className={'tap ' + sty.ce41405c}>{isEmp ? 'Все мои заказы →' : 'Все мои смены →'}</Link>
         </div>
       </div>
     </div>
