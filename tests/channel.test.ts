@@ -14,37 +14,57 @@ type DigestJob = import('@/server/channel').DigestJob;
 const DAY = '2026-11-20';
 const job = (o: Partial<DigestJob>): DigestJob => ({
   num: 12, typeLabel: 'Уборка снега', place: 'Москва, ул. Новая', pay: 3500, unit: 'за смену', date: '2026-11-21',
-  crew: 2, hired: 0, urgent: false, repeat: null, ...o
+  crew: 2, hired: 0, urgent: false, repeat: null, volume: null, payType: 'наличными в день выхода', tools: 'инвентарь есть на объекте',
+  orgType: 'УК / ТСЖ', rating: 4.9, applicants: 0, ...o
 });
 const plain = (s: string | null) => (s || '').replace(/<[^>]+>/g, '');
+const O = { day: DAY, site: 'https://arenarabot.ru', area: null };
 
 describe('сводка в канал: текст', () => {
-  it('заголовок, строки заказа, ссылка с меткой; без заказов — поста нет', () => {
-    expect(digestText([], { day: DAY, site: 'https://arenarabot.ru', area: null })).toBeNull();
+  it('сводка вверху; ближайший день — подробно; неделя, сезон, позже — строкой; ссылки с меткой; без заказов — поста нет', () => {
+    expect(digestText([], O)).toBeNull();
     const t = digestText([
-      job({ urgent: true, date: DAY, crew: 3, hired: 2 }),
-      job({ num: 13, typeLabel: 'Наледь <b>', date: '2026-11-25', crew: 99 }),
-      job({ num: 14, repeat: 'по снегопаду', date: '2026-11-18' })
-    ], { day: DAY, site: 'https://arenarabot.ru', area: 'Москва и до 50 км вокруг' })!;
-    expect(t).toContain('<b>Открытые смены · 20 ноября</b>');
-    expect(plain(t)).toContain('Москва и до 50 км вокруг: 3 заказа ждут исполнителей');
-    expect(plain(t)).toContain('Срочно · Уборка снега — ' + money(3500, 'за смену') + '\nсегодня · нужен 1 человек · Москва, ул. Новая');
+      job({ num: 21, urgent: true, pay: 12000, unit: 'за заказ', crew: 3, hired: 1, volume: 'кровля 300 м²', payType: 'перевод на карту', applicants: 2 }),
+      job({ num: 22, typeLabel: 'Наледь <b>', crew: 99, orgType: 'частное лицо', rating: null, tools: 'нужен свой инвентарь' }),
+      job({ num: 23, date: '2026-11-25', pay: 900, unit: 'за час', payType: 'самозанятый — чек' }),
+      job({ num: 24, repeat: 'по снегопаду', date: '2026-11-18', crew: 4 }),
+      job({ num: 25, date: '2026-12-15', typeLabel: 'Наледь <b>' })
+    ], { ...O, area: 'Москва и до 50 км вокруг' })!;
+    const p = plain(t);
+    expect(t).toContain('<b>Смены · Москва и до 50 км вокруг · 20 ноября</b>');
+    expect(p).toContain('5 заказов · от ' + money(900, 'за час') + ' до ' + money(12000, 'за заказ') + ' за заказ');
+    expect(p).toContain('Больше всего: уборка снега — 3, наледь &lt;b&gt; — 2');
+    expect(p).toContain('ЗАВТРА, 21 НОЯБРЯ\n\n🔴 Срочно · Уборка снега — ' + money(12000) + ' за заказ\n' +
+      'Москва, ул. Новая · нужно 2 человека · объём: кровля 300 м²\n💳 перевод на карту · 🧰 инвентарь на месте\n👤 УК / ТСЖ ★ 4,9 · 2 отклика\n→ Открыть заказ');
+    expect(p).toContain('Наледь &lt;b&gt; — ' + money(3500, 'за смену') + '\nМосква, ул. Новая · людей — сколько придёт\n' +
+      '💵 наличными в день выхода · 🧰 нужен свой инвентарь\n👤 Частный заказчик · откликов пока нет');
     expect(t).toContain('Наледь &lt;b&gt;');
-    expect(plain(t)).toContain('25 ноября · людей — сколько придёт');
-    expect(plain(t)).toContain('по вызову после снегопада · нужно 2 человека');
-    expect(t).toContain('<a href="https://arenarabot.ru/zakaz/12?utm_source=telegram&utm_medium=digest&utm_campaign=channel">Открыть заказ</a>');
-    expect(plain(t).endsWith('Все заказы — на карте')).toBe(true);
+    expect(p).toContain('НА НЕДЕЛЕ\n25 ноября · Уборка снега — ' + money(900, 'за час') + ' · Москва, ул. Новая · с чеком');
+    expect(p).toContain('НА СЕЗОН\nУборка снега — ' + money(3500, 'за смену') + ' · Москва, ул. Новая · нужно 4 человека · по вызову после снегопада');
+    expect(p.indexOf('НА СЕЗОН')).toBeLessThan(p.indexOf('ПОЗЖЕ'));
+    expect(p).toContain('ПОЗЖЕ\n15 декабря · Наледь &lt;b&gt;');
+    expect(t).toContain('<a href="https://arenarabot.ru/zakaz/21?utm_source=telegram&utm_medium=digest&utm_campaign=channel">→ Открыть заказ</a>');
+    expect(t).toContain('<a href="https://arenarabot.ru/zakaz/23?utm_source=telegram&utm_medium=digest&utm_campaign=channel">Уборка снега</a>');
+    expect(p.endsWith('Все 5 заказов — на карте')).toBe(true);
   });
 
-  it('больше десяти — «ещё N на карте»; «1 заказ ждёт», «11 заказов ждут», «21 заказ ждёт»', () => {
-    const many = (n: number) => Array.from({ length: n }, (_, i) => job({ num: i + 1 }));
-    const t = plain(digestText(many(14), { day: DAY, site: 'https://s', area: null }));
-    expect(t.match(/Открыть заказ/g)).toHaveLength(10);
+  it('подробно — до 4 заказов дня, строк — до 10, остальное — «ещё N на карте»; один заказ — без разброса и «больше всего»', () => {
+    const many = (n: number, date = '2026-11-21') => Array.from({ length: n }, (_, i) => job({ num: i + 1, date }));
+    const t = plain(digestText([...many(6), ...many(12, '2026-11-24')], O));
+    expect(t.match(/→ Открыть заказ/g)).toHaveLength(4);
+    expect(t.match(/\n\d+ ноября · Уборка снега/g)).toHaveLength(10);
     expect(t).toContain('Ещё 4 заказа — на карте');
-    expect(t).toContain('\n14 заказов ждут исполнителей');
-    expect(plain(digestText(many(1), { day: DAY, site: 'https://s', area: null }))).toContain('1 заказ ждёт');
-    expect(plain(digestText(many(11), { day: DAY, site: 'https://s', area: null }))).toContain('11 заказов ждут');
-    expect(plain(digestText(many(21), { day: DAY, site: 'https://s', area: null }))).toContain('21 заказ ждёт');
+    const one = plain(digestText(many(1), O));
+    expect(one).toContain('1 заказ\n\nЗАВТРА');
+    expect(one).not.toContain('Больше всего');
+    expect(one.endsWith('Заказ на карте')).toBe(true);
+  });
+
+  it('пост не длиннее предела Telegram: лишние строки уходят в «ещё N»', () => {
+    const long = Array.from({ length: 30 }, (_, i) => job({ num: i + 1, date: '2026-11-24', typeLabel: 'Очень длинное название вида работ '.repeat(4), place: 'Москва, ' + 'улица '.repeat(15) }));
+    const t = digestText(long, O)!;
+    expect(t.length).toBeLessThanOrEqual(3900);
+    expect(plain(t)).toMatch(/Ещё \d+ заказ/);
   });
 });
 
@@ -129,7 +149,7 @@ describe('сводка в канал: заказы из базы и публик
     expect(sent).toHaveLength(2);
     expect(sent[1].url).toBe('https://api.telegram.org/bot123456789:AAHfakefakefakefakefakefakefakefake1/sendMessage');
     expect(sent[1].body).toMatchObject({ chat_id: '@arena_rabot', parse_mode: 'HTML' });
-    expect(sent[1].body.text).toContain('Открытые смены');
+    expect(sent[1].body.text).toContain('<b>Смены · ');
     expect((await one<{ message_id: string }>(`SELECT message_id FROM channel_posts WHERE kind = 'digest' AND day = $1`, [today]))!.message_id).toBe('77');
 
     // Другой день, свой час — 8 утра; заказов в городе нет — поста нет, день отмечен.
