@@ -69,6 +69,8 @@ describe('удаление аккаунта', () => {
     const j = await jobs.createJob(form(), emp, today);
     await jobs.applyToJob(j.num, { reqConfirmed: true }, fl, today);
     await query(`INSERT INTO reviews (job_id, author_id, target_id, rating, text, editable_until) SELECT id, $1, $2, 5, 'Хороший заказчик', now() FROM jobs`, [fl.id, emp.id]);
+    // Письмо, отложенное на утро (тихие часы), не уходит после удаления, адрес не хранится.
+    await query(`INSERT INTO notification_outbox (user_id, channel, to_addr, body, next_try_at) VALUES ($1, 'email', 'fl@example.com', 'Вас наняли', now() + interval '8 hours')`, [fl.id]);
     await deleteAccount(fl, ok);
     const u = (await one<Record<string, unknown>>('SELECT * FROM users WHERE id = $1', [fl.id]))!;
     expect(u).toMatchObject({ name: 'Удалённый пользователь', phone: null, email: '', city: '', status: 'deleted', base_lat: null, avatar_url: null });
@@ -76,7 +78,7 @@ describe('удаление аккаунта', () => {
     expect(u.deleted_at).not.toBeNull();
     expect(await sessionUser(fl.token)).toBeNull();
     expect((await one<{ status: string }>('SELECT status FROM applications WHERE freelancer_id = $1', [fl.id]))!.status).toBe('withdrawn');
-    for (const t of ['sessions', 'events', 'notification_settings', 'freelancer_profiles']) {
+    for (const t of ['sessions', 'events', 'notification_settings', 'freelancer_profiles', 'notification_outbox']) {
       expect((await one<{ n: number }>(`SELECT count(*)::int AS n FROM ${t} WHERE user_id = $1`, [fl.id]))!.n, t).toBe(0);
     }
     expect((await one<{ name: string }>('SELECT a.name FROM reviews r JOIN users a ON a.id = r.author_id'))!.name).toBe('Удалённый пользователь');

@@ -9,5 +9,5 @@ export const POST = route(async (req) => {
   await assertSameOrigin(req);
   const b = await readJson(req);
   const { user, session } = await oauthSignup(b, { offer: b.offerAccepted, pd: b.pdConsent }, (await cookies()).get(NONCE_COOKIE)?.value, await requestCtx());
-  return setSessionCookie(NextResponse.json({ user }), session.token, session.expiresAt);
+  return setSessionCookie(NextResponse.json({ user }), session.token);
 });

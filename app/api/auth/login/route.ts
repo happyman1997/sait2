@@ -6,5 +6,5 @@ export const POST = route(async (req) => {
   await assertSameOrigin(req);
   const b = await readJson(req);
   const { user, session } = await login(b.identifier, b.password, await requestCtx());
-  return setSessionCookie(NextResponse.json({ user }), session.token, session.expiresAt);
+  return setSessionCookie(NextResponse.json({ user }), session.token);
 });

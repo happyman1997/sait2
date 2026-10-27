@@ -210,8 +210,12 @@ export async function leaveShift(num: number, raw: unknown, viewer: Viewer): Pro
     const hired = await hiredOf(j.id, db);
     if (!hired.some(h => h.freelancer_id === u.id)) throw new AppError(409, 'Вы не наняты на эту смену.');
     if (j.status !== 'open' && j.status !== 'staffed') throw new AppError(409, 'Работа уже сдана или смена закрыта — отказаться нельзя.');
-    // В день выхода разовой смены до неё точно меньше суток, что бы ни выбрал исполнитель.
-    if (!j.repeat && j.date <= localClock().day) notice = 'меньше суток';
+    // В день выхода до смены точно меньше суток, что бы ни выбрал исполнитель: у серии — его ближайший день
+    // (снятые «Не смогу» не в счёт).
+    const today = localClock().day;
+    const skipped = new Set((await query<{ day: string }>(`SELECT to_char(day, 'YYYY-MM-DD') AS day FROM series_skips WHERE job_id = $1 AND freelancer_id = $2`, [j.id, u.id], db)).rows.map(x => x.day));
+    const next = j.repeat ? (await datesOf(j, db)).find(d => d >= today && !skipped.has(d)) : j.date;
+    if (next && next <= today) notice = 'меньше суток';
     const late = notice === 'меньше суток';
     await query('DELETE FROM hires WHERE job_id = $1 AND freelancer_id = $2', [j.id, u.id], db);
     await query(`UPDATE applications SET status = 'withdrawn', withdrawn_at = now(), updated_at = now() WHERE job_id = $1 AND freelancer_id = $2`, [j.id, u.id], db);

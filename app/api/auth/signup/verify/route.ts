@@ -7,5 +7,5 @@ export const POST = route(async (req) => {
   const b = await readJson(req);
   // Письмо для подтверждения почты ставится в очередь внутри регистрации (server/auth.ts).
   const { user, session } = await verifySignup(b.challengeId, b.code, { offer: b.offerAccepted, pd: b.pdConsent }, await requestCtx());
-  return setSessionCookie(NextResponse.json({ user }), session.token, session.expiresAt);
+  return setSessionCookie(NextResponse.json({ user }), session.token);
 });

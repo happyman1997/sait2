@@ -13,10 +13,13 @@ export function roughAddress(address: string, district: string | null): string {
   return kept.join(', ') || district || 'Адрес откроется после найма';
 }
 
+/** Наибольший сдвиг точки, м: отбор «в радиусе» по базе берёт с этим запасом, а точно — по сдвинутой точке. */
+export const FUZZ_MAX_M = 350;
+
 export function fuzzPoint(id: string, lat: number, lng: number): { lat: number; lng: number } {
   const h = createHash('sha256').update('pt:' + id).digest();
   const angle = (h.readUInt32BE(0) / 0x1_0000_0000) * 2 * Math.PI;
-  const meters = 150 + (h.readUInt32BE(4) / 0x1_0000_0000) * 200;
+  const meters = 150 + (h.readUInt32BE(4) / 0x1_0000_0000) * (FUZZ_MAX_M - 150);
   const dLat = (meters * Math.cos(angle)) / 111_320;
   const dLng = (meters * Math.sin(angle)) / (111_320 * Math.max(0.2, Math.cos((lat * Math.PI) / 180)));
   return { lat: lat + dLat, lng: lng + dLng };

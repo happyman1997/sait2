@@ -46,7 +46,12 @@ self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   const url = new URL((e.notification.data && e.notification.data.url) || '/', self.location.origin).href;
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
-    for (const c of list) if (c.url.startsWith(self.location.origin) && 'focus' in c) { c.navigate(url); return c.focus(); }
+    // Вкладка, открытая до воркера, ему не подчинена — navigate() у неё не работает: тогда новое окно.
+    for (const c of list) {
+      if (c.url.startsWith(self.location.origin) && 'focus' in c) {
+        return c.focus().then((w) => (w || c).navigate(url)).catch(() => self.clients.openWindow(url));
+      }
+    }
     return self.clients.openWindow(url);
   }));
 });

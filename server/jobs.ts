@@ -16,7 +16,7 @@ import { jobPhotos } from './files';
 import { publish } from './live';
 import { limitOrThrow } from './rate-limit';
 import type { SessionUser } from './session';
-import { fuzzPoint, isPrivateOrg, kmBetween, PRIVATE_NAME, roughAddress } from './privacy';
+import { FUZZ_MAX_M, fuzzPoint, isPrivateOrg, kmBetween, PRIVATE_NAME, roughAddress } from './privacy';
 import { doneSql } from './stats';
 
 export const DEFAULT_BASE = { lat: 55.7558, lng: 37.6173, label: 'Москва' };
@@ -130,7 +130,7 @@ export async function listJobs(p: ListParams, viewer: Viewer, db: Db = pool()) {
   if (!viewer) {
     const hit = await guestSearch.get(key, load);
     // Готовый гостевой ответ — один объект на запись кэша (его JSON и gzip кодируются один раз, http.ts).
-    return (hit.guest ??= { jobs: hit.rows.map(x => toSummary(x, null, qBase)), base: hit.base, more: hit.rows.length >= NEAR_LIMIT });
+    return (hit.guest ??= { jobs: inRadius(hit.rows.map(x => toSummary(x, null, qBase)), q.km), base: hit.base, more: hit.rows.length >= NEAR_LIMIT });
   }
   const hit = await guestSearch.get(key, load, VIEWER_MAX_AGE);
   const rows: SummaryRow[] = mine ?? hit.rows;
@@ -142,7 +142,7 @@ export async function listJobs(p: ListParams, viewer: Viewer, db: Db = pool()) {
       .map(x => [x.job_id, x.status]))
     : null;
   // Выдача посчитана от округлённой точки, а своя метка базы на карте — точно на месте.
-  return { jobs: rows.map(x => toSummary(own ? { ...x, my_status: own.get(x.id) ?? null } : x, viewer, qBase)), base: b, more: rows.length >= NEAR_LIMIT };
+  return { jobs: inRadius(rows.map(x => toSummary(own ? { ...x, my_status: own.get(x.id) ?? null } : x, viewer, qBase)), q.km), base: b, more: rows.length >= NEAR_LIMIT };
 }
 
 // ───────────────────────── Страницы для поисковиков ─────────────────────────
@@ -200,7 +200,7 @@ export async function customTypes(db: Db = pool()) {
 
 async function searchJobs(p: ListParams, viewer: Viewer, db: Db) {
   const r = await searchRows(p, viewer, db);
-  return { jobs: r.rows.map(x => toSummary(x, viewer, r.base)), base: r.base, more: r.rows.length >= NEAR_LIMIT };
+  return { jobs: inRadius(r.rows.map(x => toSummary(x, viewer, r.base)), p.km), base: r.base, more: r.rows.length >= NEAR_LIMIT };
 }
 
 /**
@@ -240,6 +240,14 @@ const FILTER_SQL = `j.status IN ('open', 'staffed')
           AND (NOT $8 OR j.date BETWEEN $4::date AND $4::date + 1)
           AND ${SEARCH_SQL(9, 10)}`;
 
+/**
+ * «Радиус от базы» — по точке, которую видит зритель: у частного заказчика до найма она сдвинута. По настоящей точке
+ * подбором базы (вошёл заказ в радиус или нет) можно было бы найти дом. База запроса берёт радиус с запасом сдвига.
+ */
+function inRadius(jobs: JobSummary[], km: number | undefined) {
+  return km && km > 0 ? jobs.filter(x => x.distanceKm != null && x.distanceKm <= km) : jobs;
+}
+
 async function searchRows(p: ListParams, viewer: Viewer, db: Db) {
   const { base, params } = filterParams(p, viewer);
   // Внутри — 500 ближайших к базе подходящих заказов: KNN по GiST-индексу jobs_pt_idx останавливается на 500-м.
@@ -256,7 +264,7 @@ async function searchRows(p: ListParams, viewer: Viewer, db: Db) {
      )
      SELECT ${SUMMARY_COLS}
        FROM near JOIN jobs j ON j.id = near.id JOIN job_types t ON t.id = j.type_id
-      WHERE $7::float8 IS NULL OR earth_distance(ll_to_earth($2, $3), near.pt) <= $7 * 1000
+      WHERE $7::float8 IS NULL OR earth_distance(ll_to_earth($2, $3), near.pt) <= $7 * 1000 + ${FUZZ_MAX_M}
       ORDER BY j.urgent DESC, j.date, j.created_at DESC`,
     params,
     db
@@ -295,6 +303,7 @@ export async function areaJobs(p: AreaParams, viewer: Viewer, db: Db = pool()): 
 
 async function scanArea(p: AreaParams, viewer: Viewer, db: Db): Promise<AreaResult> {
   const { base, params } = filterParams(p, viewer);
+  const km = params[6] as number | null;
   const s = Math.max(-85, p.s), n = Math.min(85, p.n);
   const whole = p.e - p.w >= 360;
   const w = whole ? -180 : Math.max(-180, p.w), e = whole ? 180 : Math.min(180, p.e);
@@ -310,7 +319,7 @@ async function scanArea(p: AreaParams, viewer: Viewer, db: Db): Promise<AreaResu
             (SELECT a.status FROM applications a WHERE a.job_id = j.id AND a.freelancer_id = $1) AS my_status
        FROM jobs j
       WHERE ${FILTER_SQL}
-        AND ($7::float8 IS NULL OR earth_distance(ll_to_earth($2, $3), j.pt) <= $7 * 1000)
+        AND ($7::float8 IS NULL OR earth_distance(ll_to_earth($2, $3), j.pt) <= $7 * 1000 + ${FUZZ_MAX_M})
         AND earth_box(ll_to_earth($11, $12), $13) @> j.pt
         AND j.lat BETWEEN $14 AND $15 AND j.lng BETWEEN $16 AND $17
       LIMIT ${AREA_SCAN}`,
@@ -321,7 +330,7 @@ async function scanArea(p: AreaParams, viewer: Viewer, db: Db): Promise<AreaResu
   const pts = r.rows.map(x => {
     const hidden = isPrivateOrg(x.org_type) && x.employer_id !== viewer?.id && x.my_status !== 'hired';
     return { id: x.id, ...(hidden ? fuzzPoint(x.id, x.lat, x.lng) : { lat: x.lat, lng: x.lng }) };
-  }).filter(q => q.lat >= s && q.lat <= n && q.lng >= w && q.lng <= e);
+  }).filter(q => q.lat >= s && q.lat <= n && q.lng >= w && q.lng <= e && (km == null || kmBetween(base, q) <= km));
   if (pts.length <= AREA_LIMIT) {
     if (!pts.length) return { jobs: [], cells: [], total: 0 };
     const full = await query<SummaryRow>(
@@ -816,8 +825,8 @@ export async function seriesHasHistory(jobId: string, db: Db) {
 export const SERIES_FIXED = 'По серии уже есть снятые дни, замены или сданные выходы — сдвинуть её даты нельзя. Отдельные дни снимают исполнители; чтобы начать заново, завершите серию и опубликуйте новую.';
 
 async function ownJob(num: number, viewer: NonNullable<Viewer>, db: Db, lock = false) {
-  const j = await one<{ id: string; employer_id: string; status: JobStatus; hired: number; date: string; title: string; repeat: string | null }>(
-    `SELECT j.id, j.employer_id, j.status, to_char(j.date, 'YYYY-MM-DD') AS date, j.title, j.repeat,
+  const j = await one<{ id: string; employer_id: string; status: JobStatus; hired: number; date: string; title: string; repeat: string | null; series_len: number }>(
+    `SELECT j.id, j.employer_id, j.status, to_char(j.date, 'YYYY-MM-DD') AS date, j.title, j.repeat, j.series_len,
             (SELECT count(*) FROM hires h WHERE h.job_id = j.id)::int AS hired
        FROM jobs j WHERE j.num = $1${lock ? ' FOR UPDATE OF j' : ''}`,
     [num],
@@ -887,8 +896,15 @@ export async function cancelJob(num: number, raw: unknown, viewer: Viewer): Prom
     const j = await ownJob(num, viewer, db, true);
     if (j.status === 'accepted') throw new AppError(409, 'Принятую работу отменить нельзя — напишите в чат и оставьте отзыв.');
     if (j.status === 'cancelled') throw new AppError(409, 'Заказ уже отменён.');
-    // В день выхода разовой смены до неё точно меньше суток, что бы ни выбрал работодатель.
-    if (!j.repeat && j.date <= localClock().day) notice = 'меньше суток';
+    // Сданная работа ждёт приёмки (или сама примется через 7 дней) — отменой её не обойти.
+    if (j.status === 'reported') throw new AppError(409, 'Работа уже сдана — отменить заказ нельзя. Примите её или откройте спор по расчёту в карточке заказа.');
+    if (j.repeat && await one('SELECT 1 FROM series_days WHERE job_id = $1 AND reported_at IS NOT NULL AND accepted_at IS NULL', [j.id], db)) {
+      throw new AppError(409, 'В серии есть сданные дни — сначала примите их (или откройте спор), потом отменяйте.');
+    }
+    // В день выхода до смены точно меньше суток, что бы ни выбрал работодатель: у серии — ближайший день по графику.
+    const today = localClock().day;
+    const next = j.repeat ? (await seriesDatesFor(j, db)).find(d => d >= today) : j.date;
+    if (next && next <= today) notice = 'меньше суток';
     const late = notice === 'меньше суток' && j.hired > 0;
     await query('INSERT INTO cancellations (job_id, by_role, reason, notice, late) VALUES ($1, $2, $3, $4, $5)', [j.id, 'employer', reason, notice, late], db);
     await query(`UPDATE jobs SET status = 'cancelled', updated_at = now() WHERE id = $1`, [j.id], db);
@@ -939,7 +955,8 @@ export async function applyToJob(num: number, raw: unknown, viewer: Viewer, toda
     if (prev?.status === 'hired') throw new AppError(409, 'Вы уже наняты на этот заказ.');
     if (prev?.status === 'rejected') throw new AppError(409, 'Работодатель уже ответил отказом на этот заказ.');
     if (prev) {
-      await query(`UPDATE applications SET status = 'sent', req_confirmed = $3, updated_at = now() WHERE job_id = $1 AND freelancer_id = $2`,
+      // Снова откликнулся после отзыва — новый отклик: в конец списка и в «Смену» как ожидающий.
+      await query(`UPDATE applications SET status = 'sent', req_confirmed = $3, withdrawn_at = NULL, created_at = now(), updated_at = now() WHERE job_id = $1 AND freelancer_id = $2`,
         [j.id, viewer.id, !!j.requirement], db);
     } else {
       await query('INSERT INTO applications (job_id, freelancer_id, req_confirmed) VALUES ($1, $2, $3)', [j.id, viewer.id, !!j.requirement], db);
@@ -980,9 +997,14 @@ export async function withdrawApplication(num: number, viewer: Viewer): Promise<
  * Навыки не отсекают — только ставят выше. С выключенными оповещениями событие остаётся в журнале без доставки.
  */
 export async function notifyNearby(num: number, db: Db = pool()) {
-  const j = await one<{ id: string; title: string; lat: number; lng: number; pay: number; unit: string; urgent: boolean; type_id: string; date: string }>(
-    `SELECT id, title, lat, lng, pay, unit, urgent, type_id, to_char(date, 'YYYY-MM-DD') AS date FROM jobs WHERE num = $1`, [num], db);
+  const j = await one<{ id: string; title: string; lat: number; lng: number; pay: number; unit: string; urgent: boolean; type_id: string; date: string; org_type: string }>(
+    `SELECT j.id, j.title, j.lat, j.lng, j.pay, j.unit, j.urgent, j.type_id, to_char(j.date, 'YYYY-MM-DD') AS date,
+            coalesce((SELECT ep.org_type FROM employer_profiles ep WHERE ep.user_id = j.employer_id), 'частное лицо') AS org_type
+       FROM jobs j WHERE j.num = $1`, [num], db);
   if (!j) return 0;
+  // Расстояние и радиус — до той же точки, что на карте: у частного заказчика она сдвинута. Иначе по «в 1,3 км» из
+  // оповещений нескольких аккаунтов с разными базами дом вычислялся бы.
+  const pt = isPrivateOrg(j.org_type) ? fuzzPoint(j.id, j.lat, j.lng) : { lat: j.lat, lng: j.lng };
   const people = await query<{ id: string; km: number }>(
     `SELECT u.id, earth_distance(ll_to_earth(u.base_lat, u.base_lng), ll_to_earth($1, $2)) / 1000 AS km
        FROM users u JOIN notification_settings ns ON ns.user_id = u.id
@@ -992,7 +1014,7 @@ export async function notifyNearby(num: number, db: Db = pool()) {
         AND earth_distance(ll_to_earth(u.base_lat, u.base_lng), ll_to_earth($1, $2)) <= ns.radius_km * 1000
       ORDER BY ($3 = ANY(coalesce(fp.skills, '{}'))) DESC, km
       LIMIT 500`,
-    [j.lat, j.lng, j.type_id], db);
+    [pt.lat, pt.lng, j.type_id], db);
   // С номером заказа, как в остальных событиях журнала: два заказа на одной улице иначе выглядят одинаково.
   await addEvents(people.rows.map(p => ({
     userId: p.id, kind: 'nearby', jobId: j.id, num, deliver: true, urgent: j.urgent,

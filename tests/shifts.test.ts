@@ -196,6 +196,8 @@ describe('исполнитель', () => {
     expect(Date.parse(d.shift!.autoAcceptAt!) - Date.parse(d.shift!.reportedAt!)).toBe(7 * 86400000);
     expect((await sh.listMessages(num, fl2.id, emp)).messages.at(-1)).toMatchObject({ mine: false, text: REPORT_MESSAGE });
     await expectErr(sh.reportDone(num, fl2), /уже сдана/);
+    // Сданную работу работодатель не отменит — только примет или откроет спор.
+    await expectErr(jobs.cancelJob(num, { reason: 'передумал', notice: 'больше суток' }, emp), /уже сдана/);
     // после сдачи — ни отказа, ни «Не вышел», ни найма
     await expectErr(sh.leaveShift(num, { reason: 'болезнь', notice: 'больше суток' }, fl), /сдана/);
     await expectErr(sh.staffAction(num, ids[0], 'no-show', emp), /сдана/);

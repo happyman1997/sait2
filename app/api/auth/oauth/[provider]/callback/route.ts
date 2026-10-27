@@ -19,7 +19,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ provider: strin
     if (r.kind === 'linked') return go('/profile?linked=' + r.provider);
     if (r.kind === 'signup') return go('/auth?oauth=' + encodeURIComponent(r.ticket) + (r.applyNum ? '&apply=' + r.applyNum : ''));
     const session = await createSession(r.userId, await requestCtx());
-    return setSessionCookie(go(r.applyNum ? '/?job=' + r.applyNum : '/'), session.token, session.expiresAt);
+    return setSessionCookie(go(r.applyNum ? '/?job=' + r.applyNum : '/'), session.token);
   } catch (e) {
     const msg = e instanceof AppError ? e.message : 'Не получилось войти через сервис — попробуйте ещё раз или войдите по почте.';
     if (!(e instanceof AppError)) console.error('[oauth]', (e as Error).message);

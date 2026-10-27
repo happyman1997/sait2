@@ -336,6 +336,16 @@ describe('карточка и отклик', () => {
     expect((await onMap(noBase(fl))).addressHidden).toBe(false);
     expect([(await onMap(null)).address, (await onMap(null)).addressHidden]).toEqual(['Москва, ул. Тверская', true]);
     expect((await onMap(noBase(emp))).addressHidden).toBe(true);
+    // «Радиус от базы» — по сдвинутой точке: база на 0,99 км от настоящей точки, по другую сторону от сдвинутой —
+    // заказ в радиус 1 км не попадает (по настоящей точке попал бы, и подбором базы дом нашёлся бы).
+    const shown = await onMap(null);
+    const dLat = MOSCOW.lat - shown.lat, dLng = (MOSCOW.lng - shown.lng) * Math.cos(MOSCOW.lat * Math.PI / 180);
+    const len = Math.hypot(dLat, dLng), step = 0.99 / 111.32;
+    const probe = { lat: MOSCOW.lat + dLat / len * step, lng: MOSCOW.lng + dLng / len * step / Math.cos(MOSCOW.lat * Math.PI / 180) };
+    const near = (await jobs.listJobs({ today, km: 1, ...probe }, null)).jobs.find(x => x.num === j.num);
+    expect(near).toBeUndefined();
+    const wide = (await jobs.listJobs({ today, km: 2, ...probe }, null)).jobs.find(x => x.num === j.num)!;
+    expect(wide.distanceKm).toBeGreaterThan(1);
 
     // Организация — адрес виден всем сразу.
     const org = await jobs.createJob(form(), emp, today);
@@ -413,6 +423,8 @@ describe('карточка и отклик', () => {
     expect(w.applicants).toBe(0);
     await expectErr(jobs.withdrawApplication(j.num, fl), undefined, /Отклика .* нет/);
     expect((await jobs.applyToJob(j.num, {}, fl, today)).myStatus).toBe('sent');
+    // Снова откликнулся — отклик как новый: без отметки об отзыве (иначе «Смена» его не видит).
+    expect((await one<{ withdrawn_at: Date | null }>('SELECT withdrawn_at FROM applications WHERE freelancer_id = $1', [fl.id]))!.withdrawn_at).toBeNull();
 
     const ev = await query<{ text: string }>('SELECT text FROM events WHERE user_id = $1 ORDER BY created_at', [emp.id]);
     expect(ev.rows.map(r => r.text).filter(t => /отклик/i.test(t))).toHaveLength(3);

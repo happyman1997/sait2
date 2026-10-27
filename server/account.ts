@@ -86,6 +86,8 @@ export async function deleteAccount(viewer: U | null, raw: unknown) {
       'DELETE FROM email_verifications WHERE user_id = $1',
       'DELETE FROM auth_challenges WHERE user_id = $1',
       'DELETE FROM events WHERE user_id = $1',
+      // Очередь писем и пушей: в ней адрес почты и тексты, а отложенные (тихие часы) ушли бы уже после удаления.
+      'DELETE FROM notification_outbox WHERE user_id = $1',
       'DELETE FROM notification_settings WHERE user_id = $1',
       'DELETE FROM employer_profiles WHERE user_id = $1',
       'DELETE FROM user_identities WHERE user_id = $1',

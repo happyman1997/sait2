@@ -87,6 +87,19 @@ describe('серия в заказе', () => {
     await expectErr(sh.toggleSeriesDay(j.num, { day }, emp), /нанятый/);
   });
 
+  it('уход с серии и её отмена в день выхода — поздние, что бы ни выбрали', async () => {
+    const j = await jobs.createJob(form({ dateISO: today }), emp, today);
+    await jobs.applyToJob(j.num, { reqConfirmed: true }, fl, today);
+    await sh.staffAction(j.num, (await jobs.getJob(j.num, emp)).applicantList![0].id, 'hire', emp);
+    await sh.leaveShift(j.num, { reason: 'другая работа', notice: 'больше суток' }, fl);
+    expect((await one<{ late: boolean }>('SELECT late FROM withdrawals WHERE freelancer_id = $1', [fl.id]))!.late).toBe(true);
+    expect(await one(`SELECT 1 FROM user_marks WHERE user_id = $1 AND kind = 'late_withdrawal'`, [fl.id])).not.toBeNull();
+    await jobs.applyToJob(j.num, { reqConfirmed: true }, fl, today);
+    await sh.staffAction(j.num, (await jobs.getJob(j.num, emp)).applicantList!.find(a => a.status === 'sent')!.id, 'hire', emp);
+    await jobs.cancelJob(j.num, { reason: 'сезон закончился', notice: 'больше суток' }, emp);
+    expect(await one(`SELECT 1 FROM user_marks WHERE user_id = $1 AND kind = 'late_cancel'`, [emp.id])).not.toBeNull();
+  });
+
   it('три снятых дня подряд — пометка в профиле, один раз', async () => {
     const j = await jobs.createJob(form(), emp, today);
     await jobs.applyToJob(j.num, { reqConfirmed: true }, fl, today);

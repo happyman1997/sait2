@@ -6,7 +6,7 @@ import { cleanDeep } from '@/lib/text';
 import { config } from './config';
 import { AppError } from './errors';
 import { observe } from './metrics';
-import { sessionCookieName, sessionUser, type Ctx } from './session';
+import { SESSION_MAX_DAYS, sessionCookieName, sessionUser, type Ctx } from './session';
 
 /**
  * IP клиента. Первое значение X-Forwarded-For задаёт сам клиент — ему верить нельзя (обход лимитов).
@@ -110,9 +110,11 @@ async function handle<T>(fn: (req: Request) => Promise<T | NextResponse>, req: R
   }
 }
 
-export function setSessionCookie(res: NextResponse, token: string, expiresAt: Date) {
+// Cookie живёт до предельного срока входа (90 дней): сервер продлевает сессию при активности (30 дней без входа — конец),
+// а у cookie со сроком «30 дней от входа» браузер выкидывал вход активного человека посреди смены.
+export function setSessionCookie(res: NextResponse, token: string) {
   res.cookies.set(sessionCookieName(), token, {
-    httpOnly: true, sameSite: 'lax', secure: config.secureCookies(), path: '/', expires: expiresAt
+    httpOnly: true, sameSite: 'lax', secure: config.secureCookies(), path: '/', maxAge: SESSION_MAX_DAYS * 86400
   });
   return res;
 }
