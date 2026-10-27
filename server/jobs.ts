@@ -17,6 +17,7 @@ import { publish } from './live';
 import { limitOrThrow } from './rate-limit';
 import type { SessionUser } from './session';
 import { FUZZ_MAX_M, fuzzPoint, isPrivateOrg, kmBetween, PRIVATE_NAME, roughAddress } from './privacy';
+import { myPaidSql } from './settle';
 import { doneSql } from './stats';
 
 export const DEFAULT_BASE = { lat: 55.7558, lng: 37.6173, label: 'Москва' };
@@ -523,10 +524,13 @@ async function loadSeries(r: { id: string; repeat: string | null; repeat_note: s
       `SELECT to_char(s.day, 'YYYY-MM-DD') AS day, s.freelancer_id, u.name, s.status
          FROM series_subs s JOIN users u ON u.id = s.freelancer_id WHERE s.job_id = $1 ORDER BY s.created_at`, [r.id], db).then(x => x.rows),
     query<{ day: string; reported_at: Date | null; accepted_at: Date | null; auto: boolean; employer_paid: boolean; freelancer_paid: boolean; i_worked: boolean }>(
-      `SELECT to_char(day, 'YYYY-MM-DD') AS day, reported_at, accepted_at, auto,
-              employer_paid_at IS NOT NULL AS employer_paid, freelancer_paid_at IS NOT NULL AS freelancer_paid,
-              coalesce($2::uuid = ANY(workers), false) AS i_worked
-         FROM series_days WHERE job_id = $1`, [r.id, viewer?.id ?? null], db).then(x => x.rows)
+      // «Деньги получены»: работодателю — отметили все, кто выходил; исполнителю — своя отметка (server/settle.ts).
+      `SELECT to_char(d.day, 'YYYY-MM-DD') AS day, d.reported_at, d.accepted_at, d.auto,
+              d.employer_paid_at IS NOT NULL AS employer_paid,
+              CASE WHEN $3 THEN d.freelancer_paid_at IS NOT NULL
+                   ELSE EXISTS (SELECT 1 FROM settle_marks m WHERE m.job_id = d.job_id AND m.day = d.day AND m.freelancer_id = $2) END AS freelancer_paid,
+              coalesce($2::uuid = ANY(d.workers), false) AS i_worked
+         FROM series_days d WHERE d.job_id = $1`, [r.id, viewer?.id ?? null, owner], db).then(x => x.rows)
   ]) : [[], [], []];
   const today = localClock().day;
   const live = r.status !== 'cancelled' && r.status !== 'accepted';
@@ -616,12 +620,14 @@ async function loadShift(jobId: string, employerId: string, empName: string, hir
   // Однострочные сведения — одним запросом (раньше восемь отдельных: столько же соединений пула на одну карточку).
   const [head, reviews, photos, safety, disputes] = await Promise.all([
     one<{
-      reported_at: Date | null; accepted_at: Date | null; auto: boolean | null; employer_marked: boolean | null; freelancer_marked: boolean | null;
+      reported_at: Date | null; accepted_at: Date | null; auto: boolean | null; employer_marked: boolean | null; freelancer_marked: boolean | null; my_paid: boolean;
       c_reason: string | null; c_at: Date | null; w_reason: string | null; w_notice: string | null; w_late: boolean | null; w_at: Date | null;
       no_show_at: Date | null; msgs: number; day_done: boolean;
     }>(
       `SELECT (SELECT reported_at FROM reports WHERE job_id = $1) AS reported_at,
               ac.accepted_at, ac.auto, st.employer_marked, st.freelancer_marked,
+              -- Исполнителю «деньги получены» — его собственная отметка (в бригаде у каждого своя).
+              ${myPaidSql('$1', '$2', '(SELECT repeat FROM jobs WHERE id = $1)')} AS my_paid,
               c.reason AS c_reason, c.created_at AS c_at,
               w.reason AS w_reason, w.notice AS w_notice, w.late AS w_late, w.at AS w_at,
               (SELECT at FROM no_shows WHERE job_id = $1 AND freelancer_id = $2) AS no_show_at,
@@ -644,7 +650,7 @@ async function loadShift(jobId: string, employerId: string, empName: string, hir
   const h = head!;
   const rep = h.reported_at ? { reported_at: h.reported_at } : null;
   const acc = h.accepted_at ? { accepted_at: h.accepted_at, auto: !!h.auto } : null;
-  const settle = h.employer_marked == null ? null : { employer_marked: h.employer_marked, freelancer_marked: !!h.freelancer_marked };
+  const settle = h.employer_marked == null ? null : { employer_marked: h.employer_marked, freelancer_marked: owner ? !!h.freelancer_marked : !!h.my_paid };
   const complaint = h.c_reason ? { reason: h.c_reason, created_at: h.c_at! } : null;
   // Отказ, неявка и переписка — сведения исполнителя о себе; работодателю не нужны.
   const withdrawal = !owner && h.w_reason ? { reason: h.w_reason, notice: h.w_notice!, late: !!h.w_late, at: h.w_at! } : null;

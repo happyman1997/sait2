@@ -7,6 +7,7 @@ import { AppError, ModerationError } from './errors';
 import { addEvents, mailSupport } from './events';
 import { getJob, shortName } from './jobs';
 import { publish } from './live';
+import { markJobPaid, markSeriesPaid } from './settle';
 import { limitOrThrow } from './rate-limit';
 import { slaDeadline } from './support';
 import type { SessionUser } from './session';
@@ -16,10 +17,10 @@ type Viewer = Parameters<typeof getJob>[1];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MARK_DAYS = 90;
 
-type JobRow = { id: string; num: string; title: string; status: string; employer_id: string; pay: number; unit: string; pay_type: string | null };
+type JobRow = { id: string; num: string; title: string; status: string; employer_id: string; pay: number; unit: string; pay_type: string | null; date: string; repeat: string | null };
 
 async function lockJob(num: number, db: Db) {
-  const j = await one<JobRow>('SELECT id, num, title, status, employer_id, pay, unit, pay_type FROM jobs WHERE num = $1 FOR UPDATE', [num], db);
+  const j = await one<JobRow>(`SELECT id, num, title, status, employer_id, pay, unit, pay_type, to_char(date, 'YYYY-MM-DD') AS date, repeat FROM jobs WHERE num = $1 FOR UPDATE`, [num], db);
   if (!j) throw new AppError(404, 'Заказ не найден.');
   return j;
 }
@@ -35,14 +36,16 @@ async function evidence(j: JobRow, freelancerId: string, db: Db) {
             EXISTS (SELECT 1 FROM acceptances WHERE job_id = $1) AS accepted,
             (SELECT auto FROM acceptances WHERE job_id = $1) AS auto,
             (SELECT employer_marked FROM settlements WHERE job_id = $1) AS emp,
-            (SELECT freelancer_marked FROM settlements WHERE job_id = $1) AS fl`, [j.id, freelancerId], db);
+            -- «Деньги получены» — отметка именно этого исполнителя (в бригаде у каждого своя).
+            EXISTS (SELECT 1 FROM settle_marks WHERE job_id = $1 AND freelancer_id = $2) AS fl`, [j.id, freelancerId], db);
   const x = e!;
   // Серия: приёмка и расчёт — по дням, в которые выходил этот исполнитель.
   const d = (await one<{ days: number; reported: number; accepted: number; auto: number; emp: number; fl: number }>(
     `SELECT count(*)::int AS days, count(reported_at)::int AS reported, count(accepted_at)::int AS accepted,
             count(*) FILTER (WHERE accepted_at IS NOT NULL AND auto)::int AS auto,
             count(*) FILTER (WHERE accepted_at IS NOT NULL AND employer_paid_at IS NOT NULL)::int AS emp,
-            count(*) FILTER (WHERE accepted_at IS NOT NULL AND freelancer_paid_at IS NOT NULL)::int AS fl
+            count(*) FILTER (WHERE accepted_at IS NOT NULL AND EXISTS (SELECT 1 FROM settle_marks m
+                               WHERE m.job_id = series_days.job_id AND m.day = series_days.day AND m.freelancer_id = $2))::int AS fl
        FROM series_days WHERE job_id = $1 AND $2::uuid = ANY(workers)`, [j.id, freelancerId], db))!;
   const work = d.days
     ? [
@@ -140,8 +143,8 @@ export async function actDispute(num: number, disputeId: string, raw: unknown, v
       await query(`UPDATE disputes SET status = 'withdrawn', closed_at = now() WHERE id = $1`, [d.id], db);
       // «Деньги пришли» — это и есть отметка получения.
       if (mySide === 'freelancer') {
-        await query(`INSERT INTO settlements (job_id, freelancer_marked, freelancer_at) VALUES ($1, true, now())
-                     ON CONFLICT (job_id) DO UPDATE SET freelancer_marked = true, freelancer_at = coalesce(settlements.freelancer_at, now())`, [j.id], db);
+        if (j.repeat) await markSeriesPaid(j.id, d.freelancer_id, db);
+        else await markJobPaid(j.id, j.date, d.freelancer_id, db);
       }
       note = mySide === 'freelancer' ? 'Спор ' + label + ' снят — исполнитель получил деньги' : 'Спор ' + label + ' снят работодателем — вопрос закрыт по договорённости';
     } else if (action === 'paid') {

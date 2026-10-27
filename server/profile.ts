@@ -9,6 +9,7 @@ import { geoSearch, placeLabel } from './geo';
 import { limitOrThrow } from './rate-limit';
 import { shortName } from './jobs';
 import type { SessionUser } from './session';
+import { myPaidSql } from './settle';
 import { doneSql } from './stats';
 import { enabledProviders, identitiesOf } from './oauth';
 import { PERSON_NAME } from '@/lib/text';
@@ -46,7 +47,8 @@ export async function getProfile(viewer: U | null) {
               (SELECT inn FROM employer_profiles WHERE user_id = u.id) AS inn
          FROM users u WHERE u.id = $1`, [u.id]),
     query<{ num: string; title: string; address: string; date: string; pay: number; unit: string; employer_marked: boolean | null; freelancer_marked: boolean | null; auto: boolean }>(
-      `SELECT j.num, j.title, j.address, to_char(j.date, 'YYYY-MM-DD') AS date, j.pay, j.unit, s.employer_marked, s.freelancer_marked, ac.auto
+      `SELECT j.num, j.title, j.address, to_char(j.date, 'YYYY-MM-DD') AS date, j.pay, j.unit, s.employer_marked,
+              ${emp ? 's.freelancer_marked' : myPaidSql('j.id', '$1', 'j.repeat')} AS freelancer_marked, ac.auto
          FROM jobs j JOIN acceptances ac ON ac.job_id = j.id LEFT JOIN settlements s ON s.job_id = j.id
         WHERE ${emp ? 'j.employer_id = $1' : 'EXISTS (SELECT 1 FROM hires h WHERE h.job_id = j.id AND h.freelancer_id = $1)'}
         ORDER BY ac.accepted_at DESC LIMIT 30`, [u.id]),

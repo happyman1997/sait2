@@ -265,6 +265,25 @@ describe('приёмка, расчёт, отзывы, жалобы', () => {
     expect(ev!.n).toBe(1);
   });
 
+  it('расчёт в бригаде: «деньги получены» — у каждого свой, «подтверждён» — когда отметили все', async () => {
+    const { num, ids } = await jobWithApps([fl, fl2], { crew: '2' });
+    await sh.staffAction(num, ids[0], 'hire', emp);
+    await sh.staffAction(num, ids[1], 'hire', emp);
+    await query('UPDATE jobs SET date = current_date - 1 WHERE num = $1', [num]);
+    await sh.acceptWork(num, emp);
+    await sh.markSettled(num, emp);
+    // Первый получил деньги — второй (ещё без денег) не отмечен, работодатель видит «не все».
+    expect((await sh.markSettled(num, fl)).shift?.settle).toEqual({ employer: true, freelancer: true });
+    expect((await jobs.getJob(num, fl2)).shift?.settle).toEqual({ employer: true, freelancer: false });
+    expect((await jobs.getJob(num, emp)).shift?.settle).toEqual({ employer: true, freelancer: false });
+    expect((await one<{ n: number }>(`SELECT count(*)::int n FROM events WHERE kind = 'settle' AND text LIKE 'Расчёт подтверждён%'`))!.n).toBe(0);
+    // «Смена» второго — всё ещё про этот заказ: деньги он не отметил.
+    expect((await sh.currentShift(fl2))?.num).toBe(num);
+    await sh.markSettled(num, fl2);
+    expect((await jobs.getJob(num, emp)).shift?.settle).toEqual({ employer: true, freelancer: true });
+    expect((await one<{ n: number }>(`SELECT count(*)::int n FROM events WHERE kind = 'settle' AND text LIKE 'Расчёт подтверждён%'`))!.n).toBe(1);
+  });
+
   it('отзыв: 1–5, обе стороны, 10 минут на правку', async () => {
     const { num, ids } = await accepted();
     await expectErr(sh.saveReview(num, { rating: 7, target: ids[0] }, emp), /от 1 до 5/);

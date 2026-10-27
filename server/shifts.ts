@@ -12,6 +12,7 @@ import { AppError, ModerationError } from './errors';
 import { addEvents, localClock, mailSupport } from './events';
 import { clientToday, getJob, initialsOf, invalidateSearch, seriesDatesFor, seriesHasHistory, SERIES_FIXED, shortName, syncSeriesEnd } from './jobs';
 import { publish } from './live';
+import { markDayPaid, markJobPaid, markSeriesPaid, myPaidSql, syncSeriesSettle } from './settle';
 import { fuzzPoint, roughAddress } from './privacy';
 import { limitOrThrow } from './rate-limit';
 import type { SessionUser } from './session';
@@ -403,31 +404,31 @@ export async function markSettled(num: number, viewer: Viewer): Promise<JobDetai
     const isOwner = u.id === j.employer_id;
     if (!isOwner && !hired.some(h => h.freelancer_id === u.id)) throw new AppError(403, 'Отметку ставят только стороны смены.');
     let s: { employer_marked: boolean; freelancer_marked: boolean } | null;
+    // «Деньги получены» — у каждого исполнителя своя отметка (server/settle.ts): в бригаде за всех не отмечают.
     if (isSeries(j.repeat)) {
       // Серия: отметка по заказу — за все принятые дни (у исполнителя — за дни, когда он выходил); итог — сводка по дням.
-      await query(isOwner
-        ? 'UPDATE series_days SET employer_paid_at = now() WHERE job_id = $1 AND accepted_at IS NOT NULL AND employer_paid_at IS NULL'
-        : 'UPDATE series_days SET freelancer_paid_at = now() WHERE job_id = $1 AND accepted_at IS NOT NULL AND freelancer_paid_at IS NULL AND $2::uuid = ANY(workers)',
-      isOwner ? [j.id] : [j.id, u.id], db);
-      await syncSeriesSettle(j.id, db);
+      if (isOwner) {
+        await query('UPDATE series_days SET employer_paid_at = now() WHERE job_id = $1 AND accepted_at IS NOT NULL AND employer_paid_at IS NULL', [j.id], db);
+        await syncSeriesSettle(j.id, db);
+      } else await markSeriesPaid(j.id, u.id, db);
       s = await one('SELECT employer_marked, freelancer_marked FROM settlements WHERE job_id = $1', [j.id], db);
-    } else {
+    } else if (isOwner) {
       s = await one<{ employer_marked: boolean; freelancer_marked: boolean }>(
-        isOwner
-          ? `INSERT INTO settlements (job_id, employer_marked, employer_at) VALUES ($1, true, now())
-             ON CONFLICT (job_id) DO UPDATE SET employer_marked = true, employer_at = coalesce(settlements.employer_at, now())
-             RETURNING employer_marked, freelancer_marked`
-          : `INSERT INTO settlements (job_id, freelancer_marked, freelancer_at) VALUES ($1, true, now())
-             ON CONFLICT (job_id) DO UPDATE SET freelancer_marked = true, freelancer_at = coalesce(settlements.freelancer_at, now())
-             RETURNING employer_marked, freelancer_marked`,
-        [j.id], db);
+        `INSERT INTO settlements (job_id, employer_marked, employer_at) VALUES ($1, true, now())
+         ON CONFLICT (job_id) DO UPDATE SET employer_marked = true, employer_at = coalesce(settlements.employer_at, now())
+         RETURNING employer_marked, freelancer_marked`, [j.id], db);
+    } else {
+      await markJobPaid(j.id, j.date, u.id, db);
+      s = await one('SELECT employer_marked, freelancer_marked FROM settlements WHERE job_id = $1', [j.id], db);
     }
     const t = 'заказ № ' + jobNum(num) + ' «' + j.title + '»';
     const others = isOwner ? hired.map(h => h.freelancer_id) : [j.employer_id];
+    // «Обеими сторонами» — когда оплату отметил работодатель и получение — все в смене.
     const both = !!s?.employer_marked && !!s?.freelancer_marked;
+    const who = isOwner ? '' : await userName(u.id, db);
     await addEvents(others.map(id => ({
       userId: id, kind: 'settle', jobId: j.id, num,
-      text: both ? 'Расчёт подтверждён обеими сторонами · ' + t : (isOwner ? 'Работодатель отметил: оплата передана · ' : 'Исполнитель отметил: деньги получены · ') + t
+      text: both ? 'Расчёт подтверждён обеими сторонами · ' + t : (isOwner ? 'Работодатель отметил: оплата передана · ' : who + ' отметил: деньги получены · ') + t
     })), db);
     await publish([j.employer_id, ...hired.map(h => h.freelancer_id)], { t: 'job', num }, db);
   });
@@ -808,7 +809,6 @@ export async function currentShift(viewer: Viewer): Promise<JobDetail | null> {
       `SELECT j.num FROM jobs j
          LEFT JOIN hires h ON h.job_id = j.id AND h.freelancer_id = $1
          LEFT JOIN applications a ON a.job_id = j.id AND a.freelancer_id = $1
-         LEFT JOIN settlements s ON s.job_id = j.id
          -- Замена на день серии: ближайший ещё не прошедший день, на который взяли.
          LEFT JOIN LATERAL (SELECT min(ss.day) AS day FROM series_subs ss
                              WHERE ss.job_id = j.id AND ss.freelancer_id = $1 AND ss.status = 'hired' AND ss.day >= current_date) sb ON true
@@ -816,7 +816,7 @@ export async function currentShift(viewer: Viewer): Promise<JobDetail | null> {
                        UNION SELECT job_id FROM series_subs WHERE freelancer_id = $1 AND status = 'hired')
           AND j.status <> 'cancelled' AND (
               (h.job_id IS NOT NULL AND j.status <> 'accepted')
-           OR (h.job_id IS NOT NULL AND j.status = 'accepted' AND NOT coalesce(s.freelancer_marked, false) AND j.date > current_date - 14)
+           OR (h.job_id IS NOT NULL AND j.status = 'accepted' AND NOT ${myPaidSql('j.id', '$1', 'j.repeat')} AND j.date > current_date - 14)
            OR (h.job_id IS NULL AND sb.day IS NOT NULL AND j.status <> 'accepted')
            OR (h.job_id IS NULL AND a.status = 'sent' AND a.withdrawn_at IS NULL AND j.date >= current_date))
         ORDER BY CASE WHEN h.job_id IS NOT NULL AND j.status <> 'accepted' THEN 0 WHEN sb.day IS NOT NULL THEN 1 WHEN h.job_id IS NOT NULL THEN 2 ELSE 3 END,
@@ -895,17 +895,6 @@ async function workersOn(jobId: string, day: string, db: Db) {
      SELECT s.freelancer_id, false FROM series_subs s WHERE s.job_id = $1 AND s.day = $2 AND s.status = 'hired'`, [jobId, day], db)).rows;
 }
 
-/** Расчёт по завершённой серии — сводка по дням: отмечен, когда отмечены все принятые дни. */
-async function syncSeriesSettle(jobId: string, db: Db) {
-  await query(
-    `UPDATE settlements s SET employer_marked = x.e, freelancer_marked = x.f,
-            employer_at = CASE WHEN x.e THEN coalesce(s.employer_at, now()) END,
-            freelancer_at = CASE WHEN x.f THEN coalesce(s.freelancer_at, now()) END
-       FROM (SELECT coalesce(bool_and(employer_paid_at IS NOT NULL), true) AS e, coalesce(bool_and(freelancer_paid_at IS NOT NULL), true) AS f
-               FROM series_days WHERE job_id = $1 AND accepted_at IS NOT NULL) x
-      WHERE s.job_id = $1`, [jobId], db);
-}
-
 export type DayAction = 'report' | 'accept' | 'paid';
 
 /**
@@ -963,13 +952,16 @@ export async function seriesDayAction(num: number, raw: unknown, viewer: Viewer)
         if (w.employer_paid_at) throw new AppError(409, 'Оплата за этот день уже отмечена.');
         await query('UPDATE series_days SET employer_paid_at = now() WHERE job_id = $1 AND day = $2', [j.id, day], db);
       } else if (w.workers.includes(u.id)) {
-        if (w.freelancer_paid_at) throw new AppError(409, 'Получение за этот день уже отмечено.');
-        await query('UPDATE series_days SET freelancer_paid_at = now() WHERE job_id = $1 AND day = $2', [j.id, day], db);
+        // У каждого, кто выходил, своя отметка; день «получен», когда отметили все.
+        if (!(await markDayPaid(j.id, day, u.id, db))) throw new AppError(409, 'Получение за этот день уже отмечено.');
       } else throw new AppError(403, 'Отметку ставят только стороны смены этого дня.');
-      const both = owner ? !!w.freelancer_paid_at : !!w.employer_paid_at;
+      const now = (await one<{ e: boolean; f: boolean }>(
+        'SELECT employer_paid_at IS NOT NULL AS e, freelancer_paid_at IS NOT NULL AS f FROM series_days WHERE job_id = $1 AND day = $2', [j.id, day], db))!;
+      const both = now.e && now.f;
+      const who = owner ? '' : await userName(u.id, db);
       await addEvents((owner ? w.workers : [j.employer_id]).map(id => ({ userId: id, kind: 'settle', jobId: j.id, num,
         text: both ? 'Расчёт за ' + label + ' подтверждён обеими сторонами.'
-          : owner ? 'Работодатель отметил: оплата за ' + label + ' передана.' : 'Исполнитель отметил: деньги за ' + label + ' получены.' })), db);
+          : owner ? 'Работодатель отметил: оплата за ' + label + ' передана.' : who + ' отметил: деньги за ' + label + ' получены.' })), db);
       if (j.status === 'accepted') await syncSeriesSettle(j.id, db);
       notify = [j.employer_id, ...w.workers];
     }
