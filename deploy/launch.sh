@@ -150,3 +150,5 @@ g=$(curl -s --max-time 20 "https://$DOMAIN/api/geo/search?q=%D0%9C%D0%BE%D1%81%D
 if printf '%s' "$g" | grep -q '"lat"'; then echo "Поиск адреса: работает."
 elif [ -z "$(get DADATA_API_KEY)" ]; then echo "Поиск адреса: не подключён — добавьте ключ DaData: bash $DIR/deploy/configure.sh, затем снова этот скрипт."
 else echo "Поиск адреса: DaData не ответил или не принял ключ. Проверьте ключ (bash $DIR/deploy/configure.sh) и пришлите строки ниже:"; dc logs --tail 200 app 2>/dev/null | grep '\[geo\]' | tail -3 || true; fi
+# Telegram-канал: верный ли ключ бота и может ли он публиковать (подключён — одна строка итога).
+bash "$DIR/deploy/telegram-check.sh" || true

@@ -208,26 +208,9 @@ if [ -n "$(get TELEGRAM_CHANNEL)" ]; then
     [ "$(get TELEGRAM_DIGEST_CITY)" = все ] && set_kv TELEGRAM_DIGEST_CITY ''
   fi
 fi
-# Тот ли ключ, и может ли бот писать в канал — те же запросы, что делает сайт. Нет связи с Telegram — так и пишем.
+# Тот ли ключ и может ли бот писать в канал (deploy/telegram-check.sh — его же вызывает launch.sh).
 if [ -n "$(get TELEGRAM_CHANNEL)" ] && [ -n "$(get TELEGRAM_BOT_TOKEN)" ]; then
-  api="https://api.telegram.org/bot$(get TELEGRAM_BOT_TOKEN)"
-  me=$(curl -s --max-time 10 "$api/getMe" 2>/dev/null || true)
-  bot_id=$(printf '%s' "$me" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2 || true)
-  bot_name=$(printf '%s' "$me" | grep -o '"username":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
-  if [ -z "$me" ]; then
-    echo "  ВНИМАНИЕ: сервер не достучался до Telegram (api.telegram.org). Сводка не сможет выходить — проверьте позже или напишите в поддержку хостинга."
-  elif [ -z "$bot_id" ]; then
-    echo "  ВНИМАНИЕ: Telegram не принял ключ бота. Скопируйте его у @BotFather ещё раз (команда /token) и запустите скрипт снова."
-  else
-    hour=$(get TELEGRAM_DIGEST_HOUR)
-    member=$(curl -s --max-time 10 "$api/getChatMember?chat_id=$(urlenc "$(get TELEGRAM_CHANNEL)")&user_id=$bot_id" 2>/dev/null || true)
-    if printf '%s' "$member" | grep -q '"status":"administrator"' && printf '%s' "$member" | grep -q '"can_post_messages":true'; then
-      echo "  Telegram: бот @$bot_name — администратор $(get TELEGRAM_CHANNEL) и может публиковать. Сводка — каждый день в ${hour:-19}:00."
-    else
-      echo "  ВНИМАНИЕ: бот @$bot_name не может публиковать в $(get TELEGRAM_CHANNEL)."
-      echo "  Откройте канал → Управление каналом → Администраторы → Добавить → найдите @$bot_name и включите «Публикация сообщений»."
-    fi
-  fi
+  bash deploy/telegram-check.sh | sed 's/^/  /' || true
 fi
 
 echo
