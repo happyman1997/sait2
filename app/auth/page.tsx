@@ -16,7 +16,9 @@ export default async function AuthPage({ searchParams }: { searchParams: Promise
     : null;
   const mode: AuthMode = sp.mode === 'login' || sp.mode === 'recover' ? sp.mode : 'signup';
   // Восстановление открыто и во входе: так пароль задают те, кто регистрировался через Яндекс ID / VK ID.
-  if (mode !== 'recover' && await currentUser()) redirect(pending ? '/?job=' + pending.num : '/');
+  // «Разместить заказ» со страницы для заказчиков (next=new): после входа — сразу форма нового заказа.
+  const startNew = sp.next === 'new' && !pending;
+  if (mode !== 'recover' && await currentUser()) redirect(pending ? '/?job=' + pending.num : startNew ? '/?new=1' : '/');
   const stats = await platformStats();
   return (
     <AuthScreen
@@ -24,6 +26,7 @@ export default async function AuthPage({ searchParams }: { searchParams: Promise
       initialRole={sp.role === 'employer' && !pending ? 'employer' : 'freelancer'}
       stats={stats}
       pending={pending && { num: Number(pending.num), title: pending.title }}
+      startNew={startNew}
       oauthProviders={enabledProviders()}
       oauthTicket={typeof sp.oauth === 'string' ? sp.oauth : null}
       oauthError={typeof sp.oauth_error === 'string' ? sp.oauth_error.slice(0, 300) : null}

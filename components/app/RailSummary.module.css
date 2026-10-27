@@ -164,3 +164,6 @@
 .workList { all: unset; cursor: pointer; color: var(--color-accent-700); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
 .workList:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 
+
+/* «Нанимаю»: ссылка на страницу для заказчиков под кнопкой. */
+.forCustomers { display: block; margin-top: 10px; text-align: center; font-size: 14px; color: var(--color-accent-100); }

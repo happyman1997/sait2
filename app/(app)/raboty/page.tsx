@@ -4,6 +4,7 @@ import { Crumbs, JobCards, JsonLd, LinkChips, SeoPage } from '@/components/seo/S
 import sty from '@/components/seo/Seo.module.css';
 import { WorkSearch } from '@/components/seo/WorkSearch';
 import { AUTO_ACCEPT_DAYS, plural, type JobSummary } from '@/lib/jobs';
+import { WORK_SEASONS } from '@/lib/seo';
 import { normSkill } from '@/lib/skills';
 import { ModerationError } from '@/server/errors';
 import { publicJobs } from '@/server/jobs';
@@ -24,15 +25,6 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
     ...(q ? { robots: { index: false, follow: true } } : { alternates: { canonical: '/raboty' } })
   };
 }
-
-// По сезонам — так люди и ищут: зимой снег, летом покос, осенью листва.
-const SEASONS: [string, string[]][] = [
-  ['Зима', ['snow', 'ice', 'roof', 'salt']],
-  ['Весна', ['thaw', 'spring', 'green']],
-  ['Лето', ['grass', 'water', 'trim', 'paint', 'facade']],
-  ['Осень', ['leaves', 'harvest', 'winterize', 'dacha']],
-  ['Круглый год', ['street', 'trash', 'load']]
-];
 
 /** Каталог: все виды подработки по сезонам с числом открытых заказов, города, частые вопросы. */
 export default async function WorksHub(props: Props) {
@@ -96,7 +88,7 @@ export default async function WorksHub(props: Props) {
         <Link href="/auth?role=freelancer" className="btn btn-secondary">Создать профиль исполнителя</Link>
       </div>
 
-      {SEASONS.map(([season, ids]) => (
+      {WORK_SEASONS.map(([season, ids]) => (
         <section key={season}>
           <h2 className={sty.h2}>{season}</h2>
           <LinkChips items={ids.map(id => works.find(w => w.id === id)!).map(w => ({ href: '/raboty/' + w.slug, label: w.label, count: w.count }))} />
@@ -129,13 +121,13 @@ export default async function WorksHub(props: Props) {
         <h3>Что если работу не приняли?</h3>
         <p>После сдачи работы у заказчика {AUTO_ACCEPT_DAYS} дней на приёмку; не ответил — смена закрывается и засчитывается исполнителю автоматически. По расчёту можно открыть спор — поддержка разберёт его по переписке и фото.</p>
         <h3>Я работодатель — как найти людей на смену?</h3>
-        <p>Создайте профиль работодателя и поставьте заказ точкой на карте: тип работы, дата, объём и оплата. Исполнители поблизости получат уведомление, отклики появятся в карточке заказа.</p>
+        <p>Создайте профиль работодателя и поставьте заказ точкой на карте: тип работы, дата, объём и оплата. Исполнители поблизости получат уведомление, отклики появятся в карточке заказа. Подробнее — на странице <Link href="/zakazchikam">для заказчиков</Link>.</p>
       </div>
 
       <div className={sty.cta}>
         <h2>Нужны люди на смену?</h2>
         <p>Разместите заказ — его увидят исполнители рядом, условия видны сразу.</p>
-        <Link href="/auth?role=employer" className="btn">Разместить заказ</Link>
+        <Link href="/auth?role=employer&next=new" className="btn">Разместить заказ</Link>
       </div>
     </SeoPage>
   );

@@ -66,7 +66,8 @@ export function GuestGuide() {
           </div>
           <div className={sty.cf7a0fd3}>{g.note}</div>
         </div>
-        <Link href={'/auth?role=' + who} className={'btn btn-secondary btn-block ' + sty.cd488481}>{g.cta}</Link>
+        <Link href={'/auth?role=' + who + (who === 'employer' ? '&next=new' : '')} className={'btn btn-secondary btn-block ' + sty.cd488481}>{g.cta}</Link>
+        {who === 'employer' && <Link href="/zakazchikam" className={sty.forCustomers}>Подробнее для заказчиков →</Link>}
       </div>
     </div>
   );

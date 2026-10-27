@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cityPhrase, inCity, ldJson, slugify, WORK_INFO, WORK_PAGES, workBySlug } from '@/lib/seo';
+import { cityPhrase, inCity, ldJson, seasonOf, slugify, WORK_INFO, WORK_PAGES, WORK_SEASONS, workById, workBySlug } from '@/lib/seo';
 
 describe('страницы для поисковиков', () => {
   it('адрес страницы — транслитом', () => {
@@ -37,5 +37,23 @@ describe('страницы для поисковиков', () => {
     const s = ldJson({ description: 'Вынести хлам </script><script>alert(1)</script>' });
     expect(s).not.toContain('</script>');
     expect(JSON.parse(s).description).toContain('</script>');
+  });
+});
+
+describe('страница для заказчиков: сезон', () => {
+  it('сезон по месяцу; в последний месяц сезона — и следующий («скоро»)', () => {
+    expect(seasonOf('2026-10-27')).toEqual({ now: 'Осень', soon: 'Зима' });
+    expect(seasonOf('2026-11-05')).toEqual({ now: 'Зима', soon: null });
+    expect(seasonOf('2027-01-15')).toEqual({ now: 'Зима', soon: null });
+    expect(seasonOf('2027-03-10')).toEqual({ now: 'Зима', soon: 'Весна' });
+    expect(seasonOf('2027-05-20')).toEqual({ now: 'Весна', soon: 'Лето' });
+    expect(seasonOf('2027-07-01')).toEqual({ now: 'Лето', soon: null });
+    expect(seasonOf('2027-08-31')).toEqual({ now: 'Лето', soon: 'Осень' });
+  });
+
+  it('в сезонах — только виды работ из каталога, без повторов', () => {
+    const ids = WORK_SEASONS.flatMap(s => s[1]);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const id of ids) expect(workById(id), id).not.toBeNull();
   });
 });

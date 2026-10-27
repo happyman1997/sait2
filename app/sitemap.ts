@@ -18,6 +18,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const fixed: MetadataRoute.Sitemap = [
     { url: base + '/', changeFrequency: 'hourly', priority: 1 },
     { url: base + '/raboty', changeFrequency: 'daily', priority: 0.8 },
+    { url: base + '/zakazchikam', changeFrequency: 'weekly', priority: 0.8 },
     ...WORK_PAGES.map(w => ({ url: base + '/raboty/' + w.slug, changeFrequency: 'daily' as const, priority: 0.7 })),
     { url: base + '/help', changeFrequency: 'monthly', priority: 0.3 },
     ...LEGAL.map(p => ({ url: base + '/legal/' + p, changeFrequency: 'monthly' as const, priority: 0.2 }))

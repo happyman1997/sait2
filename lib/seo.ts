@@ -18,6 +18,26 @@ export const WORK_PAGES = JOB_TYPES.map(t => ({ id: t.id as string, label: t.lab
 export const workBySlug = (slug: string) => WORK_PAGES.find(w => w.slug === slug) ?? null;
 export const workById = (id: string) => WORK_PAGES.find(w => w.id === id) ?? null;
 
+/** Виды работ по сезонам — так люди и ищут: зимой снег, летом покос, осенью листва. */
+export const WORK_SEASONS: [string, string[]][] = [
+  ['Зима', ['snow', 'ice', 'roof', 'salt']],
+  ['Весна', ['thaw', 'spring', 'green']],
+  ['Лето', ['grass', 'water', 'trim', 'paint', 'facade']],
+  ['Осень', ['leaves', 'harvest', 'winterize', 'dacha']],
+  ['Круглый год', ['street', 'trash', 'load']]
+];
+
+// Месяц (1–12) → сезон: зима — с ноября по март (снег), весна — апрель и май, лето — с июня по август, осень — сентябрь и октябрь.
+const SEASON_BY_MONTH = ['Зима', 'Зима', 'Зима', 'Весна', 'Весна', 'Лето', 'Лето', 'Лето', 'Осень', 'Осень', 'Зима', 'Зима'];
+const NEXT_SEASON: Record<string, string> = { Зима: 'Весна', Весна: 'Лето', Лето: 'Осень', Осень: 'Зима' };
+
+/** Сезон по дате YYYY-MM-DD; в последний месяц сезона — и следующий («скоро»), чтобы заказчики искали людей заранее. */
+export function seasonOf(day: string): { now: string; soon: string | null } {
+  const m = parseInt(day.slice(5, 7), 10);
+  const now = SEASON_BY_MONTH[m - 1] || 'Зима';
+  return { now, soon: SEASON_BY_MONTH[m % 12] !== now ? NEXT_SEASON[now] : null };
+}
+
 type WorkInfo = { season: string; about: string; tasks: string[]; bring: string };
 
 /** Текст посадочной страницы вида работ: о чём работа, что обычно делают, что взять. */

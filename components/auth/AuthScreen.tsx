@@ -96,8 +96,8 @@ function OAuthButtons({ providers, apply, lead, orEmail = true }: { providers: O
 
 type OAuthTicketInfo = { provider: OAuthProvider; providerName: string; name: string; email: string };
 
-export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProviders = [], oauthTicket, oauthError }: {
-  initialMode: AuthMode; initialRole: Role; stats: Stats; pending?: { num: number; title: string } | null;
+export function AuthScreen({ initialMode, initialRole, stats, pending, startNew = false, oauthProviders = [], oauthTicket, oauthError }: {
+  initialMode: AuthMode; initialRole: Role; stats: Stats; pending?: { num: number; title: string } | null; startNew?: boolean;
   oauthProviders?: OAuthProvider[]; oauthTicket?: string | null; oauthError?: string | null;
 }) {
   const router = useRouter();
@@ -201,9 +201,9 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
     }
   }, [mode]);
 
-  // После входа доводим до конца действие, которое его потребовало: отложенный отклик.
+  // После входа доводим до конца действие, которое его потребовало: отложенный отклик или новый заказ.
   const done = (role?: Role) => {
-    router.replace(pending ? '/?job=' + pending.num + (role !== 'employer' ? '&apply=1' : '') : '/');
+    router.replace(pending ? '/?job=' + pending.num + (role !== 'employer' ? '&apply=1' : '') : startNew && role === 'employer' ? '/?new=1' : '/');
     router.refresh();
   };
 
