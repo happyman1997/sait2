@@ -159,6 +159,21 @@ if [ -n "$(get YANDEX_CLIENT_ID)" ]; then
     echo "  Без Client secret вход через Яндекс не работает — ClientID не сохранён. Запустите скрипт ещё раз, когда будут оба."
   fi
 fi
+# Знает ли Яндекс такое приложение и такой адрес возврата — тот же запрос, что делает кнопка «Войти через Яндекс ID».
+# Нет связи с Яндексом — молча пропускаем.
+if [ -n "$(get YANDEX_CLIENT_ID)" ]; then
+  cb="https://$DOMAIN/api/auth/oauth/yandex/callback"
+  ans=$(curl -s --max-time 10 -w '\n%{http_code}' "https://oauth.yandex.ru/authorize?response_type=code&client_id=$(get YANDEX_CLIENT_ID)&redirect_uri=$(urlenc "$cb")" 2>/dev/null || true)
+  code=${ans##*$'\n'}
+  if [ "$code" = 400 ] && printf '%s' "$ans" | grep -qi 'client_id'; then
+    echo "  ВНИМАНИЕ: Яндекс не знает приложения с ClientID $(get YANDEX_CLIENT_ID)."
+    echo "  Проверьте на oauth.yandex.ru: приложение сохранено, и в поле ClientID вписан «ClientID», а не «Client secret» (их легко перепутать)."
+  elif [ "$code" = 400 ]; then
+    echo "  ВНИМАНИЕ: Яндекс отклонил вход для этого приложения. Проверьте в его настройках Redirect URI — ровно $cb"
+  elif [[ "$code" =~ ^(200|30[0-9])$ ]]; then
+    echo "  Яндекс ID: приложение найдено, адрес возврата принят."
+  fi
+fi
 ask VK_CLIENT_ID "ID приложения VK ID (id.vk.com; только цифры; Enter — пропустить)" '^[0-9]+$' "ID приложения VK — только цифры."
 
 echo
