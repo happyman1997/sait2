@@ -1,3 +1,4 @@
+import { goal, type Goal } from './metrika';
 import type { BadCategory } from './moderation';
 
 export type ApiErrorBody = {
@@ -20,6 +21,18 @@ export class ApiError extends Error {
 export const TODO_EVENT = 'arena:todo';
 const JOB_ACTION = /^\/api\/jobs\/\d+\/(?!chat|photos)/;
 
+// Ключевые действия — цели Яндекс Метрики (lib/metrika.ts; без согласия на статистику ничего не уходит).
+export function goalOf(url: string, method: string, data: unknown): Goal | null {
+  if (method !== 'POST') return null;
+  if (url === '/api/auth/signup/verify' || url === '/api/auth/oauth/signup') {
+    return (data as { user?: { role?: string } } | null)?.user?.role === 'employer' ? 'signup_employer' : 'signup_freelancer';
+  }
+  if (url === '/api/jobs') return 'job_created';
+  if (/^\/api\/jobs\/\d+\/apply$/.test(url)) return 'apply';
+  if (/^\/api\/jobs\/\d+\/applicants\/[^/]+\/hire$/.test(url)) return 'hire';
+  return null;
+}
+
 /** JSON-запрос; FormData уходит как multipart (загрузка фото). DELETE без тела — передайте body = null. */
 export async function api<T = unknown>(url: string, body?: unknown, method: 'POST' | 'PATCH' | 'PUT' | 'DELETE' = 'POST'): Promise<T> {
   let res: Response;
@@ -39,6 +52,10 @@ export async function api<T = unknown>(url: string, body?: unknown, method: 'POS
   const data = isJson ? await res.json().catch(() => null) : null;
   if (!res.ok) throw new ApiError(res.status, data?.error || { message: 'Ошибка сервера — попробуйте ещё раз.' });
   if (data === null) throw new ApiError(res.status, { message: 'Сервер ответил неожиданно — обновите страницу и проверьте, сохранилось ли действие.' });
-  if (body !== undefined && JOB_ACTION.test(url) && typeof window !== 'undefined') window.dispatchEvent(new Event(TODO_EVENT));
+  if (body !== undefined && typeof window !== 'undefined') {
+    if (JOB_ACTION.test(url)) window.dispatchEvent(new Event(TODO_EVENT));
+    const g = goalOf(url, method, data);
+    if (g) goal(g);
+  }
   return data as T;
 }

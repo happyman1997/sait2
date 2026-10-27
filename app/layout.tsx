@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import { connection } from 'next/server';
-import type { ReactNode } from 'react';
+import { Suspense, type ReactNode } from 'react';
 import Script from 'next/script';
+import { Analytics } from '@/components/Analytics';
 import { ServiceWorkerSetup } from '@/components/AppInstall';
 import { INSTALL_CATCHER } from '@/lib/install';
 import { ModerationGuard } from '@/components/ModerationGuard';
@@ -43,6 +44,7 @@ export const viewport: Viewport = { width: 'device-width', initialScale: 1, view
 // Строгая CSP (proxy.ts): nonce свой у каждого ответа, поэтому все страницы рендерятся по запросу.
 export default async function RootLayout({ children }: { children: ReactNode }) {
   await connection();
+  const metrika = config.metrikaId();
   return (
     <html lang="ru">
       <body>
@@ -50,6 +52,8 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           {children}
           <ModerationGuard />
           <ServiceWorkerSetup />
+          {/* Яндекс Метрика — только после «Разрешить» в окне о статистике (components/Analytics.tsx). */}
+          {metrika > 0 && <Suspense fallback={null}><Analytics id={metrika} /></Suspense>}
           {/* До оживления страницы: ловит «можно установить» (lib/install.ts); nonce Next.js ставит сам. */}
           <Script id="arena-install" strategy="beforeInteractive">{INSTALL_CATCHER}</Script>
         </ToastProvider>

@@ -29,6 +29,8 @@ export function productionProblems(env: Record<string, string | undefined> = pro
   if (val('YANDEX_CLIENT_ID')) need('YANDEX_CLIENT_SECRET', 'Client secret приложения на oauth.yandex.ru (или уберите YANDEX_CLIENT_ID)');
   if (val('YANDEX_CLIENT_SECRET') && !val('YANDEX_CLIENT_ID')) out.push('YANDEX_CLIENT_ID — ClientID приложения на oauth.yandex.ru (секрет указан, а ClientID нет)');
   if (val('VK_CLIENT_ID') && !/^\d+$/.test(val('VK_CLIENT_ID'))) out.push('VK_CLIENT_ID — ID приложения VK ID, только цифры');
+  // Иначе счётчик молча не включился бы (server/config.ts) — а владелец ждал бы статистику.
+  if (val('YANDEX_METRIKA_ID') && !/^\d{5,12}$/.test(val('YANDEX_METRIKA_ID'))) out.push('YANDEX_METRIKA_ID — номер счётчика Яндекс Метрики, только цифры (или пусто)');
   return out;
 }
 

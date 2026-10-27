@@ -20,6 +20,14 @@ describe('CSP', () => {
     expect(c).toBe("connect-src 'self' https://tiles.openfreemap.org https://tiles.example.org");
   });
 
+  it('Яндекс Метрика — только когда включена: её сервер в соединениях и картинках, скрипты по-прежнему по nonce', () => {
+    expect(buildCsp('n')).not.toMatch(/yandex/);
+    const csp = buildCsp('n', { metrika: true });
+    expect(dir(csp, 'connect-src')).toBe("connect-src 'self' https://tiles.openfreemap.org https://mc.yandex.ru https://mc.yandex.com");
+    expect(dir(csp, 'img-src')).toBe("img-src 'self' data: blob: https://mc.yandex.ru https://mc.yandex.com");
+    expect(dir(csp, 'script-src')).toBe("script-src 'self' 'nonce-n' 'strict-dynamic'");
+  });
+
   it('nonce — 128 бит, каждый раз новый', () => {
     const a = makeNonce(), b = makeNonce();
     expect(a).not.toBe(b);

@@ -37,6 +37,11 @@ describe('проверка настроек перед запуском', () => 
     expect(productionProblems({ ...full, VK_CLIENT_ID: 'app-1' })[0]).toMatch(/^VK_CLIENT_ID/);
   });
 
+  it('номер счётчика Метрики — только цифры', () => {
+    expect(productionProblems({ ...full, YANDEX_METRIKA_ID: '98765432' })).toEqual([]);
+    expect(productionProblems({ ...full, YANDEX_METRIKA_ID: 'ym(98765432)' })[0]).toMatch(/^YANDEX_METRIKA_ID/);
+  });
+
   it('обработчики в политике: «ИНН» дописывается, кавычки — ёлочки, защита у хостинга — одной строкой', () => {
     const keep = { ...process.env };
     try {

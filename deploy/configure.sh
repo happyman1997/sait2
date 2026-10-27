@@ -177,8 +177,12 @@ fi
 ask VK_CLIENT_ID "ID приложения VK ID (id.vk.com; только цифры; Enter — пропустить)" '^[0-9]+$' "ID приложения VK — только цифры."
 
 echo
+echo "── Яндекс Метрика (по желанию; как завести счётчик — DEPLOY.md, раздел 14)"
+ask YANDEX_METRIKA_ID "Номер счётчика Метрики (metrika.yandex.ru, цифры над кодом счётчика; Enter — пропустить)" '^[0-9]{5,12}$' "Номер счётчика — только цифры, обычно 8–9. Это число в названии счётчика, а не весь код."
+
+echo
 echo "Сохранено. Сейчас в настройках (пароли не показываются):"
-for k in OPERATOR_NAME OPERATOR_OGRNIP OPERATOR_INN OPERATOR_ADDRESS OPERATOR_EMAIL OPERATOR_RKN_NUMBER PROCESSOR_HOSTING PROCESSOR_PROTECTION PROCESSOR_MAIL PROCESSOR_GEO EMAIL_FROM SUPPORT_EMAIL YANDEX_CLIENT_ID VK_CLIENT_ID; do
+for k in OPERATOR_NAME OPERATOR_OGRNIP OPERATOR_INN OPERATOR_ADDRESS OPERATOR_EMAIL OPERATOR_RKN_NUMBER PROCESSOR_HOSTING PROCESSOR_PROTECTION PROCESSOR_MAIL PROCESSOR_GEO EMAIL_FROM SUPPORT_EMAIL YANDEX_CLIENT_ID VK_CLIENT_ID YANDEX_METRIKA_ID; do
   v=$(get "$k")
   if broken "$v"; then v='испорченные буквы — запустите скрипт ещё раз'; fi
   printf '  %-18s %s\n' "$k" "$v"

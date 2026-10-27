@@ -36,6 +36,8 @@ export const config = {
   // По умолчанию — код arenarabot.ru из Вебмастера; другой сайт задаёт свой (или пустой — без тега).
   yandexVerification: () => env('YANDEX_VERIFICATION', 'b91c308724c2c0a7'),
   googleVerification: () => env('GOOGLE_SITE_VERIFICATION', ''),
+  // Номер счётчика Яндекс Метрики (не секрет). Пусто или не цифры — счётчика и окна о статистике нет.
+  metrikaId: () => { const v = env('YANDEX_METRIKA_ID', '').trim(); return /^\d{5,12}$/.test(v) ? Number(v) : 0; },
   uploadDir: () => env('UPLOAD_DIR', isProd ? undefined : './data/uploads'),
   // Веб-пуш: ключи VAPID (npx web-push generate-vapid-keys). Без них пуш в браузер выключен.
   vapidPublic: () => env('VAPID_PUBLIC_KEY', ''),
@@ -58,5 +60,7 @@ export const config = {
   metricsToken: () => env('METRICS_TOKEN', ''),
   // Новая редакция оферты и Правил — новая дата (её видно внизу документов и она сохраняется при регистрации).
   offerVersion: '2026-10-26',
+  // Редакция политики обработки ПДн (меняется отдельно от оферты: 2026-10-27 — статистика посещений).
+  policyVersion: '2026-10-27',
   pdConsentVersion: '2026-10'
 };

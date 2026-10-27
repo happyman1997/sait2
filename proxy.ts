@@ -1,11 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { config as appConfig } from '@/server/config';
 import { buildCsp, makeNonce } from '@/server/csp';
 
 // Строгая CSP для страниц: свежий nonce на каждый ответ. Next.js берёт его из заголовка запроса
 // и проставляет своим скриптам сам; страницы поэтому рендерятся динамически (connection() в корневом layout).
 export function proxy(request: NextRequest) {
   const nonce = makeNonce();
-  const csp = buildCsp(nonce, { dev: process.env.NODE_ENV === 'development', connectExtra: process.env.CSP_CONNECT_SRC });
+  const csp = buildCsp(nonce, { dev: process.env.NODE_ENV === 'development', connectExtra: process.env.CSP_CONNECT_SRC, metrika: !!appConfig.metrikaId() });
   const headers = new Headers(request.headers);
   headers.set('x-nonce', nonce);
   headers.set('Content-Security-Policy', csp);

@@ -2,15 +2,18 @@
 // то, что они подгружают сами). Теги <style> и таблицы стилей — тоже по nonce или со своего сайта (CSS-инъекция
 // с селекторами не пройдёт); атрибуты style разрешены — ими интерфейс прототипа задаёт оформление, nonce на них
 // не действует. Старым браузерам без style-src-elem/attr остаётся общий style-src. Шрифты — свои;
-// внешний источник — только стиль и тайлы карты (или свой сервер тайлов, тогда и его нет).
+// внешний источник — только стиль и тайлы карты (или свой сервер тайлов, тогда и его нет). С Яндекс Метрикой —
+// ещё её сервер: tag.js грузит наш скрипт ('strict-dynamic'), просмотры уходят запросом или картинкой.
 const MAP_STYLE = process.env.NEXT_PUBLIC_MAP_STYLE_URL || 'https://tiles.openfreemap.org/styles/liberty';
+const METRIKA = ['https://mc.yandex.ru', 'https://mc.yandex.com'];
 
 function origin(url: string): string | null {
   try { return new URL(url).origin; } catch { return null; }
 }
 
-export function buildCsp(nonce: string, opts: { dev?: boolean; connectExtra?: string } = {}): string {
-  const connect = ["'self'", origin(MAP_STYLE), ...(opts.connectExtra || '').split(/\s+/)].filter(Boolean);
+export function buildCsp(nonce: string, opts: { dev?: boolean; connectExtra?: string; metrika?: boolean } = {}): string {
+  const stats = opts.metrika ? METRIKA : [];
+  const connect = ["'self'", origin(MAP_STYLE), ...stats, ...(opts.connectExtra || '').split(/\s+/)].filter(Boolean);
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${opts.dev ? " 'unsafe-eval'" : ''}`,
@@ -19,7 +22,7 @@ export function buildCsp(nonce: string, opts: { dev?: boolean; connectExtra?: st
     `style-src-elem 'self' ${opts.dev ? "'unsafe-inline'" : `'nonce-${nonce}'`}`,
     "style-src-attr 'unsafe-inline'",
     "font-src 'self' data:",
-    "img-src 'self' data: blob:",
+    ["img-src 'self' data: blob:", ...stats].join(' '),
     'connect-src ' + [...new Set(connect)].join(' '),
     "worker-src 'self' blob:",
     "manifest-src 'self'",
