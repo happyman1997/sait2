@@ -526,7 +526,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, oauthProv
 
   return (
     <div className={sty.c66e751c}>
-      <div style={css('display: grid; grid-template-columns: ' + (narrow ? 'minmax(0, 1fr)' : 'minmax(320px, .85fr) minmax(0, 1.15fr)') + '; height: 100vh; height: 100dvh; overflow: hidden; box-sizing: border-box')}>
+      <div style={css('display: grid; grid-template-columns: ' + (narrow ? 'minmax(0, 1fr)' : 'minmax(320px, .85fr) minmax(0, 1.15fr)') + '; height: calc(100dvh - var(--consent-h, 0px)); overflow: hidden; box-sizing: border-box')}>
 
         {/* Тёмная колонка */}
         <div style={css('overflow: hidden; padding: clamp(24px, 4vh, 46px) clamp(24px, 3.4vw, 48px); display: ' + (narrow ? 'none' : 'flex') + '; flex-direction: column; justify-content: space-between; gap: 40px; min-width: 0; box-sizing: border-box; background: var(--ink); color: #f4f2ef')}>

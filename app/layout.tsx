@@ -49,11 +49,11 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     <html lang="ru">
       <body>
         <ToastProvider>
+          {/* Яндекс Метрика — только после «Разрешить» в полосе о статистике (components/Analytics.tsx); полоса — над страницей. */}
+          {metrika > 0 && <Suspense fallback={null}><Analytics id={metrika} /></Suspense>}
           {children}
           <ModerationGuard />
           <ServiceWorkerSetup />
-          {/* Яндекс Метрика — только после «Разрешить» в окне о статистике (components/Analytics.tsx). */}
-          {metrika > 0 && <Suspense fallback={null}><Analytics id={metrika} /></Suspense>}
           {/* До оживления страницы: ловит «можно установить» (lib/install.ts); nonce Next.js ставит сам. */}
           <Script id="arena-install" strategy="beforeInteractive">{INSTALL_CATCHER}</Script>
         </ToastProvider>

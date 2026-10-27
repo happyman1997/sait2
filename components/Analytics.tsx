@@ -1,7 +1,9 @@
 'use client';
 
-// Яндекс Метрика (lib/metrika.ts): окно «Разрешить статистику?» до решения посетителя, счётчик — только после
+// Яндекс Метрика (lib/metrika.ts): полоса «Разрешить статистику?» до решения посетителя, счётчик — только после
 // «Разрешить», просмотры при переходах внутри сайта, цель «приложение установлено». Решение меняют в политике (StatsSwitch).
+// Полоса — над страницей, в её потоке: ничего не закрывает, а экраны во весь рост (карта, вход) становятся ниже
+// на её высоту — она в переменной --consent-h.
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useSyncExternalStore } from 'react';
@@ -17,6 +19,7 @@ export function Analytics({ id }: { id: number }) {
   const pathname = usePathname();
   const search = useSearchParams();
   const last = useRef('');
+  const bar = useRef<HTMLElement>(null);
 
   useEffect(() => {
     rememberLanding();
@@ -37,12 +40,23 @@ export function Analytics({ id }: { id: number }) {
     last.current = here;
   }, [pathname, search]);
 
+  useEffect(() => {
+    const el = bar.current;
+    if (!el) return;
+    const root = document.documentElement.style;
+    const set = () => root.setProperty('--consent-h', el.offsetHeight + 'px');
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    return () => { ro.disconnect(); root.removeProperty('--consent-h'); };
+  }, [choice]);
+
   if (choice !== null) return null;
   return (
-    <section className={sty.banner} aria-label="Статистика посещений">
+    <section ref={bar} className={sty.banner} aria-label="Статистика посещений">
       <p className={sty.text}>
-        Разрешите считать посещения через Яндекс Метрику: она ставит cookie и передаёт ООО «Яндекс» IP-адрес, сведения
-        о браузере и просмотренных страницах. <Link href="/legal/personal-data#stats">Подробнее</Link>
+        Разрешите статистику посещений: Яндекс Метрика ставит cookie и передаёт ООО «Яндекс» IP-адрес и сведения
+        о посещении. <Link href="/legal/personal-data#stats">Подробнее</Link>
       </p>
       <div className={sty.actions}>
         <button className="btn btn-primary" onClick={() => setStatsChoice('yes')}>Разрешить</button>

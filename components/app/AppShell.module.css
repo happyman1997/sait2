@@ -2,8 +2,8 @@
 :where(.cfa14b4e) {
   display: flex !important;
   flex-direction: column !important;
-  height: 100vh !important;
-  height: 100dvh !important;
+  height: calc(100vh - var(--consent-h, 0px)) !important;
+  height: calc(100dvh - var(--consent-h, 0px)) !important;
   overflow: hidden !important;
 }
 :where(.c5e48755) {
