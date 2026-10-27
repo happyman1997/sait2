@@ -136,7 +136,8 @@ export function ShiftBlock({ job, isOwner, act, onChat, onReview, busy }: {
 
       {brigade && (
         <div style={css('font-size: 13.5px; line-height: 1.45; margin-top: 8px; ' + MUTED)}>
-          Бригада: {s.hired.map(h => h.name + (h.isLead ? ' (старший)' : '')).join(', ')}.
+          {/* Имя с инициалом кончается точкой («Тест И.») — вторую не ставим. */}
+          Бригада: {s.hired.map(h => h.name + (h.isLead ? ' (старший)' : '')).join(', ').replace(/\.?$/, '.')}
           {!isOwner && (s.iAmLead ? ' Вы старший: у вас телефон встречающего, работу за бригаду сдаёте вы.' : s.leadName ? ' Работу за бригаду сдаёт старший.' : ' Работодатель назначит старшего — он сдаёт работу за всех.')}
         </div>
       )}

@@ -806,7 +806,8 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
               </div>
             </div>
           )}
-          {loaded && !found && !form && (
+          {/* Открыта карточка (свой заказ в работе, закрытый) — подсказка закрывала бы его метку на маленькой карте. */}
+          {loaded && !found && !form && selected == null && (
             <div className={sty.ca7e8c51}>
               {nFilters || filters.q.trim() ? 'Под фильтр ничего не попало — снимите лишние условия.' : isEmp ? 'Заказов пока нет — нажмите на карту, чтобы опубликовать первый.' : 'Открытых заказов пока нет — загляните позже.'}
             </div>
