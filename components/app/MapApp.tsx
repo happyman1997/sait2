@@ -25,7 +25,7 @@ import { NAV_H } from './MobileShell';
 import { ObjectCardPanel, ObjectsList, type ObjectCard, type OrderDefaults } from './ObjectsBlock';
 import { ActionBox } from './ActionBox';
 import { InstallCard } from '@/components/AppInstall';
-import { GuestGuide, StartSteps, WorkLinks } from './RailSummary';
+import { GuestGuide, GuestIntro, StartSteps, WorkLinks } from './RailSummary';
 import { DocLinks } from '@/components/DocLinks';
 import { Corners, LABEL } from './ui';
 
@@ -752,7 +752,7 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
               onDeleted={id => { setObjects(list => list.filter(x => x.id !== id)); setObjEdit(null); }} />
           )}
 
-          {!form && !selected && !objEdit && (!me ? <GuestGuide /> : (
+          {!form && !selected && !objEdit && (!me ? (narrow ? <GuestIntro /> : <GuestGuide />) : (
             <>
               <ActionBox />
               <InstallCard />

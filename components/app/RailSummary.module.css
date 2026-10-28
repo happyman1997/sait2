@@ -142,12 +142,12 @@
 .howHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 2px; }
 .howHeadGap { margin-top: 18px; }
 .howHide { height: 40px; min-height: 40px !important; padding: 0 6px !important; margin-right: -6px; font-size: 14px; }
-/* Гостю на телефоне: три шага под кнопкой «Как это работает — 3 шага». */
-.moreBtn {
-  align-items: center; min-height: 40px; margin-top: 8px; padding: 0; border: 0; background: none; cursor: pointer;
-  font: 600 14px/1.2 var(--font-body); color: var(--color-accent-100); text-decoration: underline; text-underline-offset: 3px;
-}
-@media (max-width: 719.98px) { .foldNarrow { display: none; } }
+/* Гостю на телефоне под картой — короткая светлая карточка (GuestIntro), как остальные карточки телефона. */
+.intro { padding: 14px 14px 12px; border: 1px solid var(--color-divider); border-radius: 14px; background: var(--color-bg); }
+.introTitle { margin: 0; font-family: var(--font-body); font-weight: 700; font-size: 17px; line-height: 1.25; color: var(--color-text); }
+.introText { margin: 6px 0 12px; font-size: 14px; line-height: 1.45; color: color-mix(in srgb, var(--color-text) 72%, transparent); }
+.introActions { display: flex; gap: 8px; }
+.introActions :global(.btn) { flex: 1; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 
 /* Телефон: заголовки, имена и кнопки — обычным регистром, как в мобильных приложениях; мелкие подписи разделов остаются прописными. */
 @media (max-width: 719.98px) {

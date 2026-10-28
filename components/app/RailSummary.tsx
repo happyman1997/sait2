@@ -1,6 +1,7 @@
 'use client';
 
-// Левая панель без выбранного заказа: гостю — «Как это работает», вошедшим — «Смена/Заказ за три шага».
+// Левая панель без выбранного заказа: гостю — «Как это работает» (на телефоне — короткая карточка GuestIntro),
+// вошедшим — «Смена/Заказ за три шага».
 import Link from 'next/link';
 import { useState, useSyncExternalStore, type KeyboardEvent } from 'react';
 import { css } from '@/lib/css';
@@ -33,10 +34,23 @@ const GUIDE = {
   }
 };
 
+/** Гостю на телефоне — под картой: что это, и две дороги — «Ищу работу» и «Нанимаю» (страница для заказчиков). */
+export function GuestIntro() {
+  return (
+    <section className={sty.intro} aria-label="О сервисе">
+      <h2 className={sty.introTitle}>Подработка рядом — без резюме</h2>
+      <p className={sty.introText}>Заказы на карте видны без регистрации: ставка, дата и место — сразу. Профиль нужен только для отклика.</p>
+      <div className={sty.introActions}>
+        <Link href="/auth?role=freelancer" className="btn btn-primary">Ищу работу</Link>
+        <Link href="/zakazchikam" className="btn btn-secondary">Нанимаю</Link>
+      </div>
+    </section>
+  );
+}
+
+/** Гостю на компьютере — в левой панели: «Ищу работу / Нанимаю», три шага и кнопка профиля. */
 export function GuestGuide() {
   const [who, setWho] = useState<'freelancer' | 'employer'>('freelancer');
-  // Телефон: три шага свёрнуты — под картой остаются заголовок, пара строк и кнопка профиля.
-  const [more, setMore] = useState(false);
   const g = GUIDE[who];
   const tab = (id: 'freelancer' | 'employer', label: string) => (
     <button role="tab" aria-selected={who === id} onClick={() => setWho(id)}
@@ -52,20 +66,15 @@ export function GuestGuide() {
         </div>
         <div className={'fh ' + sty.cc1bc816}>{g.title}</div>
         <div className={sty.c5cc1dcf}>{g.lead}</div>
-        <button className={'only-narrow ' + sty.moreBtn} onClick={() => setMore(m => !m)} aria-expanded={more}>
-          {more ? 'Свернуть ▴' : 'Как это работает — 3 шага ▾'}
-        </button>
-        <div className={more ? '' : sty.foldNarrow}>
-          <div className={sty.caf4ed04}>
-            {g.steps.map((t, i) => (
-              <div key={i} className={sty.c6776925}>
-                <div className={'fh ' + sty.c0422fe0}>0{i + 1}</div>
-                <div className={sty.c5d0b7df}>{t}</div>
-              </div>
-            ))}
-          </div>
-          <div className={sty.cf7a0fd3}>{g.note}</div>
+        <div className={sty.caf4ed04}>
+          {g.steps.map((t, i) => (
+            <div key={i} className={sty.c6776925}>
+              <div className={'fh ' + sty.c0422fe0}>0{i + 1}</div>
+              <div className={sty.c5d0b7df}>{t}</div>
+            </div>
+          ))}
         </div>
+        <div className={sty.cf7a0fd3}>{g.note}</div>
         <Link href={'/auth?role=' + who + (who === 'employer' ? '&next=new' : '')} className={'btn btn-secondary btn-block ' + sty.cd488481}>{g.cta}</Link>
         {who === 'employer' && <Link href="/zakazchikam" className={sty.forCustomers}>Подробнее для заказчиков →</Link>}
       </div>
