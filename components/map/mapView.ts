@@ -347,6 +347,8 @@ export class SeasonMapView {
         return;
       }
       if (l.type !== 'symbol' || !layout || layout['text-field'] === undefined) return;
+      // Номер трассы на щитке («М-9») оставляем: название дороги в щиток не влезает, а без названия щиток пустой.
+      if (JSON.stringify(layout['text-field']).includes('"ref"')) return;
       try { this.map!.setLayoutProperty(l.id, 'text-field', nm); set++; } catch { /* слой не готов */ }
     });
     if (!set) return;
