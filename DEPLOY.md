@@ -69,7 +69,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.production ps     # ap
 curl https://arenarabot.ru/api/health                                    # {"ok":true,...}
 ```
 
-Первый сотрудник поддержки (после его регистрации на сайте):
+Жалобы и споры приходят письмом на `SUPPORT_EMAIL` («Адрес для жалоб пользователей» в `deploy/configure.sh`): в письме — заказ, обе стороны с почтой и текст, а «Ответить» пишет автору обращения. Так их можно разбирать прямо из почты. Кабинет поддержки на сайте нужен для санкций (пометка в профиле, блокировка, скрыть отзыв) — для него назначьте сотрудника (после его регистрации на сайте):
 
 ```sh
 docker compose -f docker-compose.prod.yml --env-file .env.production exec app node scripts/staff.mjs add <логин>

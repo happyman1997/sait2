@@ -9,7 +9,7 @@ import {
 import { badWordIn, findBadField } from '@/lib/moderation';
 import { one, pool, query, tx, type Db } from './db';
 import { AppError, ModerationError } from './errors';
-import { addEvents, localClock, mailSupport } from './events';
+import { addEvents, localClock, mailSupport, supportContact } from './events';
 import { clientToday, getJob, initialsOf, invalidateSearch, seriesDatesFor, seriesHasHistory, SERIES_FIXED, shortName, syncSeriesEnd } from './jobs';
 import { publish } from './live';
 import { markDayPaid, markJobPaid, markSeriesPaid, myPaidSql, syncSeriesSettle } from './settle';
@@ -527,12 +527,12 @@ export async function fileComplaint(num: number, raw: unknown, viewer: Viewer): 
       if ((e as { code?: string }).code === '23505') throw new AppError(409, 'Жалоба по этой смене уже подана — ответ придёт в течение 3 рабочих дней.');
       throw e;
     }
-    // Жалобы уходят в поддержку по почте (через очередь доставки).
-    const author = await one<{ login: string; email: string; role: string }>('SELECT login, email, role FROM users WHERE id = $1', [u.id], db);
+    // Жалобы уходят в поддержку по почте (через очередь доставки); «Ответить» — автору.
+    const author = await supportContact(u.id, db);
     await mailSupport('Жалоба · заказ № ' + jobNum(num) + ' · ' + reason,
-      'Заказ № ' + jobNum(num) + ' «' + j.title + '»\nАвтор: ' + author?.login + ' (' + author?.role + ', ' + author?.email + ')\n' +
-      (target ? 'На кого: ' + (await one<{ login: string }>('SELECT login FROM users WHERE id = $1', [target], db))?.login + '\n' : '') +
-      'Тема: ' + reason + '\n\n' + text, db);
+      'Заказ № ' + jobNum(num) + ' «' + j.title + '»\nАвтор: ' + author.line + '\n' +
+      (target ? 'На кого: ' + (await supportContact(target, db)).line + '\n' : '') +
+      'Тема: ' + reason + '\n\n' + text, db, author.email);
     await addEvents([{ userId: u.id, kind: 'complaint', text: 'Жалоба зарегистрирована · заказ № ' + jobNum(num) + ' — ответ за 3 рабочих дня', jobId: j.id, num, silent: true }], db);
   });
   return getJob(num, viewer);

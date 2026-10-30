@@ -2,11 +2,12 @@
 import nodemailer, { type Transporter } from 'nodemailer';
 import { config } from './config';
 
-export interface Mailer { send(to: string, subject: string, text: string): Promise<void> }
+/** replyTo — куда уйдёт «Ответить» в почте (письма поддержке — автору обращения). */
+export interface Mailer { send(to: string, subject: string, text: string, replyTo?: string | null): Promise<void> }
 
 class ConsoleMailer implements Mailer {
-  async send(to: string, subject: string, text: string) {
-    console.log(`[email] ${to} ← ${subject}\n${text}`);
+  async send(to: string, subject: string, text: string, replyTo?: string | null) {
+    console.log(`[email] ${to} ← ${subject}${replyTo ? ' (ответ: ' + replyTo + ')' : ''}\n${text}`);
   }
 }
 
@@ -17,8 +18,8 @@ export function smtpTransport(url: string): Transporter {
 
 class SmtpMailer implements Mailer {
   private t: Transporter = smtpTransport(config.smtpUrl());
-  async send(to: string, subject: string, text: string) {
-    await this.t.sendMail({ from: config.emailFrom(), to, subject, text });
+  async send(to: string, subject: string, text: string, replyTo?: string | null) {
+    await this.t.sendMail({ from: config.emailFrom(), to, subject, text, ...(replyTo ? { replyTo } : {}) });
   }
 }
 

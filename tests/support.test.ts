@@ -78,6 +78,12 @@ describe('жалобы', () => {
   it('жалоба исполнителя без адресата — на работодателя; подтверждение ставит пометку и уведомляет обе стороны', async () => {
     const num = await acceptedShift();
     await sh.fileComplaint(num, { reason: 'не рассчитались', text: 'Обещали перевод, прошла неделя' }, fl);
+    // Письмо в поддержку: обе стороны с почтой, «Ответить» — автору жалобы.
+    const mail = await one<{ to_addr: string; body: string; reply_to: string }>(`SELECT to_addr, body, reply_to FROM notification_outbox WHERE to_addr = 'support@arenarabot.ru'`);
+    expect(mail).toMatchObject({ reply_to: 'daniyar_s@x.ru' });
+    expect(mail!.body).toContain('Автор: daniyar_s (исполнитель, daniyar_s@x.ru)');
+    expect(mail!.body).toContain('На кого: aigul_t (работодатель, aigul_t@x.ru)');
+    expect(mail!.body).toContain('письмо уйдёт на daniyar_s@x.ru');
     const list = await sup.listComplaints(staff, 'open');
     expect(list).toHaveLength(1);
     expect(list[0]).toMatchObject({ reason: 'не рассчитались', num, author: { login: 'daniyar_s' }, target: { login: 'aigul_t', marks: 0 } });

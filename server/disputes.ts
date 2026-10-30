@@ -4,7 +4,7 @@ import { disputeNum, DISPUTE_REASONS, jobNum, money, type DisputeInfo } from '@/
 import { findBadField } from '@/lib/moderation';
 import { one, pool, query, tx, type Db } from './db';
 import { AppError, ModerationError } from './errors';
-import { addEvents, mailSupport } from './events';
+import { addEvents, mailSupport, supportContact } from './events';
 import { getJob, shortName } from './jobs';
 import { publish } from './live';
 import { markJobPaid, markSeriesPaid } from './settle';
@@ -111,8 +111,11 @@ export async function openDispute(num: number, raw: unknown, viewer: Viewer) {
       userId: other, kind: 'dispute', jobId: j.id, num, deliver: true, urgent: true,
       text: 'Открыт спор по расчёту ' + label + ': ' + reason + ', ' + sum.toLocaleString('ru-RU') + ' ₽. Ответьте в карточке смены.'
     }, { userId: u.id, kind: 'dispute', jobId: j.id, num, silent: true, text: 'Спор ' + label + ' передан в поддержку' }], db);
-    await mailSupport('Спор ' + label, 'Открыл: ' + (side === 'employer' ? 'работодатель' : 'исполнитель') + '\nПричина: ' + reason +
-      '\nСумма: ' + sum + ' ₽\n\n' + text + '\n\nДоказательства:\n' + ev.map(e => (e.ok ? '✓ ' : '— ') + e.label).join('\n'), db);
+    const [boss, worker] = [await supportContact(j.employer_id, db), await supportContact(freelancerId, db)];
+    await mailSupport('Спор ' + label, 'Открыл: ' + (side === 'employer' ? 'работодатель' : 'исполнитель') +
+      '\nРаботодатель: ' + boss.line + '\nИсполнитель: ' + worker.line + '\nПричина: ' + reason +
+      '\nСумма: ' + sum + ' ₽\n\n' + text + '\n\nДоказательства:\n' + ev.map(e => (e.ok ? '✓ ' : '— ') + e.label).join('\n'),
+      db, (side === 'employer' ? boss : worker).email);
     await publish([j.employer_id, freelancerId], { t: 'job', num }, db);
   });
   return getJob(num, viewer);
@@ -159,7 +162,8 @@ export async function actDispute(num: number, disputeId: string, raw: unknown, v
       const bad = findBadField([{ field: 'text', label: 'Пояснение', value: text }]);
       if (bad) throw new ModerationError(bad.field, bad.label, bad.category);
       await query(`UPDATE disputes SET status = 'review', response = $2 WHERE id = $1`, [d.id, text], db);
-      await mailSupport('Пояснение по спору ' + label, text, db);
+      const me = await supportContact(u.id, db);
+      await mailSupport('Пояснение по спору ' + label, 'От: ' + me.line + '\n\n' + text, db, me.email);
       note = 'Спор ' + label + ': вторая сторона не согласна и дала пояснение — решение примет поддержка.';
     } else {
       throw new AppError(422, 'Неизвестное действие.');

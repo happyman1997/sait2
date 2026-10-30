@@ -1,7 +1,7 @@
 // Журнал событий пользователя, мгновенное уведомление (live) и доставка во внешние каналы (e-mail, пуш в браузер).
 import crypto from 'node:crypto';
 import { config } from './config';
-import { pool, query, type Db } from './db';
+import { one, pool, query, type Db } from './db';
 import { publishMany } from './live';
 import { getMailer } from './mail';
 import { deliverPush } from './push';
@@ -108,9 +108,21 @@ export async function addEvents(rows: EventRow[], db: Db = pool()) {
   await enqueue(list.filter(r => r.deliver).map(r => ({ id: r.id, userId: r.userId, kind: r.kind, text: r.text, num: r.num ?? null, urgent: !!r.urgent, path: r.path ?? null })), db);
 }
 
-/** Письмо в поддержку (жалобы). */
-export async function mailSupport(subject: string, body: string, db: Db = pool()) {
-  await query(`INSERT INTO notification_outbox (channel, to_addr, subject, body) VALUES ('email', $1, $2, $3)`, [config.supportEmail(), subject, body], db);
+/**
+ * Письмо в поддержку (жалобы, споры) — на SUPPORT_EMAIL. replyTo — почта автора: «Ответить» в почте пишет ему,
+ * так что разбирать обращения можно прямо из ящика, без кабинета поддержки.
+ */
+export async function mailSupport(subject: string, body: string, db: Db = pool(), replyTo?: string | null) {
+  const tail = '\n\n—\nПользователю обещан ответ в течение 3 рабочих дней.' + (replyTo ? ' «Ответить» в почте — письмо уйдёт на ' + replyTo + '.' : '');
+  await query(`INSERT INTO notification_outbox (channel, to_addr, subject, body, reply_to) VALUES ('email', $1, $2, $3, $4)`,
+    [config.supportEmail(), subject, body + tail, replyTo || null], db);
+}
+
+const ROLE_RU: Record<string, string> = { freelancer: 'исполнитель', employer: 'работодатель' };
+/** Человек в письме поддержке: «логин (роль, почта)» — и его почта для «Ответить». */
+export async function supportContact(userId: string, db: Db = pool()): Promise<{ line: string; email: string | null }> {
+  const p = await one<{ login: string; role: string; email: string }>('SELECT login, role, email FROM users WHERE id = $1', [userId], db);
+  return p ? { line: p.login + ' (' + (ROLE_RU[p.role] || p.role) + ', ' + p.email + ')', email: p.email } : { line: '—', email: null };
 }
 
 /**
@@ -119,16 +131,16 @@ export async function mailSupport(subject: string, body: string, db: Db = pool()
  * Если процесс упадёт посреди отправки, аренда истечёт и запись уйдёт повторно.
  */
 export async function processOutbox(limit = 50): Promise<{ sent: number; failed: number }> {
-  const due = await query<{ id: string; user_id: string | null; channel: 'email' | 'push'; to_addr: string; subject: string | null; body: string; attempts: number }>(
+  const due = await query<{ id: string; user_id: string | null; channel: 'email' | 'push'; to_addr: string; subject: string | null; body: string; reply_to: string | null; attempts: number }>(
     `UPDATE notification_outbox o SET next_try_at = now() + interval '10 minutes'
       WHERE o.id IN (SELECT id FROM notification_outbox WHERE status = 'pending' AND next_try_at <= now()
                       ORDER BY next_try_at LIMIT $1 FOR UPDATE SKIP LOCKED)
-      RETURNING o.id, o.user_id, o.channel, o.to_addr, o.subject, o.body, o.attempts`, [limit]);
+      RETURNING o.id, o.user_id, o.channel, o.to_addr, o.subject, o.body, o.reply_to, o.attempts`, [limit]);
   let sent = 0, failed = 0;
   for (const m of due.rows) {
     try {
       if (m.channel === 'push') await deliverPush(m.user_id!, { title: 'Арена Работ', body: m.body, url: m.subject || '/' });
-      else await getMailer().send(m.to_addr, m.subject || 'Арена Работ', m.body);
+      else await getMailer().send(m.to_addr, m.subject || 'Арена Работ', m.body, m.reply_to);
       await query(`UPDATE notification_outbox SET status = 'sent', sent_at = now(), attempts = attempts + 1, error = NULL WHERE id = $1`, [m.id]);
       sent++;
     } catch (e) {

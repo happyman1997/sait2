@@ -11,6 +11,8 @@ const dsp = await import('@/server/disputes');
 const prof = await import('@/server/profile');
 const { sessionUser, createSession } = await import('@/server/session');
 const { AppError } = await import('@/server/errors');
+const { setMailer } = await import('@/server/mail');
+const { processOutbox } = await import('@/server/events');
 const { localISO } = await import('@/lib/jobs');
 
 type SU = NonNullable<Awaited<ReturnType<typeof sessionUser>>>;
@@ -80,7 +82,9 @@ describe('споры по расчёту', () => {
     const empView = await jobs.getJob(num, emp);
     expect(empView.shift!.disputes[0]).toMatchObject({ mine: false, other: 'Данияр С.' });
     expect((await one<{ text: string }>(`SELECT text FROM events WHERE user_id = $1 AND kind = 'dispute'`, [emp.id]))!.text).toMatch(/Открыт спор/);
-    expect((await one<{ n: number }>(`SELECT count(*)::int AS n FROM notification_outbox WHERE to_addr = 'support@arenarabot.ru'`))!.n).toBe(1);
+    const mail = await one<{ body: string; reply_to: string }>(`SELECT body, reply_to FROM notification_outbox WHERE to_addr = 'support@arenarabot.ru'`);
+    expect(mail!.reply_to).toBe('daniyar_s@x.ru');
+    expect(mail!.body).toMatch(/Работодатель: aigul_t \(работодатель, aigul_t@x\.ru\)\nИсполнитель: daniyar_s \(исполнитель, daniyar_s@x\.ru\)/);
     // Незакрытый спор виден в профиле обеих сторон.
     expect((await prof.getProfile(emp)).marks[0].label).toMatch(/Незакрытый спор/);
     expect((await prof.getProfile(fl)).marks[0].label).toMatch(/Незакрытый спор/);
@@ -108,6 +112,16 @@ describe('споры по расчёту', () => {
     const id = (await dsp.openDispute(num, { reason: 'исполнитель требует больше договорённого', sum: 9000, text: 'Договаривались на 6000, просит 9000', target: app }, emp)).shift!.disputes[0].id;
     await expectErr(dsp.actDispute(num, id, { action: 'explain', text: 'Объём оказался вдвое больше' }, emp), /вторая сторона/);
     await dsp.actDispute(num, id, { action: 'explain', text: 'Объём оказался вдвое больше описанного' }, fl);
+    // Спор открыл работодатель — «Ответить» ему; пояснение исполнителя — исполнителю. Почта уходит с этим адресом.
+    const mails = await query<{ subject: string; body: string; reply_to: string }>(
+      `SELECT subject, body, reply_to FROM notification_outbox WHERE to_addr = 'support@arenarabot.ru' ORDER BY created_at, subject DESC`);
+    expect(mails.rows.map(m => m.reply_to)).toEqual(['aigul_t@x.ru', 'daniyar_s@x.ru']);
+    expect(mails.rows[1].body).toMatch(/^От: daniyar_s \(исполнитель, daniyar_s@x\.ru\)\n\nОбъём/);
+    const sent: (string | null | undefined)[] = [];
+    setMailer({ async send(to, _s, _t, replyTo) { if (to === 'support@arenarabot.ru') sent.push(replyTo); } });
+    await processOutbox();
+    setMailer(null);
+    expect(sent.sort()).toEqual(['aigul_t@x.ru', 'daniyar_s@x.ru']);
     const q = await dsp.listDisputes('open');
     expect(q[0]).toMatchObject({ status: 'review', response: 'Объём оказался вдвое больше описанного', jobNum: num });
     await expectErr(dsp.resolveDispute(staff.id, id, { for: 'freelancer', note: '' }), /пару слов/);
