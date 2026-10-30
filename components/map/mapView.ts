@@ -18,8 +18,12 @@ export type MapCallbacks = {
   onView?: (v: MapViewport) => void;
 };
 
-// Россия целиком — кадр по умолчанию, когда меток нет.
-const RU_BOUNDS: [[number, number], [number, number]] = [[19, 42], [180, 71]];
+// Первый кадр — город: гостю Москва в пределах МКАД, исполнителю с базой — квадрат CITY_KM вокруг базы.
+// Заказы в NEAR_KM от центра кадр расширяют; дальние видны, если отдалить карту.
+const MOSCOW = { lat: 55.751, lng: 37.618 };
+const MOSCOW_BOUNDS: [[number, number], [number, number]] = [[37.37, 55.57], [37.86, 55.92]];
+const CITY_KM = 12;
+const NEAR_KM = 60;
 
 const A = (v: string, fb: string) => 'var(' + v + ',' + fb + ')';
 const ACCENT = A('--color-accent', '#5980a6');
@@ -235,8 +239,8 @@ export class SeasonMapView {
       container: this.host,
       // Относительный адрес стиля — от своего сайта.
       style: new URL(STYLE_URL, window.location.href).href,
-      center: [60, 57],
-      zoom: 3,
+      center: [MOSCOW.lng, MOSCOW.lat],
+      zoom: 9,
       minZoom: 0,
       maxZoom: 17,
       dragRotate: false,
@@ -304,33 +308,21 @@ export class SeasonMapView {
     }, 250);
   }
 
-  // Кадр вокруг базы: растим радиус, пока в кадр не попадёт хотя бы MIN_SHOWN заказов.
+  // Кадр вокруг базы (гостю — Москва) вместе с ближними заказами.
   private fitData() {
     if (!this.map || !this.gl) return;
     const pins: LatLng[] = this.fitPts ?? this.pins.filter(p => !p.n);
-    const home = this.anchor || { lat: 55.751, lng: 37.618 };
-    if (!pins.length) {
-      if (this.anchor) this.map.jumpTo({ center: [home.lng, home.lat], zoom: 9 });
-      else this.map.fitBounds(RU_BOUNDS, { padding: 12, animate: false });
-      this.map.triggerRepaint();
-      return;
-    }
-    const dist = pins.map(p => kmBetween(p.lat, p.lng, home.lat, home.lng));
-    const MIN_SHOWN = 8;
-    const RINGS = [400, 700, 1000, 1500, 2500];
-    let use: LatLng[] | null = null;
-    for (const ring of RINGS) {
-      const set = pins.filter((_, k) => dist[k] <= ring);
-      if (set.length >= Math.min(MIN_SHOWN, pins.length)) { use = set; break; }
-    }
-    if (!use) use = pins;
-    if (use.length >= 2) {
-      const b: LngLatBounds = new this.gl.LngLatBounds();
-      use.forEach(p => b.extend([p.lng, p.lat]));
-      this.map.fitBounds(b, { padding: 44, maxZoom: 10, animate: false });
+    const home = this.anchor || MOSCOW;
+    const b: LngLatBounds = new this.gl.LngLatBounds();
+    if (this.anchor) {
+      const dLat = CITY_KM / 111, dLng = dLat / Math.cos(home.lat * Math.PI / 180);
+      b.extend([home.lng - dLng, home.lat - dLat]);
+      b.extend([home.lng + dLng, home.lat + dLat]);
     } else {
-      this.map.jumpTo({ center: [use[0].lng, use[0].lat], zoom: 10 });
+      MOSCOW_BOUNDS.forEach(c => b.extend(c));
     }
+    pins.forEach(p => { if (kmBetween(p.lat, p.lng, home.lat, home.lng) <= NEAR_KM) b.extend([p.lng, p.lat]); });
+    this.map.fitBounds(b, { padding: 24, animate: false });
     this.map.triggerRepaint();
   }
 
