@@ -232,6 +232,17 @@
   font-size: 13.5px !important;
   line-height: 1.4 !important;
 }
+/* Пустая карта у гостя: строка и две кнопки — профиль исполнителя и заказ первым. */
+.emptyHint { display: grid; gap: 10px; width: min(440px, calc(100vw - 64px)); }
+.emptyActions { display: flex; gap: 8px; }
+.emptyActions :global(.btn) { flex: 1 1 auto; min-height: 38px; padding: 0 12px; font-size: 13px; white-space: nowrap; }
+/* На телефоне карта невысокая: кнопки в одну строку, подпись короче. */
+@media (max-width: 719.98px) {
+  .emptyHint { gap: 8px; }
+  .emptyActions :global(.btn) { flex: 1 1 0; min-height: 36px; padding: 0 8px; }
+  .emptyLead { display: none; }
+}
+
 /* Гость на телефоне: короткая строка и кнопка регистрации вместо абзаца. */
 .guestLine {
   flex: 1 1 100%;

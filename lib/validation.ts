@@ -1,6 +1,7 @@
 // Проверки полей регистрации/входа — общие для клиента и сервера. Тексты ошибок — из прототипа.
 import { passwordProblem } from './password-policy';
 import { ACCESS, GEAR, JOB_TYPE_IDS, OBJECT_KINDS, ORG_TYPES, PASS_MODES, SAFETY_REQ, TOOLS, tidyGear } from './catalog';
+import { slugify } from './seo';
 import { liftSkills } from './skills';
 import { PERSON_NAME } from './text';
 
@@ -79,7 +80,9 @@ export function contactsMissing(c: Partial<Contacts>, opts: { requirePassword?: 
   if (name.length < 2 || !PERSON_NAME.test(name)) miss.push('name');
   const email = (c.email || '').trim();
   if (!EMAIL_RE.test(email) || unreachableEmail(email)) miss.push('email');
-  if (!LOGIN_RE.test((c.login || '').trim())) miss.push('login');
+  // Логин при регистрации необязателен: не придумали — сервер сделает его из имени (loginBase).
+  const login = (c.login || '').trim();
+  if (login && !LOGIN_RE.test(login)) miss.push('login');
   if (opts.requirePassword !== false && passwordProblem(c.password || '', { login: c.login, email: c.email })) miss.push('password');
   if (!(c.city || '').trim()) miss.push('city');
   return miss;
@@ -102,17 +105,15 @@ export function validateContacts(c: Partial<Contacts>, opts?: { requirePassword?
   return { field: miss[0], message: contactsMessage(miss[0], c.email || '', c) };
 }
 
-export function validateProfile(role: Role, p: { freelancer?: Partial<FreelancerProfile>; employer?: Partial<EmployerProfile> }): FieldError | null {
-  if (role === 'employer') {
-    const e = p.employer || {};
-    if (!(e.access || []).length) return { field: 'access', message: 'Отметьте, как попасть на объект — это первый вопрос исполнителя.' };
-    if (!e.tools) return { field: 'tools', message: 'Отметьте, чей инвентарь на смене.' };
-    return null;
-  }
-  const f = p.freelancer || {};
-  if (!(f.skills || []).length && !(f.customSkills || []).length) return { field: 'skills', message: 'Впишите, что умеете, — хотя бы один навык.' };
-  if (!(f.workCities || []).length) return { field: 'cities', message: 'Добавьте хотя бы один город, где вы работаете.' };
-  return null;
+/**
+ * Основа логина из имени, когда человек его не придумал: «Данияр Сапаров» → «daniyar_s». Из имени, а не из почты:
+ * логин видят другие, а имя они и так видят («Данияр С.»). Занятый сервер дополняет цифрой (server/auth.ts).
+ */
+export function loginBase(name: string): string {
+  const [first = '', ...rest] = name.trim().split(/\s+/).map(w => slugify(w).replace(/-/g, ''));
+  const last = rest.filter(Boolean).pop() || '';
+  const base = (first.slice(0, 14) + (last ? '_' + last[0] : '')).replace(/^_+/, '');
+  return base.length >= 3 ? base : ('user' + (base ? '_' + base : '')).slice(0, 14);
 }
 
 export function takenMessage(by: 'email' | 'login', role: Role): string {

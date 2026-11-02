@@ -1,6 +1,7 @@
 'use client';
 
 // «Все заказы списком» — выезжающая слева панель с поиском.
+import Link from 'next/link';
 import { Fragment } from 'react';
 import { dateLabel, jobNum, jobStatus, kmLabel, money, shortTitle, type JobSummary } from '@/lib/jobs';
 import { AdSlot } from './AdSlot';
@@ -53,7 +54,8 @@ export function JobListOverlay({ jobs, q, setQ, onClose, onOpen, onHover, role, 
             {q.trim() ? 'По этому запросу ничего не нашлось — попробуйте другое слово или нажмите «Сброс».'
               : filtered ? 'Под фильтр ничего не попало — уберите лишние условия в «Фильтрах»: вид работы, оплату, расстояние или «сегодня и завтра».'
                 : role === 'employer' ? 'Заказов пока нет — закройте список и нажмите на карту, чтобы опубликовать первый.'
-                  : 'Открытых заказов пока нет — загляните позже.'}
+                  : role === 'freelancer' ? 'Заказов рядом пока нет — пришлём уведомление, как только появится работа рядом с вами.'
+                    : <>Заказов рядом пока нет. <Link href="/auth?role=freelancer">Создайте профиль</Link> — пришлём уведомление, как только появится работа рядом с вами.</>}
           </div>
         )}
       </div>

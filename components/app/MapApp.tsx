@@ -809,7 +809,9 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
           {/* Открыта карточка (свой заказ в работе, закрытый) — подсказка закрывала бы его метку на маленькой карте. */}
           {loaded && !found && !form && selected == null && (
             <div className={sty.ca7e8c51}>
-              {nFilters || filters.q.trim() ? 'Под фильтр ничего не попало — снимите лишние условия.' : isEmp ? 'Заказов пока нет — нажмите на карту, чтобы опубликовать первый.' : 'Открытых заказов пока нет — загляните позже.'}
+              {nFilters || filters.q.trim() ? 'Под фильтр ничего не попало — снимите лишние условия.'
+                : isEmp ? 'Заказов пока нет — нажмите на карту, чтобы опубликовать первый.'
+                  : <EmptyMapHint guest={!me} noBase={!!me && me.baseLat == null} />}
             </div>
           )}
         </div>
@@ -832,6 +834,31 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
           <button onClick={() => setSelected(null)} aria-label="Закрыть заказ" style={css(WORK_BTN + '; flex: 0 0 64px; background: var(--color-neutral-100); color: var(--color-accent-900)')}>×</button>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Пустая карта — не тупик «загляните позже», а повод остаться: гостю — профиль исполнителя (оповещение о работе
+ * рядом приходит по базе, notifyNearby) и заказ первым; исполнителю — что оповестим (или где указать базу).
+ */
+function EmptyMapHint({ guest, noBase }: { guest: boolean; noBase: boolean }) {
+  if (!guest) {
+    return (
+      <div className={sty.emptyHint}>
+        {noBase
+          ? <span>Заказов рядом пока нет. <Link href="/profile">Укажите базу в профиле</Link> — пришлём уведомление, как только появится работа рядом.</span>
+          : <span>Заказов рядом пока нет — пришлём уведомление, как только появится работа рядом с вами.</span>}
+      </div>
+    );
+  }
+  return (
+    <div className={sty.emptyHint}>
+      <span><b>Заказов рядом пока нет.</b> Создайте профиль — пришлём уведомление, как только появится работа рядом с вами.</span>
+      <span className={sty.emptyActions}>
+        <Link href="/auth?role=freelancer" className="btn btn-primary">Создать профиль</Link>
+        <Link href="/auth?role=employer&next=new" className="btn btn-secondary"><span className={sty.emptyLead}>Нужны люди? </span>Разместить заказ</Link>
+      </span>
     </div>
   );
 }

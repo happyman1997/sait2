@@ -3,21 +3,18 @@
 // Экран «Вход / регистрация / восстановление» — по прототипу (design/… v5.dc.html, stage === 'auth').
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { ApiError, api } from '@/lib/api';
-import { ACCESS, GEAR, GEAR_FOR, JOB_TYPES, NO_GEAR, OBJECT_KINDS, ORG_TYPES, PASS_MODES, SAFETY_REQ, TOOLS } from '@/lib/catalog';
 import { css } from '@/lib/css';
 import { plural } from '@/lib/jobs';
 import { passwordProblem } from '@/lib/password-policy';
-import { contactsMessage, contactsMissing, EMAIL_RE, LOGIN_RE, validateProfile, type Role } from '@/lib/validation';
+import { contactsMessage, contactsMissing, EMAIL_RE, LOGIN_RE, type Role } from '@/lib/validation';
 import { showModeration } from '@/components/ModerationGuard';
 import { DocLinks } from '@/components/DocLinks';
 import { useIosApp } from '@/components/AppInstall';
 import { useFlash } from '@/components/Toast';
 import { useNarrow } from '@/components/useNarrow';
 import { CityInput } from '@/components/CityInput';
-import { SkillInput } from '@/components/SkillInput';
-import { parseSkills } from '@/lib/skills';
 import { BrandLogo } from '@/components/BrandLogo';
 import { PasswordInput } from '@/components/PasswordInput';
 import sty from './AuthScreen.module.css';
@@ -32,13 +29,9 @@ const REQ = 'font-family: var(--font-heading); font-size: 11.5px; letter-spacing
 const H3 = 'margin: 0 0 14px; font-size: 24px; text-transform: uppercase; letter-spacing: .02em';
 const HINT = 'display: block; font-size: 12.5px; line-height: 1.4; color: color-mix(in srgb, var(--color-text) 62%, transparent)';
 const NOTE = 'font-size: 13px; line-height: 1.4; margin-top: 7px; color: color-mix(in srgb, var(--color-text) 64%, transparent)';
-/** Поле шага по ключу ошибки (contactsMissing, validateProfile, ответ сервера) — к нему прокручиваем. */
-const FIELD_IDS: Record<string, string> = {
-  name: 'su-name', email: 'su-email', login: 'su-login', pass: 'su-pass', city: 'su-city',
-  skills: 'su-skills', cities: 'su-cities', access: 'su-access', tools: 'su-tools'
-};
+/** Поле шага по ключу ошибки (contactsMissing, ответ сервера) — к нему прокручиваем. Логин сервер делает из имени. */
+const FIELD_IDS: Record<string, string> = { name: 'su-name', email: 'su-email', login: 'su-name', pass: 'su-pass', city: 'su-city' };
 const ALERT = 'font-size: 13.5px; font-weight: 600; line-height: 1.4; margin-top: 16px; color: var(--color-accent-900); border: 2px solid var(--color-accent-700); padding: 9px 11px; background: var(--color-accent-100)';
-const DRAFT_INPUT = 'flex: 1; min-width: 0; height: 40px; font-size: 14px; border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 8%, transparent); color: var(--color-accent-900); --placeholder-color: var(--color-accent-700)';
 const PRIMARY = 'height: 46px; font-size: 14px; letter-spacing: .08em; text-transform: uppercase';
 const LINK_BTN = 'margin-top: 14px; padding: 0; border: 0; background: transparent; cursor: pointer; font-family: var(--font-heading); font-size: 12.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--color-accent-700)';
 const UNDERLINE_BTN = 'padding: 0; border: 0; background: transparent; cursor: pointer; font-family: var(--font-body); font-size: 13px; color: var(--color-accent-700); text-decoration: underline';
@@ -57,15 +50,6 @@ function roleCardStyle(active: boolean) {
 }
 
 const Corners = () => <><i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" /></>;
-
-function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
-  return (
-    <button type="button" className={('tag ' + (active ? 'tag-accent' : 'tag-outline')) + ' ' + sty.c4008c14} onClick={onClick}
-      aria-pressed={active}>{children}</button>
-  );
-}
-
-const TYPE_LABEL: Record<string, string> = Object.fromEntries(JOB_TYPES.map(t => [t.id, t.label]));
 
 const fmtNum = (v: number) => String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 /** С какого числа показывать счётчики людей на площадке. */
@@ -109,38 +93,11 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, startNew 
   const [role, setRole] = useState<Role>(initialRole);
   const [busy, setBusy] = useState(false);
 
-  // Контакты
+  // Контакты. Логина в анкете нет — сервер делает его из имени; навыки и прочий профиль дополняют потом, в профиле.
   const [name, setName] = useState('');
-  const [login, setLogin] = useState('');
   const [pass, setPass] = useState('');
   const [email, setEmail] = useState('');
   const [city, setCity] = useState('');
-
-  // Профиль исполнителя
-  const [skills, setSkills] = useState<string[]>([]);
-  const [customSkills, setCustomSkills] = useState<string[]>([]);
-  const [skillDraft, setSkillDraft] = useState('');
-  const [gear, setGear] = useState<string[]>([]);
-  const [customGear, setCustomGear] = useState<string[]>([]);
-  const [gearDraft, setGearDraft] = useState('');
-  const [workCities, setWorkCities] = useState<string[]>([]);
-  const [cityDraft, setCityDraft] = useState('');
-  const [loginCyr, setLoginCyr] = useState(false);
-  const [gearOpen, setGearOpen] = useState(false);
-  const [ownCar, setOwnCar] = useState(false);
-
-  // Профиль работодателя
-  const [orgType, setOrgType] = useState('частное лицо');
-  const [orgName, setOrgName] = useState('');
-  const [objectKind, setObjectKind] = useState('частный двор');
-  const [objectOther, setObjectOther] = useState('');
-  const [access, setAccess] = useState<string[]>([]);
-  const [tools, setTools] = useState('');
-  const [meetName, setMeetName] = useState('');
-  const [meetPhone, setMeetPhone] = useState('');
-  const [passMode, setPassMode] = useState('');
-  const [passWhom, setPassWhom] = useState('');
-  const [safetyReq, setSafetyReq] = useState<string[]>([]);
 
   // Код
   const [challenge, setChallenge] = useState<CodeSent | null>(null);
@@ -187,8 +144,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, startNew 
   // сам текст ошибки — в закреплённой полосе над «Далее», его видно при любой прокрутке.
   useEffect(() => {
     if (!errTick) return;
-    // Галочки оферты — только на шаге 4: вернулись назад — к полю этого шага.
-    const id = step === 4 && offerError ? 'su-offer' : FIELD_IDS[missFields[0]];
+    const id = step === 2 && offerError && !missFields.length ? 'su-offer' : FIELD_IDS[missFields[0]];
     if (id) document.getElementById(id)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }, [errTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -267,12 +223,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, startNew 
     if (m === 'login') setRecoverStep(1);
   };
 
-  type Drafted = { skills: string[]; customSkills: string[]; customGear: string[]; gear: string[]; workCities: string[] };
-  const signupPayload = (drafted?: Drafted) => ({
-    role, name, login, password: oauth ? '' : pass, email, city, oauthTicket: oauth?.ticket,
-    freelancer: role === 'freelancer' ? { skills, customSkills, gear, customGear, ownCar, workCities, ...drafted } : undefined,
-    employer: role === 'employer' ? { orgType, orgName, objectKind, objectOther, access, tools, meetName, meetPhone, passMode, passWhom, safetyReq } : undefined
-  });
+  const signupPayload = () => ({ role, name, password: oauth ? '' : pass, email, city, oauthTicket: oauth?.ticket });
 
   const startCodeTimer = (c: CodeSent) => {
     setChallenge(c);
@@ -284,81 +235,58 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, startNew 
 
   // ─── Регистрация ───
 
+  // Новичку-исполнителю — где дополнить профиль: навыков и инвентаря при регистрации больше не спрашиваем.
+  const created = () => {
+    flash(role === 'freelancer' ? 'Аккаунт создан. Навыки и инвентарь добавьте в профиле — так охотнее нанимают' : 'Аккаунт создан');
+    done(role);
+  };
+
   const nextStep = async () => {
     if (busy) return;
     if (step === 1) { setStep(2); setStepError(''); return; }
     if (step === 2) {
-      const miss = contactsMissing({ name, login, password: pass, email, city }, { requirePassword: !oauth });
+      const miss = contactsMissing({ name, password: pass, email, city }, { requirePassword: !oauth });
       if (miss.length) {
-        flashFields(miss.map(m => (m === 'password' ? 'pass' : m)), contactsMessage(miss[0], email, { login, email, password: pass }));
+        flashFields(miss.map(m => (m === 'password' ? 'pass' : m)), contactsMessage(miss[0], email, { email, password: pass }));
+        return;
+      }
+      if (!offerAccepted || !pdConsent) {
+        setOfferError(!offerAccepted ? 'Без принятия оферты аккаунт создать нельзя — отметьте галочку.' : 'Без согласия на обработку персональных данных аккаунт создать нельзя — отметьте галочку.');
+        setErrTick(t => t + 1);
         return;
       }
       setBusy(true);
       try {
-        await api('/api/auth/signup/check', signupPayload());
+        // Почту уже подтвердил сервис — аккаунт сразу, без кода.
+        if (skipCode) {
+          await api('/api/auth/oauth/signup', { ...signupPayload(), offerAccepted, pdConsent });
+          created();
+          return;
+        }
+        startCodeTimer(await api<CodeSent>('/api/auth/signup/start', signupPayload()));
         setStep(3);
         setStepError('');
-        if (!workCities.length) setWorkCities([city.trim()]);
-      } catch (e) {
-        handleApiError(e, { password: 'pass' });
-      } finally { setBusy(false); }
-      return;
-    }
-    if (step === 3) {
-      const drafted = role === 'freelancer' ? flushDrafts() : undefined;
-      const err = validateProfile(role, { freelancer: { skills: drafted?.skills, customSkills: drafted?.customSkills, workCities: drafted?.workCities }, employer: { access, tools } });
-      if (err) { flashFields([err.field], err.message); return; }
-      // Почту уже подтвердил сервис — без кода, сразу к согласию.
-      if (skipCode) { setStep(4); setStepError(''); return; }
-      setBusy(true);
-      try {
-        const c = await api<CodeSent>('/api/auth/signup/start', signupPayload(drafted));
-        startCodeTimer(c);
-        setStep(4);
-        setStepError('');
-      } catch (e) {
-        if (e instanceof ApiError && ['name', 'login', 'email', 'city', 'password'].includes(e.field || '') && !e.body.moderation) setStep(2);
-        handleApiError(e, { password: 'pass' });
-      } finally { setBusy(false); }
-      return;
-    }
-    // Шаг 4: оферта + код
-    if (!offerAccepted || !pdConsent) {
-      setOfferError(!offerAccepted ? 'Без принятия оферты аккаунт создать нельзя — отметьте галочку.' : 'Без согласия на обработку персональных данных аккаунт создать нельзя — отметьте галочку.');
-      setErrTick(t => t + 1);
-      return;
-    }
-    if (skipCode) {
-      setBusy(true);
-      try {
-        await api('/api/auth/oauth/signup', { ...signupPayload(), offerAccepted, pdConsent });
-        flash('Аккаунт создан');
-        done(role);
       } catch (e) {
         if (e instanceof ApiError && e.status === 410) { setOauth(null); setStep(1); showError(e.message); }
-        else if (e instanceof ApiError && ['name', 'login', 'email', 'city'].includes(e.field || '') && !e.body.moderation) { setStep(2); handleApiError(e); }
-        else handleApiError(e);
+        else handleApiError(e, { password: 'pass' });
       } finally { setBusy(false); }
       return;
     }
+    // Шаг 3: код из письма
     if (attemptsLeft <= 0) { setCodeError('Попытки исчерпаны — запросите новый код'); return; }
     if (code.length < CODE_LEN) { setCodeError('Введите все шесть цифр из письма'); return; }
     setBusy(true);
     try {
       await api('/api/auth/signup/verify', { challengeId: challenge?.challengeId, code, offerAccepted, pdConsent });
-      flash('Аккаунт создан');
-      done(role);
+      created();
     } catch (e) {
       if (e instanceof ApiError && e.field === 'code') {
         setCode('');
         setCodeError(e.message);
         if (typeof e.body.attemptsLeft === 'number') setAttemptsLeft(e.body.attemptsLeft);
-      } else if (e instanceof ApiError && (e.field === 'email' || e.field === 'login')) {
+      } else if (e instanceof ApiError && (e.field === 'email' || e.field === 'login' || e.status === 410)) {
         setStep(2);
         handleApiError(e);
-      } else if (e instanceof ApiError && e.status === 410) {
-        setStep(3);
-        showError(e.message);
       } else handleApiError(e);
     } finally { setBusy(false); }
   };
@@ -381,62 +309,9 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, startNew 
     setCodeError('');
   };
 
-  const addGear = () => {
-    const v = gearDraft.trim();
-    if (!v) return;
-    setCustomGear(cur => (cur.includes(v) ? cur : cur.concat([v]).slice(0, 8)));
-    setGear(g => (g.includes(v) ? g : g.filter(x => x !== NO_GEAR).concat([v])));
-    setGearDraft('');
-    flash('Инвентарь «' + v + '» добавлен в профиль');
-  };
-
-  /** Навыки из поля: вид работ, выбранный в подсказках, и вписанное (через запятую — несколько). */
-  const addSkills = ({ id, text }: { id?: string; text: string }) => {
-    const r = parseSkills(text, { skills, customSkills });
-    if (id && !r.skills.includes(id)) r.skills.push(id);
-    if (r.customSkills.length > 8) flash('Своих навыков — не больше восьми');
-    setSkills(r.skills); setCustomSkills(r.customSkills.slice(0, 8)); setSkillDraft(''); setStepError('');
-  };
-
-  /** picked — город, выбранный в подсказках (черновик в этот момент ещё не обновился). */
-  const addCity = (picked?: string) => {
-    const v = (picked ?? cityDraft).trim();
-    if (!v) return;
-    if (workCities.some(c => c.toLowerCase() === v.toLowerCase())) { setCityDraft(''); return; }
-    setWorkCities(c => c.concat([v]));
-    setCityDraft('');
-    setStepError('');
-  };
-
-  /** Вписанное в поля «свой навык», «свой инвентарь», «город», но не добавленное кнопкой, — не теряем: добавляем при «Далее». */
-  const flushDrafts = (): Drafted => {
-    const add = (list: string[], v: string, max: number) => (v && !list.some(x => x.toLowerCase() === v.toLowerCase()) ? list.concat([v]).slice(0, max) : list);
-    const sk = skillDraft.trim(), gr = gearDraft.trim(), ct = cityDraft.trim();
-    const typed = parseSkills(sk, { skills, customSkills });
-    const out = { skills: typed.skills, customSkills: typed.customSkills.slice(0, 8), customGear: add(customGear, gr, 8), gear: gr && !gear.includes(gr) ? gear.filter(x => x !== NO_GEAR).concat([gr]) : gear, workCities: add(workCities, ct, 20) };
-    if (sk || gr || ct) {
-      setSkills(out.skills); setCustomSkills(out.customSkills); setCustomGear(out.customGear); setGear(out.gear); setWorkCities(out.workCities);
-      setSkillDraft(''); setGearDraft(''); setCityDraft('');
-    }
-    return out;
-  };
-
   const onEnter = (fn: () => void) => (e: KeyboardEvent) => {
     if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); fn(); }
   };
-
-  // «Ничего нет» снимает отмеченный инвентарь, отмеченный инвентарь — «Ничего нет» (как в профиле).
-  const pickGear = (g: string) => {
-    if (g === NO_GEAR && !gear.includes(NO_GEAR)) { setGear([NO_GEAR]); setCustomGear([]); return; }
-    setGear(cur => (cur.includes(g) ? cur.filter(x => x !== g) : [...cur.filter(x => x !== NO_GEAR), g]));
-  };
-  // Сначала — то, что пригодится для отмеченных работ; «Ничего нет» — последним.
-  const gearFirst = [...new Set(skills.flatMap(s => GEAR_FOR[s] || []))];
-  const gearOrder = [...gearFirst, ...GEAR.filter(g => g !== NO_GEAR && !gearFirst.includes(g)), NO_GEAR];
-  const showGear = gearOpen || gear.length > 0 || customGear.length > 0 || !!gearDraft;
-
-  const toggle = (list: string[], set: (v: string[]) => void, v: string) =>
-    set(list.includes(v) ? list.filter(x => x !== v) : list.concat([v]));
 
   // ─── Вход ───
 
@@ -520,8 +395,8 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, startNew 
     [stats.freelancers, plural(stats.freelancers, 'исполнитель', 'исполнителя', 'исполнителей')],
     [stats.employers, plural(stats.employers, 'работодатель', 'работодателя', 'работодателей')]
   ] as [number, string][]).filter(([n]) => n >= STATS_MIN);
-  const nextLabel = step === 1 ? 'Далее — контакты' : step === 2 ? 'Далее — профиль' : step === 3 ? (skipCode ? 'Далее — согласие' : 'Далее — код') : (isEmp ? 'Создать аккаунт работодателя' : 'Создать аккаунт исполнителя');
-  const isPrivateOrg = orgType === 'частное лицо';
+  const createLabel = isEmp ? 'Создать аккаунт работодателя' : 'Создать аккаунт исполнителя';
+  const nextLabel = step === 1 ? 'Далее — контакты' : step === 2 && !skipCode ? 'Далее — код' : createLabel;
   const sentTo = challenge?.sentTo || email;
 
   return (
@@ -586,7 +461,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, startNew 
             {mode === 'signup' && (
               <div>
                 <div className={sty.c471c66a}>
-                  {['Роль', 'Контакты', 'Профиль', skipCode ? 'Согласие' : 'Код'].map((label, i) => (
+                  {['Роль', 'Контакты', ...(skipCode ? [] : ['Код'])].map((label, i) => (
                     <div key={label} className={sty.stepBox} aria-current={step === i + 1 ? 'step' : undefined} style={css('flex: 1; min-width: 0; padding: 8px 9px; border: 1px solid ' + (step === i + 1 ? 'var(--color-accent)' : 'var(--color-divider)') +
                       '; background: ' + (step > i + 1 ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : step === i + 1 ? 'color-mix(in srgb, var(--color-accent) 18%, transparent)' : 'transparent') +
                       '; color: ' + (step >= i + 1 ? 'var(--color-accent-900)' : 'color-mix(in srgb, var(--color-text) 64%, transparent)'))}>
@@ -598,7 +473,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, startNew 
 
                 {oauth && (
                   <div style={css(NOTE + '; margin: 0 0 14px; padding: 9px 11px; border: 1px solid var(--color-accent); background: color-mix(in srgb, var(--color-accent) 8%, transparent)')}>
-                    Данные получены из {oauth.providerName}: имя{oauth.email ? ' и почта' : ''}. Выберите роль и заполните профиль{skipCode ? ' — код подтверждения не понадобится.' : '; почту подтвердим кодом из письма.'}
+                    Данные получены из {oauth.providerName}: имя{oauth.email ? ' и почта' : ''}. Выберите роль и проверьте данные{skipCode ? ' — код подтверждения не понадобится.' : '; почту подтвердим кодом из письма.'}
                   </div>
                 )}
 
@@ -633,16 +508,7 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, startNew 
                         <input id="su-email" className="input" type="email" value={email} onChange={e => { setEmail(e.target.value); setStepError(''); }} placeholder="name@mail.ru" autoComplete="email" style={css(missStyle('email', true))} />
                         <span style={css(HINT)}>{skipCode
                           ? 'Почта подтверждена в ' + oauth?.providerName + ' — код не понадобится.'
-                          : 'Придёт письмо с кодом из шести цифр. По почте или логину — вход.'}</span>
-                      </div>
-                      <div className="field">
-                        <label htmlFor="su-login">Логин <span style={css(REQ)}>обязательно</span></label>
-                        <input id="su-login" className="input" value={login} autoCapitalize="none" autoCorrect="off" spellCheck={false}
-                          onChange={e => { const raw = e.target.value; setLogin(raw.replace(/[^a-zA-Z0-9._]/g, '').slice(0, 20)); setLoginCyr(/[а-яё]/i.test(raw)); setStepError(''); }}
-                          placeholder="daniyar_s" autoComplete="username" style={css(missStyle('login', true))} />
-                        {/* Русские буквы в логин не попадают — без подсказки кажется, что поле «не печатает». */}
-                        {loginCyr && <span role="status" style={css(HINT + '; color: var(--color-accent-700)')}>Русские буквы в логине нельзя — переключите клавиатуру на латиницу (EN).</span>}
-                        <span style={css(HINT)}>Латиница, цифры, точка и подчёркивание, 3–20 символов. Нужен для входа; потом его не изменить.</span>
+                          : 'Придёт письмо с кодом из шести цифр. По этой почте потом и входить.'}</span>
                       </div>
                       {!oauth && (
                         <div className="field">
@@ -655,168 +521,20 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, startNew 
                         <CityInput id="su-city" value={city} onChange={v => { setCity(v); setStepError(''); }} placeholder="Начните вводить — например, Москва" style={css(missStyle('city', true))} />
                       </div>
                     </div>
-                  </div>
-                )}
-
-                {step === 3 && !isEmp && (
-                  <div>
-                    <h3 className={sty.stepTitle} style={css(H3)}>Профиль исполнителя</h3>
-                    <div style={css(NOTE + '; margin: -6px 0 16px')}>Всё это можно поменять потом в профиле.</div>
-                    {/* Навыки — своими словами; подсказки — виды работ площадки (components/SkillInput, lib/skills.ts). */}
-                    <div className={sty.cfd1ed7d}>
-                      <label htmlFor="su-skills" style={css(LABEL)}>Что умеете</label>
-                      <span className={sty.c347d421}>обязательно</span>
-                    </div>
-                    <div className={sty.cb724174}>
-                      <SkillInput id="su-skills" wrapStyle={{ flex: 1, minWidth: 0 }} style={css(DRAFT_INPUT + '; ' + missStyle('skills', false))}
-                        value={skillDraft} onChange={v => { setSkillDraft(v); setStepError(''); }} onAdd={addSkills} exclude={skills}
-                        placeholder="например, грузчик" ariaLabel="Что умеете" />
-                      <button className={'btn btn-secondary ' + sty.c27fa87c} onClick={() => addSkills({ text: skillDraft })}>Добавить</button>
-                    </div>
-                    {(skills.length > 0 || customSkills.length > 0) && (
-                      <div className={sty.ca8e3223}>
-                        {skills.map(id => <Chip key={id} active onClick={() => setSkills(s => s.filter(x => x !== id))}>{TYPE_LABEL[id] || id}</Chip>)}
-                        {customSkills.map(label => <Chip key={'c' + label} active onClick={() => setCustomSkills(s => s.filter(x => x !== label))}>{label}</Chip>)}
-                      </div>
-                    )}
-                    <div style={css(NOTE)}>Пишите своими словами, можно несколько через запятую. Нажмите на навык, чтобы убрать его.</div>
-
-                    {/* Инвентарь — по желанию и свёрнут: шаг короче, а кому есть что указать — раскроет. */}
-                    <div className={sty.c6840f0a}>
-                      <div className={sty.cfd1ed7d}>
-                        <div style={css(LABEL)}>Инвентарь</div>
-                        <span className={sty.c347d421}>необязательно</span>
-                      </div>
-                      {!showGear ? (
-                        <>
-                          <button type="button" className={'btn btn-secondary ' + sty.c27fa87c + ' ' + sty.gearOpen} onClick={() => setGearOpen(true)}>+ Указать свой инвентарь</button>
-                          <div style={css(NOTE)}>Работодатель увидит в отклике, с чем вы придёте.</div>
-                        </>
-                      ) : (
-                        <>
-                          {gearFirst.length > 0 && <div style={css(NOTE + '; margin: 6px 0 8px')}>Сначала — то, что пригодится для отмеченных работ.</div>}
-                          <div className={sty.c2bf69bb} style={gearFirst.length ? undefined : { marginTop: 8 }}>
-                            {gearOrder.map(g => <Chip key={g} active={gear.includes(g)} onClick={() => pickGear(g)}>{g}</Chip>)}
-                            {customGear.map(g => <Chip key={'c' + g} active onClick={() => { setCustomGear(s => s.filter(x => x !== g)); setGear(s => s.filter(x => x !== g)); }}>{g}</Chip>)}
-                          </div>
-                          <div className={sty.cb724174}>
-                            <input className="input" aria-label="Свой инвентарь" value={gearDraft} onChange={e => setGearDraft(e.target.value)} onKeyDown={onEnter(addGear)} placeholder="например, мотобур" style={css(DRAFT_INPUT)} />
-                            <button className={'btn btn-secondary ' + sty.c27fa87c} onClick={addGear}>Добавить</button>
-                          </div>
-                          <div style={css(NOTE)}>Выбранное подсвечено — нажмите ещё раз, чтобы убрать.</div>
-                        </>
-                      )}
-                    </div>
-                    <div className={sty.c6840f0a}>
-                      <div className="field">
-                        <label htmlFor="su-cities" style={css(LABEL + '; margin-bottom: 8px')}>Города, где вы работаете</label>
-                        <div className={sty.caea80b7}>
-                          <CityInput id="su-cities" wrapStyle={{ flex: 1, minWidth: 160 }} style={css('border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 8%, transparent); color: var(--color-accent-900); --placeholder-color: var(--color-accent-700); ' + missStyle('cities', false))}
-                            value={cityDraft} onChange={setCityDraft} onPick={addCity} onKeyDown={onEnter(() => addCity())} placeholder="начните вводить город" />
-                          <button className={'btn btn-secondary ' + sty.c27fa87c + ' ' + sty.cec058aa} onClick={() => addCity()}>Добавить</button>
-                        </div>
-                      </div>
-                      <div className={sty.ca8e3223}>
-                        {workCities.map(label => <Chip key={label} active onClick={() => setWorkCities(c => c.filter(x => x !== label))}>{label}</Chip>)}
-                      </div>
-                      <div style={css(NOTE)}>Смены в этих городах будут в ленте и уведомлениях. Нажмите на город, чтобы убрать его.</div>
-                    </div>
-                    <label className={sty.c1200285}>
-                      <input type="checkbox" checked={ownCar} onChange={e => setOwnCar(e.target.checked)} className={sty.ca42a1ef} />
-                      Есть свой транспорт для перевозки инвентаря
+                    <label id="su-offer" className={sty.c2ff6e93}>
+                      <input type="checkbox" checked={offerAccepted} onChange={e => { setOfferAccepted(e.target.checked); if (e.target.checked && pdConsent) setOfferError(''); }} className={sty.cdf98b21} />
+                      <span>Мне есть 18 лет, принимаю <Link href="/legal/offer" target="_blank">оферту</Link> и <Link href="/legal/rules" target="_blank">правила площадки</Link>. Площадка — посредник: договор о работах стороны заключают между собой.</span>
+                    </label>
+                    <label className={sty.c2ff6e93}>
+                      <input type="checkbox" checked={pdConsent} onChange={e => { setPdConsent(e.target.checked); if (e.target.checked && offerAccepted) setOfferError(''); }} className={sty.cdf98b21} />
+                      <span>Даю <Link href="/legal/consent" target="_blank">согласие на обработку персональных данных</Link> на условиях <Link href="/legal/personal-data" target="_blank">политики</Link>.</span>
                     </label>
                   </div>
                 )}
 
-                {step === 3 && isEmp && (
+                {step === 3 && (
                   <div>
-                    <h3 className={sty.stepTitle} style={css(H3)}>Профиль работодателя</h3>
-                    <div style={css(NOTE + '; margin: -6px 0 16px')}>Всё это можно поменять потом в профиле.</div>
-                    <div style={css(LABEL + '; margin-bottom: 8px')}>Тип работодателя</div>
-                    <select className={'input ' + sty.c66998fc} aria-label="Тип работодателя" value={orgType} onChange={e => setOrgType(e.target.value)}>
-                      {ORG_TYPES.map(o => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                    <div className={sty.c5ca8ba3}>
-                      <div className="field">
-                        <label htmlFor="su-org">{isPrivateOrg ? 'ФИО работодателя' : 'Название организации'}</label>
-                        <input id="su-org" className="input" value={orgName} onChange={e => setOrgName(e.target.value)} placeholder={isPrivateOrg ? 'Айгуль Тлеубаева' : 'УК «Тверская»'} />
-                      </div>
-                      <div className="field">
-                        <label htmlFor="su-objkind">Объекты обслуживания</label>
-                        <select id="su-objkind" className="input" value={objectKind} onChange={e => setObjectKind(e.target.value)}>
-                          {OBJECT_KINDS.map(o => <option key={o}>{o}</option>)}
-                        </select>
-                      </div>
-                      {objectKind === 'свой вариант' && (
-                        <div className="field">
-                          <label htmlFor="su-objother">Свой объект обслуживания</label>
-                          <input id="su-objother" className="input" value={objectOther} onChange={e => setObjectOther(e.target.value)} placeholder="например, территория автомойки" />
-                        </div>
-                      )}
-                    </div>
-
-                    <div className={sty.c6840f0a}>
-                      <div className={sty.cfd1ed7d}>
-                        <div style={css(LABEL)}>Доступ на объект</div>
-                        <span className={sty.c347d421}>обязательно</span>
-                      </div>
-                      <div id="su-access" style={css('display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding: 4px; ' + missStyle('access', false))}>
-                        {ACCESS.map(a => <Chip key={a} active={access.includes(a)} onClick={() => { toggle(access, setAccess, a); setStepError(''); }}>{a}</Chip>)}
-                      </div>
-                    </div>
-
-                    <div className={sty.c6840f0a}>
-                      <div className={sty.cfd1ed7d}>
-                        <div style={css(LABEL)}>Инвентарь на объекте</div>
-                        <span className={sty.c347d421}>обязательно</span>
-                      </div>
-                      <div id="su-tools" style={css('display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding: 4px; ' + missStyle('tools', false))}>
-                        {TOOLS.map(t => <Chip key={t} active={tools === t} onClick={() => { setTools(t); setStepError(''); }}>{t}</Chip>)}
-                      </div>
-                    </div>
-
-                    {isPrivateOrg ? (
-                      <div className={sty.c217b1cc}>
-                        <div className="field">
-                          <label htmlFor="su-meet">Кто встречает на объекте</label>
-                          <input id="su-meet" className="input" value={meetName} onChange={e => setMeetName(e.target.value)} placeholder="я сам, коллега" />
-                        </div>
-                        <div className="field">
-                          <label htmlFor="su-meetphone">Телефон встречающего</label>
-                          <input id="su-meetphone" className="input" type="tel" value={meetPhone} onChange={e => setMeetPhone(e.target.value)} placeholder="+7 900 000-00-00" />
-                        </div>
-                      </div>
-                    ) : (
-                      <div className={sty.c6840f0a}>
-                        <div style={css(LABEL)}>Пропуск на территорию</div>
-                        <div className={sty.c520f760}>
-                          {PASS_MODES.map(p => <Chip key={p} active={passMode === p} onClick={() => setPassMode(p)}>{p}</Chip>)}
-                        </div>
-                        {passMode === 'нужен пропуск' && (
-                          <div className={'field ' + sty.c4bb9003}>
-                            <label htmlFor="su-passwhom">На кого оформлять пропуск</label>
-                            <input id="su-passwhom" className="input" value={passWhom} onChange={e => setPassWhom(e.target.value)} placeholder="ФИО исполнителя, за сутки, на охрану корпуса Б" />
-                          </div>
-                        )}
-                        <div style={css(LABEL + '; margin-top: 18px')}>Охрана труда</div>
-                        <div className={sty.c520f760}>
-                          {SAFETY_REQ.map(s => <Chip key={s} active={safetyReq.includes(s)} onClick={() => toggle(safetyReq, setSafetyReq, s)}>{s}</Chip>)}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className={sty.c35a8d17}>
-                      Адрес, доступ, инвентарь и требования видны в карточке заказа сразу. Телефон встречающего открывается исполнителю только после найма. В каждом новом заказе эти условия спрашиваем заново — объекты и смены разные.
-                    </div>
-                  </div>
-                )}
-
-                {step === 4 && (
-                  <div>
-                    <h3 className={sty.c93ff964}>{skipCode ? 'Последний шаг' : 'Подтверждение'}</h3>
-                    {skipCode ? (
-                      <div className={sty.cd2d7539}>Почта подтверждена в {oauth?.providerName}. Осталось принять оферту и дать согласие на обработку данных — и аккаунт готов. Входить потом — той же кнопкой «{oauth?.providerName}».</div>
-                    ) : (<>
+                    <h3 className={sty.c93ff964}>Подтверждение</h3>
                     <div className={sty.cd2d7539}>
                       Код из шести цифр отправлен на <b>{sentTo}</b> · действует 10 минут. Письма нет — проверьте «Спам» (в Gmail — ещё «Промоакции»).
                     </div>
@@ -847,20 +565,11 @@ export function AuthScreen({ initialMode, initialRole, stats, pending, startNew 
                     {/* Письмо так и не пришло (иностранная почта, фильтры) — регистрация без письма. */}
                     <OAuthButtons providers={oauthProviders} apply={pending?.num} orEmail={false} lead="Письмо не приходит? Зарегистрируйтесь без него — через ваш аккаунт:" />
                     {challenge?.devCode && <div className={sty.cf8e1b45}>Режим разработки: код {challenge.devCode} (письма не отправляются, а пишутся в журнал)</div>}
-                    </>)}
-                    <label id="su-offer" className={sty.c2ff6e93}>
-                      <input type="checkbox" checked={offerAccepted} onChange={e => { setOfferAccepted(e.target.checked); if (e.target.checked && pdConsent) setOfferError(''); }} className={sty.cdf98b21} />
-                      <span>Мне есть 18 лет, принимаю <Link href="/legal/offer" target="_blank">оферту</Link> и <Link href="/legal/rules" target="_blank">правила площадки</Link>. Площадка — посредник: договор о работах стороны заключают между собой.</span>
-                    </label>
-                    <label className={sty.c2ff6e93}>
-                      <input type="checkbox" checked={pdConsent} onChange={e => { setPdConsent(e.target.checked); if (e.target.checked && offerAccepted) setOfferError(''); }} className={sty.cdf98b21} />
-                      <span>Даю <Link href="/legal/consent" target="_blank">согласие на обработку персональных данных</Link> на условиях <Link href="/legal/personal-data" target="_blank">политики</Link>.</span>
-                    </label>
                   </div>
                 )}
 
                 <div className={sty.c115257a + ' ' + sty.stepNav}>
-                  {(stepError || (step === 4 && offerError)) && <div role="alert" className={sty.navAlert} style={{ ...css(ALERT), animation: stepErrAnim }}>{stepError || offerError}</div>}
+                  {(stepError || (step === 2 && offerError)) && <div role="alert" className={sty.navAlert} style={{ ...css(ALERT), animation: stepErrAnim }}>{stepError || offerError}</div>}
                   {step > 1 && <button className={'btn btn-secondary ' + sty.c61fef2d} onClick={() => { setStep(s => Math.max(1, s - 1)); setStepError(''); }}>Назад</button>}
                   <button className="btn btn-primary blueprint" onClick={nextStep} disabled={busy} style={css('flex: 1; ' + PRIMARY)}>
                     <Corners />{nextLabel}

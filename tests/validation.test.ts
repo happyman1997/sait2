@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GEAR, GEAR_FOR, JOB_TYPE_IDS, NO_GEAR } from '@/lib/catalog';
-import { contactsMessage, contactsMissing, EMAIL_RE, parseIdentifier, sanitizeSignup, unreachableEmail } from '@/lib/validation';
+import { contactsMessage, contactsMissing, EMAIL_RE, LOGIN_RE, loginBase, parseIdentifier, sanitizeSignup, unreachableEmail } from '@/lib/validation';
 
 describe('почта', () => {
   it.each(['ivan@mail.ru', 'ivan.petrov+work@yandex.ru', 'a@xn--80a1acny.xn--p1ai', 'a_b@sub.domain.co.uk'])('подходит: %s', e => {
@@ -45,5 +45,24 @@ describe('почта, на которую письма не уходят', () =>
 
   it.each(['ivan@gmail.com', 'ivan@mail.ru', 'ivan@proton.me.example.com', 'pm.me@gmail.com'])('остальные — можно: %s', e => {
     expect(unreachableEmail(e)).toBe(false);
+  });
+});
+
+describe('логин из имени', () => {
+  it('имя и первая буква фамилии латиницей; коротко — с приставкой user', () => {
+    expect(loginBase('Данияр Сапаров')).toBe('daniyar_s');
+    expect(loginBase('  Айгуль   Тлеубаева ')).toBe('aygul_t');
+    expect(loginBase('Щукин-Ёлкин Пётр')).toBe('schukinelkin_p');
+    expect(loginBase('Константин Константинопольский')).toBe('konstantin_k');
+    expect(loginBase('Ян')).toBe('yan');
+    expect(loginBase('Ли')).toBe('user_li');
+    expect(loginBase('John Smith')).toBe('john_s');
+    for (const n of ['Данияр Сапаров', 'Ян', 'Константин Константинопольский', 'О Ли']) expect(loginBase(n) + '99').toMatch(LOGIN_RE);
+  });
+
+  it('логин в анкете необязателен, но вписанный — по правилам', () => {
+    const c = { name: 'Иван Петров', email: 'ivan@mail.ru', password: 'Test-pass-123', city: 'Москва' };
+    expect(contactsMissing(c)).toEqual([]);
+    expect(contactsMissing({ ...c, login: 'да' })).toEqual(['login']);
   });
 });

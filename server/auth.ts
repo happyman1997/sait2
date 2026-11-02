@@ -6,7 +6,7 @@ import { findBadField } from '@/lib/moderation';
 import { cityPoint } from '@/lib/city-point';
 import {
   EMAIL_RE, parseIdentifier, sanitizeSignup, signupTextFields, takenMessage, unreachableEmail, UNREACHABLE_EMAIL_MSG,
-  validateContacts, validateProfile, type Role, type SignupInput
+  loginBase, validateContacts, type Role, type SignupInput
 } from '@/lib/validation';
 import { config } from './config';
 import { one, pool, query, tx, type Db } from './db';
@@ -104,7 +104,7 @@ function moderate(fields: { field: string; label: string; value: unknown }[]) {
 async function roleTaken(email: string, login: string, db: Db): Promise<{ by: 'email' | 'login'; role: Role } | null> {
   const byEmail = email ? await one<{ role: Role }>('SELECT role FROM users WHERE ' + EMAIL_SQL, [email], db) : null;
   if (byEmail) return { by: 'email', role: byEmail.role };
-  const byLogin = await one<{ role: Role }>('SELECT role FROM users WHERE lower(login) = lower($1)', [login], db);
+  const byLogin = login ? await one<{ role: Role }>('SELECT role FROM users WHERE lower(login) = lower($1)', [login], db) : null;
   if (byLogin) return { by: 'login', role: byLogin.role };
   return null;
 }
@@ -126,13 +126,13 @@ export async function checkContacts(raw: unknown, db: Db = pool()) {
   return { ok: true };
 }
 
-/** Шаги 2–3 целиком → письмо с кодом (шаг 4). Пользователь создаётся только после кода. */
+/** Контакты и согласие → письмо с кодом. Профиль при регистрации необязателен — его дополняют потом. Пользователь создаётся только после кода. */
 export async function startSignup(raw: unknown, ctx: Ctx, db: Db = pool(), nonce?: string): Promise<CodeSent> {
   // После «Войти через…», когда сервис не дал почту или человек вписал другую: адрес подтверждается кодом, как обычно.
   const ticketRaw = (raw as Record<string, unknown> | null)?.oauthTicket;
   const ticket = typeof ticketRaw === 'string' && ticketRaw ? await loadTicket(ticketRaw, nonce, db) : null;
   const s = sanitizeSignup(withOAuthPassword(raw));
-  const err = validateContacts(s) || validateProfile(s.role, s);
+  const err = validateContacts(s);
   if (err) throw new AppError(422, err.message, err.field);
   moderate(signupTextFields(s));
   await assertUnique(s.email, s.login, db);
@@ -252,8 +252,20 @@ async function signupBase(city: string): Promise<Base | null> {
   } catch { return null; }
 }
 
+/** Свободный логин из имени: «daniyar_s», занят — «daniyar_s2», «daniyar_s3»… */
+async function freeLogin(name: string, db: Db): Promise<string> {
+  const base = loginBase(name);
+  const taken = new Set((await query<{ l: string }>(
+    `SELECT lower(login) AS l FROM users WHERE lower(login) LIKE $1 ESCAPE '\\'`, [base.replace(/[_%\\]/g, '\\$&') + '%'], db)).rows.map(r => r.l));
+  for (let n = 1; ; n++) {
+    const login = n === 1 ? base : base + n;
+    if (!taken.has(login)) return login;
+  }
+}
+
 /** Аккаунт, профиль, настройки уведомлений — в транзакции регистрации. Почта уже подтверждена: кодом или сервисом входа. */
-async function createAccount(p: StoredSignup, base: Base | null, db: Db) {
+async function createAccount(signup: StoredSignup, base: Base | null, db: Db) {
+  const p = signup.login ? signup : { ...signup, login: await freeLogin(signup.name, db) };
   await assertUnique(p.email, p.login, db);
   let user;
   try {
@@ -277,7 +289,7 @@ async function createAccount(p: StoredSignup, base: Base | null, db: Db) {
     await query(
       `INSERT INTO freelancer_profiles (user_id, skills, custom_skills, gear, custom_gear, own_car, work_cities)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [uid, f.skills, f.customSkills, f.gear, f.customGear, f.ownCar, f.workCities],
+      [uid, f.skills, f.customSkills, f.gear, f.customGear, f.ownCar, f.workCities.length ? f.workCities : [p.city]],
       db
     );
   } else {
@@ -285,7 +297,7 @@ async function createAccount(p: StoredSignup, base: Base | null, db: Db) {
     await query(
       `INSERT INTO employer_profiles (user_id, org_type, org_name, object_kind, object_other, access, tools, meet_name, meet_phone, pass_mode, pass_whom, safety_req)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-      [uid, e.orgType, e.orgName || null, e.objectKind, e.objectOther || null, e.access, e.tools, e.meetName || null, e.meetPhone || null, e.passMode || null, e.passWhom || null, e.safetyReq],
+      [uid, e.orgType, e.orgName || null, e.objectKind, e.objectOther || null, e.access, e.tools || null, e.meetName || null, e.meetPhone || null, e.passMode || null, e.passWhom || null, e.safetyReq],
       db
     );
   }
@@ -338,7 +350,7 @@ export async function oauthSignup(raw: unknown, accepted: { offer?: unknown; pd?
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const pre = await loadTicket(r.oauthTicket, nonce);
   const s = sanitizeSignup(withOAuthPassword(r));
-  const err = validateContacts(s) || validateProfile(s.role, s);
+  const err = validateContacts(s);
   if (err) throw new AppError(422, err.message, err.field);
   if (!pre.profile.email || pre.profile.email.trim().toLowerCase() !== s.email.toLowerCase()) {
     throw new AppError(409, 'Этот адрес не подтверждён в ' + (pre.profile.provider === 'vk' ? 'VK ID' : 'Яндекс ID') + ' — подтвердите его кодом из письма.', 'email');

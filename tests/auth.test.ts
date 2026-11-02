@@ -155,11 +155,18 @@ describe('регистрация', () => {
     await expectErr(auth.checkContacts(freelancer({ city: ' ' })), 'city', /город/);
   });
 
-  it('профиль: исполнителю нужен навык и город, работодателю — доступ и инвентарь', async () => {
-    await expectErr(auth.startSignup(freelancer({ freelancer: { skills: [], customSkills: [], workCities: ['Москва'] } }), ctx), 'skills');
-    await expectErr(auth.startSignup(freelancer({ freelancer: { skills: ['snow'], workCities: [] } }), ctx), 'cities');
-    await expectErr(auth.startSignup(employer({ employer: { access: [], tools: 'нужен свой инвентарь' } }), ctx), 'access');
-    await expectErr(auth.startSignup(employer({ employer: { access: ['домофон'] } }), ctx), 'tools');
+  it('короткая анкета: без логина и профиля — логин из имени, город работы — город регистрации', async () => {
+    const short = (over: Record<string, unknown>) => ({ password: 'secret1!', city: 'Москва', ...over });
+    const { user: a } = await register(short({ role: 'freelancer', name: 'Данияр Сапаров', email: 'd1@mail.ru' }));
+    expect(a.login).toBe('daniyar_s');
+    expect(await auth.loadProfile(a.id, 'freelancer')).toMatchObject({ skills: [], customSkills: [], workCities: ['Москва'] });
+    // Тёзка — со следующей цифрой; логин, придуманный самим, тоже занимает имя.
+    await register(freelancer({ login: 'daniyar_s2', email: 'd2@mail.ru' }));
+    const { user: b } = await register(short({ role: 'employer', name: 'Данияр Сапаров', email: 'd3@mail.ru' }));
+    expect(b.login).toBe('daniyar_s3');
+    expect(await auth.loadProfile(b.id, 'employer')).toMatchObject({ orgType: 'частное лицо', access: [] });
+    // Вход по сделанному логину — как по своему.
+    expect((await auth.login('daniyar_s3', 'secret1!', ctx)).user.id).toBe(b.id);
   });
 
   it('один аккаунт — одна роль: занятая почта (без учёта регистра) или логин в любой роли', async () => {
