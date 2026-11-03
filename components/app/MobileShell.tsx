@@ -1,7 +1,7 @@
 'use client';
 
 // Мобильная оболочка (< 720 px), как в популярных приложениях: сверху — лёгкая шапка (знак или название раздела,
-// справа — журнал и чат), снизу — вкладки с иконками. У исполнителя «Карта · Поиск · Смена · Мои смены · Профиль»,
+// справа — журнал и чат), снизу — вкладки с иконками. У исполнителя «Карта · Поиск · Ближайшая · Мои смены · Профиль»,
 // у работодателя «Карта · Заказы · ＋ · Отклики · Профиль», у гостя «Карта · Поиск · Войти».
 // На широком экране скрыта через CSS (.only-narrow).
 import Link from 'next/link';
@@ -39,7 +39,7 @@ function Icon({ name, on = false }: { name: IconName; on?: boolean }) {
 
 const Badge = ({ n }: { n: number }) => (n > 0 ? <span className={sty.badge}>{n > 99 ? '99+' : n}</span> : null);
 
-const TITLE: Record<string, string> = { '/shift': 'Смена', '/apps': 'Отклики', '/profile': 'Профиль', '/support': 'Поддержка' };
+const TITLE: Record<string, string> = { '/shift': 'Ближайшая смена', '/apps': 'Отклики', '/profile': 'Профиль', '/support': 'Поддержка' };
 
 /** Верхняя полоса: на карте — знак площадки, в разделах — название; справа — журнал и чат (или вход для гостя). */
 export function MobileBar() {
@@ -100,7 +100,7 @@ export function MobileNav() {
         key: 'new', label: 'Заказ', icon: 'plus', on: false,
         act: () => { leave(); if (onMap) window.dispatchEvent(new Event('arena:new-job')); else router.push('/?new=1'); }
       }, page('/apps', 'Отклики', 'people', count(todo.apps)), profile]
-      : [map, search, page('/shift', 'Смена', 'shift', todo.shift ? 'dot' : undefined), page('/mine', 'Мои смены', 'list', count(todo.reviews.length)), profile];
+      : [map, search, page('/shift', 'Ближайшая', 'shift', todo.shift ? 'dot' : undefined), page('/mine', 'Мои смены', 'list', count(todo.reviews.length)), profile];
 
   const face = (t: Tab) => t.icon !== 'avatar' ? <Icon name={t.icon} on={t.on} /> : (
     <span className={sty.avatar + (t.on ? ' ' + sty.avatarOn : '')}>

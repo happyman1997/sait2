@@ -72,7 +72,9 @@ export function ShiftScreen({ pick = null }: { pick?: number | null }) {
     );
   }
 
-  const shift = job.shift;
+  // Блок смены (чек-лист, сдача, расчёт) — владельцу и нанятому. Данные смены сервер отдаёт и откликнувшемуся,
+  // но тому здесь — «отклик отправлен, ждём решения», а не «вы наняты».
+  const shift = isEmp || job.myStatus === 'hired' ? job.shift : null;
   // Замена на отдельные дни серии: смены (чек-листа, сдачи) у неё нет — только дни и чат с работодателем.
   const subHired = (!shift && job.series?.days.filter(d => d.mySub === 'hired' && d.date && !d.past)) || [];
   const subSent = (!shift && job.series?.days.filter(d => d.mySub === 'sent' && d.date && !d.past)) || [];

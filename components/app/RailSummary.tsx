@@ -134,7 +134,7 @@ export function StartSteps({ isEmp, addr }: {
   return (
     <div>
       {isEmp && addr && (
-        <div className={sty.c4f7f1ad}>
+        <div className={sty.c4f7f1ad} data-new-order="">
           <div style={css(LABEL + '; margin-bottom: 10px')}>Новый заказ</div>
           <div className={sty.cfabd50d}>
             <input className={'input ' + sty.c8b4ab7f} aria-label="Адрес заказа" value={addr.query} onChange={e => addr.setQuery(e.target.value)} onKeyDown={onKey} placeholder="Москва, ул. Тверская, 18" />

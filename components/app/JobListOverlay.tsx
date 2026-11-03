@@ -7,12 +7,19 @@ import { dateLabel, jobNum, jobStatus, kmLabel, money, shortTitle, type JobSumma
 import { AdSlot } from './AdSlot';
 import sty from './JobListOverlay.module.css';
 
+/** Дальше этого от базы — в конце списка, по расстоянию: иначе срочный заказ за 1400 км стоял бы первым. */
+const NEAR_KM = 60;
+
 export function JobListOverlay({ jobs, q, setQ, onClose, onOpen, onHover, role, filtered }: {
   jobs: JobSummary[]; q: string; setQ: (q: string) => void; onClose: () => void; onOpen: (num: number) => void;
   onHover: (num: number | null) => void; role: 'freelancer' | 'employer' | null;
   /** Включён хоть один фильтр из панели — пустой список объясняем им, а не отсутствием заказов. */
   filtered: boolean;
 }) {
+  const isFar = (j: JobSummary) => j.distanceKm != null && j.distanceKm > NEAR_KM;
+  const near = jobs.filter(j => !isFar(j));
+  const far = jobs.filter(isFar).sort((a, b) => a.distanceKm! - b.distanceKm!);
+  const list = near.concat(far);
   return (
     <div style={{ display: 'contents' }}>
       <div onClick={onClose} className={sty.c9a3a89e} />
@@ -29,11 +36,12 @@ export function JobListOverlay({ jobs, q, setQ, onClose, onOpen, onHover, role, 
           {q.trim() && <button className={'btn btn-ghost ' + sty.c07b4ee6} onClick={() => setQ('')}>Сброс</button>}
         </div>
         <div className={sty.cf7fdbae}>
-          {jobs.map((j, i) => {
+          {list.map((j, i) => {
             const s = jobStatus(j, role);
             return (
               <Fragment key={j.num}>
               {i === 3 && <AdSlot place="feed" />}
+              {i === near.length && i > 0 && <div className={'fh ' + sty.farHead}>Дальше {NEAR_KM} км</div>}
               <button onClick={() => onOpen(j.num)} onMouseEnter={() => onHover(j.num)} onMouseLeave={() => onHover(null)} className={'job-row ' + sty.c38739c6}>
                 <span className={sty.c99ccaca}>
                   <span className={'fh ' + sty.c12af3c0}>{jobNum(j.num)}</span>

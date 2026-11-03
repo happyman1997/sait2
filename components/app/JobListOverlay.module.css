@@ -144,3 +144,6 @@
 @media (max-width: 719.98px) {
   .c0177dc8 { text-transform: none !important; letter-spacing: normal !important; }
 }
+
+/* Подпись перед заказами дальше NEAR_KM от базы. */
+.farHead { margin: 6px 2px 0; font-size: 12.5px; letter-spacing: .18em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 60%, transparent); }

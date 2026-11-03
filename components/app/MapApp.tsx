@@ -553,11 +553,15 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
       setListOpen(false); setFiltersOpen(false); setStackPick(null); setObjEdit(null);
       if (form) return;
       setSelected(null);
-      setTimeout(() => {
+      // С другой страницы (/?new=1) поле появляется, когда загрузится панель, — ждём его до двух секунд.
+      let tries = 0;
+      const go = () => {
         const el = document.querySelector<HTMLInputElement>('input[aria-label="Адрес заказа"]');
-        el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-        el?.focus();
-      }, 60);
+        if (!el) { if (++tries < 20) setTimeout(go, 100); return; }
+        (el.closest('[data-new-order]') || el).scrollIntoView({ block: 'start', behavior: 'smooth' });
+        el.focus({ preventScroll: true });
+      };
+      setTimeout(go, 60);
     };
   });
   useEffect(() => {
@@ -755,12 +759,14 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
           {!form && !selected && !objEdit && (!me ? (narrow ? <GuestIntro /> : <GuestGuide />) : (
             <>
               <ActionBox />
-              <InstallCard />
+              {/* Заказчику первым — поле нового заказа (к нему ведёт вкладка «Заказ»), карточка приложения — после. */}
+              {!isEmp && <InstallCard />}
               <StartSteps isEmp={isEmp} addr={isEmp ? {
                 query: addrQuery, setQuery: v => { setAddrQuery(v); setAddrError(''); setAddrManual(false); }, busy: addrBusy,
                 note: addrError || 'Найденный адрес станет черновиком заказа. Можно просто нажать на карту.', error: !!addrError, onFind: findAddress
               } : undefined} />
               {isEmp && <ObjectsList objects={objects} onMark={fromObject} onEdit={o => { setObjEdit(o); mapRef.current?.flyTo(o.lat, o.lng, 14); }} />}
+              {isEmp && <InstallCard />}
             </>
           ))}
           {!me && !form && !selected && !objEdit && (

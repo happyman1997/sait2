@@ -19,7 +19,17 @@ const pending = () => (window as Win).__arenaInstall ?? null;
 // Метка «установлено» живёт 30 дней с последнего запуска приложения: удалили приложение — со временем снова предложим.
 const INSTALLED_DAYS = 30;
 const STANDALONE = '(display-mode: standalone)';
-const standalone = () => window.matchMedia(STANDALONE).matches || !!(navigator as { standalone?: boolean }).standalone;
+// Приложение из магазина (TWA) открывает сайт с referrer «android-app://пакет»; дальше по сайту referrer обычный —
+// запоминаем на сессию.
+const TWA_KEY = 'arena:twa';
+const twa = () => {
+  const fromApp = document.referrer.startsWith('android-app://');
+  try {
+    if (fromApp) sessionStorage.setItem(TWA_KEY, '1');
+    return sessionStorage.getItem(TWA_KEY) === '1';
+  } catch { return fromApp; }
+};
+const standalone = () => window.matchMedia(STANDALONE).matches || !!(navigator as { standalone?: boolean }).standalone || twa();
 const hasApp = () => { try { return Date.now() - Number(localStorage.getItem(INSTALLED_KEY) || 0) < INSTALLED_DAYS * 86400_000; } catch { return false; } };
 
 /** В корневом layout: Service Worker (пуш, страница «Нет интернета»); запуск приложения обновляет метку «установлено». */
