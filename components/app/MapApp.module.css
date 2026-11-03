@@ -236,10 +236,11 @@
 .emptyHint { display: grid; gap: 10px; width: min(440px, calc(100vw - 64px)); }
 .emptyActions { display: flex; gap: 8px; }
 .emptyActions :global(.btn) { flex: 1 1 auto; min-height: 38px; padding: 0 12px; font-size: 13px; white-space: nowrap; }
-/* На телефоне карта невысокая: кнопки в одну строку, подпись короче. */
+/* На телефоне карта невысокая: подсказка компактнее — мельче текст, кнопки ниже и в одну строку, подпись короче. */
 @media (max-width: 719.98px) {
-  .emptyHint { gap: 8px; }
-  .emptyActions :global(.btn) { flex: 1 1 0; min-height: 36px; padding: 0 8px; }
+  .emptyHint { gap: 6px; width: calc(100vw - 52px); }
+  .emptyActions { gap: 6px; }
+  .emptyActions :global(.btn) { flex: 1 1 0; min-height: 32px; padding: 0 8px; font-size: 12.5px; }
   .emptyLead { display: none; }
 }
 
@@ -279,5 +280,5 @@
 @media (max-width: 719.98px) {
   .c4b2febe { text-transform: none !important; letter-spacing: normal !important; }
   /* «Заказов пока нет» — под строкой поиска (она лежит поверх карты: top 10px + 44px), а не под ней. */
-  .ca7e8c51 { top: 64px !important; }
+  .ca7e8c51 { top: 62px !important; padding: 7px 10px !important; font-size: 12.5px !important; line-height: 1.35 !important; }
 }

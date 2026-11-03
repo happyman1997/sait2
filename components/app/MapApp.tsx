@@ -847,14 +847,14 @@ function EmptyMapHint({ guest, noBase }: { guest: boolean; noBase: boolean }) {
     return (
       <div className={sty.emptyHint}>
         {noBase
-          ? <span>Заказов рядом пока нет. <Link href="/profile">Укажите базу в профиле</Link> — пришлём уведомление, как только появится работа рядом.</span>
-          : <span>Заказов рядом пока нет — пришлём уведомление, как только появится работа рядом с вами.</span>}
+          ? <span>Заказов рядом пока нет. <Link href="/profile">Укажите базу в профиле</Link> — пришлём уведомление о работе рядом.</span>
+          : <span>Заказов рядом пока нет — пришлём уведомление о работе рядом.</span>}
       </div>
     );
   }
   return (
     <div className={sty.emptyHint}>
-      <span><b>Заказов рядом пока нет.</b> Создайте профиль — пришлём уведомление, как только появится работа рядом с вами.</span>
+      <span><b>Заказов рядом пока нет.</b> Создайте профиль — пришлём уведомление о работе рядом.</span>
       <span className={sty.emptyActions}>
         <Link href="/auth?role=freelancer" className="btn btn-primary">Создать профиль</Link>
         <Link href="/auth?role=employer&next=new" className="btn btn-secondary"><span className={sty.emptyLead}>Нужны люди? </span>Разместить заказ</Link>
