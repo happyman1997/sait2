@@ -37,6 +37,9 @@ export const config = {
   yandexVerification: () => env('YANDEX_VERIFICATION', 'b91c308724c2c0a7'),
   googleVerification: () => env('GOOGLE_SITE_VERIFICATION', ''),
   // Номер счётчика Яндекс Метрики (не секрет). Пусто или не цифры — счётчика и окна о статистике нет.
+  /** Android-приложение из PWABuilder: пакет и SHA-256 отпечатки ключа подписи (server/android.ts). */
+  androidPackage: () => env('ANDROID_PACKAGE', '').trim(),
+  androidCertSha256: () => env('ANDROID_CERT_SHA256', ''),
   metrikaId: () => { const v = env('YANDEX_METRIKA_ID', '').trim(); return /^\d{5,12}$/.test(v) ? Number(v) : 0; },
   uploadDir: () => env('UPLOAD_DIR', isProd ? undefined : './data/uploads'),
   // Веб-пуш: ключи VAPID (npx web-push generate-vapid-keys). Без них пуш в браузер выключен.

@@ -2,6 +2,8 @@
 // Иначе в оферте и политике стояло бы «[ФИО]», а коды и письма молча не уходили бы.
 // Номер в реестре Роскомнадзора не обязателен: его присваивают позже, чем подаётся уведомление.
 
+import { ANDROID_PACKAGE_RE, certFingerprints } from '@/lib/android';
+
 const EXAMPLE_NAME = 'Иванов Иван Иванович';
 
 export function productionProblems(env: Record<string, string | undefined> = process.env): string[] {
@@ -30,6 +32,13 @@ export function productionProblems(env: Record<string, string | undefined> = pro
   if (val('YANDEX_CLIENT_SECRET') && !val('YANDEX_CLIENT_ID')) out.push('YANDEX_CLIENT_ID — ClientID приложения на oauth.yandex.ru (секрет указан, а ClientID нет)');
   if (val('VK_CLIENT_ID') && !/^\d+$/.test(val('VK_CLIENT_ID'))) out.push('VK_CLIENT_ID — ID приложения VK ID, только цифры');
   // Иначе счётчик молча не включился бы (server/config.ts) — а владелец ждал бы статистику.
+  // Android-приложение: пакет и отпечаток ключа — вместе, иначе приложение открывалось бы со строкой адреса.
+  if (val('ANDROID_PACKAGE') && !ANDROID_PACKAGE_RE.test(val('ANDROID_PACKAGE'))) out.push('ANDROID_PACKAGE — название пакета приложения, например ru.arenarabot.app (латиница, через точку)');
+  if (val('ANDROID_CERT_SHA256')) {
+    const fp = certFingerprints(val('ANDROID_CERT_SHA256'));
+    if (fp.bad.length || !fp.ok.length) out.push('ANDROID_CERT_SHA256 — отпечаток SHA-256 ключа подписи: 32 пары знаков через двоеточие (из assetlinks.json); несколько — через запятую');
+    if (!val('ANDROID_PACKAGE')) out.push('ANDROID_PACKAGE — название пакета приложения (отпечаток ключа указан, а пакет нет)');
+  }
   if (val('YANDEX_METRIKA_ID') && !/^\d{5,12}$/.test(val('YANDEX_METRIKA_ID'))) out.push('YANDEX_METRIKA_ID — номер счётчика Яндекс Метрики, только цифры (или пусто)');
   // Telegram-канал: нужны оба — иначе сводка молча не выходила бы.
   if (val('TELEGRAM_CHANNEL') && !/^@[A-Za-z][A-Za-z0-9_]{4,31}$|^-100\d{5,15}$/.test(val('TELEGRAM_CHANNEL'))) out.push('TELEGRAM_CHANNEL — адрес канала, например @arena_rabot');

@@ -214,8 +214,16 @@ if [ -n "$(get TELEGRAM_CHANNEL)" ] && [ -n "$(get TELEGRAM_BOT_TOKEN)" ]; then
 fi
 
 echo
+echo "── Android-приложение для RuStore и Google Play (по желанию; как собрать — DEPLOY.md, раздел 16)"
+# Пакет и отпечаток ключа — не секреты (их видит каждый в /.well-known/assetlinks.json). Сам ключ подписи сюда не вводят.
+ask ANDROID_PACKAGE "Название пакета приложения, например ru.arenarabot.app (Enter — пропустить)" '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$' "Название пакета — латиница, через точку, как при сборке в PWABuilder: ru.arenarabot.app"
+if [ -n "$(get ANDROID_PACKAGE)" ]; then
+  ask ANDROID_CERT_SHA256 "SHA-256 отпечаток ключа подписи — строка вида 12:AB:…:9F из assetlinks.json (несколько — через запятую)" '^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){31}([,[:space:]]+[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){31})*$' "Отпечаток — 32 пары букв и цифр через двоеточие, например 12:AB:34:…; скопируйте его из файла assetlinks.json целиком."
+fi
+
+echo
 echo "Сохранено. Сейчас в настройках (пароли не показываются):"
-for k in OPERATOR_NAME OPERATOR_OGRNIP OPERATOR_INN OPERATOR_ADDRESS OPERATOR_EMAIL OPERATOR_RKN_NUMBER PROCESSOR_HOSTING PROCESSOR_PROTECTION PROCESSOR_MAIL PROCESSOR_GEO EMAIL_FROM SUPPORT_EMAIL YANDEX_CLIENT_ID VK_CLIENT_ID YANDEX_METRIKA_ID TELEGRAM_CHANNEL TELEGRAM_DIGEST_HOUR TELEGRAM_DIGEST_CITY; do
+for k in OPERATOR_NAME OPERATOR_OGRNIP OPERATOR_INN OPERATOR_ADDRESS OPERATOR_EMAIL OPERATOR_RKN_NUMBER PROCESSOR_HOSTING PROCESSOR_PROTECTION PROCESSOR_MAIL PROCESSOR_GEO EMAIL_FROM SUPPORT_EMAIL YANDEX_CLIENT_ID VK_CLIENT_ID YANDEX_METRIKA_ID TELEGRAM_CHANNEL TELEGRAM_DIGEST_HOUR TELEGRAM_DIGEST_CITY ANDROID_PACKAGE ANDROID_CERT_SHA256; do
   v=$(get "$k")
   if broken "$v"; then v='испорченные буквы — запустите скрипт ещё раз'; fi
   printf '  %-18s %s\n' "$k" "$v"
