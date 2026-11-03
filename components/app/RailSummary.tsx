@@ -39,7 +39,7 @@ export function GuestIntro() {
   return (
     <section className={sty.intro} aria-label="О сервисе">
       <h2 className={sty.introTitle}>Подработка рядом — без резюме</h2>
-      <p className={sty.introText}>Заказы на карте видны без регистрации: ставка, дата и место — сразу. Профиль нужен только для отклика.</p>
+      <p className={sty.introText}>Ставка, дата и место видны без регистрации. Профиль — только для отклика.</p>
       <div className={sty.introActions}>
         <Link href="/auth?role=freelancer" className="btn btn-primary">Ищу работу</Link>
         <Link href="/zakazchikam" className="btn btn-secondary">Нанимаю</Link>

@@ -143,11 +143,11 @@
 .howHeadGap { margin-top: 18px; }
 .howHide { height: 40px; min-height: 40px !important; padding: 0 6px !important; margin-right: -6px; font-size: 14px; }
 /* Гостю на телефоне под картой — короткая светлая карточка (GuestIntro), как остальные карточки телефона. */
-.intro { padding: 14px 14px 12px; border: 1px solid var(--color-divider); border-radius: 14px; background: var(--color-bg); }
-.introTitle { margin: 0; font-family: var(--font-body); font-weight: 700; font-size: 17px; line-height: 1.25; color: var(--color-text); }
-.introText { margin: 6px 0 12px; font-size: 14px; line-height: 1.45; color: color-mix(in srgb, var(--color-text) 72%, transparent); }
+.intro { padding: 10px 12px; border: 1px solid var(--color-divider); border-radius: 14px; background: var(--color-bg); }
+.introTitle { margin: 0; font-family: var(--font-body); font-weight: 700; font-size: 15.5px; line-height: 1.25; color: var(--color-text); }
+.introText { margin: 3px 0 9px; font-size: 13px; line-height: 1.4; color: color-mix(in srgb, var(--color-text) 72%, transparent); }
 .introActions { display: flex; gap: 8px; }
-.introActions :global(.btn) { flex: 1; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+.introActions :global(.btn) { flex: 1; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 
 /* Телефон: заголовки, имена и кнопки — обычным регистром, как в мобильных приложениях; мелкие подписи разделов остаются прописными. */
 @media (max-width: 719.98px) {

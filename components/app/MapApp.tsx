@@ -649,7 +649,7 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
     ? 'grid-row: 2; grid-column: 1; min-height: 0; border-top: 1px solid var(--color-divider); overflow-y: auto; overflow-x: hidden; padding: 14px 16px ' + (me && live.workMode && detail ? '96px' : '26px') + '; background: var(--color-neutral-100); box-shadow: 0 -6px 18px rgba(31,45,58,.10)'
     : 'grid-row: 1; grid-column: 1; min-height: 0; border-right: 1px solid var(--color-divider); overflow-y: auto; overflow-x: hidden; padding: 20px 22px 26px 20px; background: var(--color-neutral-100)';
   const shellStyle = narrow
-    ? 'position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: ' + (form || selected ? 'minmax(110px, 22%)' : 'minmax(240px, 56%)') + ' minmax(0, 1fr)'
+    ? 'position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: ' + (form || selected ? 'minmax(110px, 22%)' : 'minmax(240px, 68%)') + ' minmax(0, 1fr)'
     : 'position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: ' + (form ? 'minmax(420px, 620px)' : 'minmax(320px, 420px)') + ' minmax(340px, 1fr); overflow-x: auto';
   // Как у шапки на карте и левой панели — во всю ширину экрана.
   const PAD = 'clamp(14px, 2vw, 20px)';
