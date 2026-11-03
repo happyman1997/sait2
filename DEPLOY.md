@@ -284,6 +284,13 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --no-
 
 Приложение — это сайт в оболочке Android (Trusted Web Activity): открывается во весь экран без строки адреса, с иконкой и уведомлениями. Обновлять его в магазине при изменениях сайта не нужно — новая версия нужна, только если меняется название, иконка или ключ.
 
+**Версия 1.0.0 уже собрана** (пакет `ru.arenarabot.app`, Android 7.0 и новее): файлы `.apk` (RuStore), `.aab` (Google Play) и архив с ключом подписи переданы владельцу. Настройки сборки — `android/twa-manifest.json`; ключа в репозитории нет и не должно быть. Отпечаток ключа для шага 4:
+`BC:44:B8:F3:E3:3C:9A:D5:AC:84:94:AE:80:92:FF:8E:DA:F5:96:CE:E7:27:30:8C:71:B4:13:08:03:CA:C2:C0`
+
+Следующая версия: в `android/twa-manifest.json` увеличить `appVersionCode` (2, 3…) и `appVersionName`, положить рядом `arena-rabot.keystore` и собрать `npx @bubblewrap/cli build` (нужны JDK 17+ и Android SDK; пароль — из архива с ключом). Либо PWABuilder (шаги ниже) — в «Signing key» выбрать «Use mine» и загрузить тот же ключ, Package ID — тот же.
+
+Собрать заново с нуля через PWABuilder (если ключа ещё нет):
+
 1. На компьютере откройте [pwabuilder.com](https://www.pwabuilder.com) → впишите `https://arenarabot.ru` → «Start». Дождитесь проверки сайта → «Package for stores» → «Android» → «Generate Package».
 2. В настройках (Options) проверьте:
    - **Package ID** — `ru.arenarabot.app`. После первой публикации его не изменить.

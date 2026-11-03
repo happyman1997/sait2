@@ -1,0 +1,66 @@
+{
+  "packageId": "ru.arenarabot.app",
+  "host": "arenarabot.ru",
+  "name": "Арена Работ",
+  "launcherName": "Арена Работ",
+  "display": "standalone",
+  "themeColor": "#22282E",
+  "themeColorDark": "#22282E",
+  "navigationColor": "#22282E",
+  "navigationColorDark": "#22282E",
+  "navigationDividerColor": "#22282E",
+  "navigationDividerColorDark": "#22282E",
+  "backgroundColor": "#22282E",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "iconUrl": "https://arenarabot.ru/icons/icon-512.png",
+  "maskableIconUrl": "https://arenarabot.ru/icons/maskable-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./arena-rabot.keystore",
+    "alias": "arena"
+  },
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [
+    {
+      "name": "Карта заказов",
+      "shortName": "Карта",
+      "url": "https://arenarabot.ru/",
+      "chosenIconUrl": "https://arenarabot.ru/icons/icon-192.png"
+    },
+    {
+      "name": "Мои заказы и смены",
+      "shortName": "Мои",
+      "url": "https://arenarabot.ru/mine",
+      "chosenIconUrl": "https://arenarabot.ru/icons/icon-192.png"
+    },
+    {
+      "name": "Профиль",
+      "shortName": "Профиль",
+      "url": "https://arenarabot.ru/profile",
+      "chosenIconUrl": "https://arenarabot.ru/icons/icon-192.png"
+    }
+  ],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://arenarabot.ru/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://arenarabot.ru/",
+  "minSdkVersion": 24,
+  "orientation": "portrait",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [],
+  "appVersion": "1.0.0"
+}
