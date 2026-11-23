@@ -212,3 +212,9 @@
 /* Сообщение «заполните поля» — над кнопками внутри закреплённой полосы: видно, даже если шаг длинный. */
 .navWrap { flex-wrap: wrap; }
 .navAlert { flex: 1 0 100%; margin: 0 0 2px !important; }
+.timeHint {
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}

@@ -80,7 +80,8 @@ server/              только сервер: db, migrate, auth, oauth, codes,
                      shifts (жизненный цикл), live (LISTEN/NOTIFY), events (журнал и очередь доставки),
                      profile, files (загрузка фото), storage (папка или S3), ads, objects,
                      verify (e-mail, НПД), push, support (жалобы, блокировки), disputes, metrics,
-                     cron (автоприёмка, рассылка, перепроверка НПД, очистка)
+                     reminders (напоминания о смене: накануне вечером и за 2 часа до начала),
+                     cron (автоприёмка, рассылка, напоминания, перепроверка НПД, очистка)
 public/sw.js         Service Worker: показ веб-пуша и переход к заказу по клику
 db/migrations/       схема БД
 tests/               vitest

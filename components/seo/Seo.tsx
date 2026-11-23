@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { DocLinks } from '@/components/DocLinks';
-import { dateLabel, jobNum, jobStatus, money, shortTitle, type JobSummary } from '@/lib/jobs';
+import { whenLabel, jobNum, jobStatus, money, shortTitle, type JobSummary } from '@/lib/jobs';
 import { ldJson } from '@/lib/seo';
 import sty from './Seo.module.css';
 
@@ -49,7 +49,7 @@ export function JobCards({ jobs }: { jobs: JobSummary[] }) {
                 <span className={sty.cardPay}>{money(j.pay, j.unit)}</span>
               </span>
               <span className={sty.cardTitle}>{shortTitle(j.title, j.address)}</span>
-              <span className={sty.cardMeta}>{j.address} · {j.repeat ? 'с ' + dateLabel(j.date) + ', ' + j.repeat : dateLabel(j.date)}</span>
+              <span className={sty.cardMeta}>{j.address} · {whenLabel(j) + (j.repeat ? ', ' + j.repeat : '')}</span>
               <span className={sty.cardTags}><span className={s.cls}>{s.label}</span></span>
             </Link>
           </li>

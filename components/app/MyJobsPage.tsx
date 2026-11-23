@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, api } from '@/lib/api';
 import { css } from '@/lib/css';
-import { ACCEPT_CONFIRM, dateLabel, dayLabel, isSeries, jobNum, jobStatus, localISO, money, plural, REPORT_CONFIRM, seriesDayLabel, shortTitle, type JobDetail, type MyJob } from '@/lib/jobs';
+import { ACCEPT_CONFIRM, dateLabel, dayLabel, timeLabel, isSeries, jobNum, jobStatus, localISO, money, plural, REPORT_CONFIRM, seriesDayLabel, shortTitle, type JobDetail, type MyJob } from '@/lib/jobs';
 import { useFlash } from '@/components/Toast';
 import { useLive, useLiveEvent } from './Live';
 import { Corners } from './ui';
@@ -124,7 +124,7 @@ export function MyJobsPage({ role }: { role: 'freelancer' | 'employer' }) {
                 <div className={'fh ' + sty.c9f4231f}>{jobNum(j.num)}</div>
                 <div className={sty.c1dddb55}>
                   <div className={'fh ' + sty.c10a0e6b}>{shortTitle(j.title, j.address)}</div>
-                  <div className={sty.c6490c3f}>{j.address} · {sub ? 'замена ' + dayList(subShown) : dateLabel(j.date)}</div>
+                  <div className={sty.c6490c3f}>{j.address} · {(sub ? 'замена ' + dayList(subShown) : dateLabel(j.date)) + (j.startTime ? ', ' + timeLabel(j.startTime) : '')}</div>
                   <div className={sty.c9e6b1c6}>
                     <span className={s.cls}>{s.label}</span>
                     <span className={sty.cdde3848}>

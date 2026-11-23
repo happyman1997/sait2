@@ -2,7 +2,7 @@
 import crypto from 'node:crypto';
 import { CREW_ANY, MONTHS_GEN } from '@/lib/catalog';
 import {
-  autoTitle, daysAhead, emptyJobForm, isKnownPayType, isKnownRepeat, isKnownTools, isKnownUnit, jobAllErrors, JOB_FIELD_STEP,
+  autoTitle, daysAhead, emptyJobForm, START_TIME_RE, isKnownPayType, isKnownRepeat, isKnownTools, isKnownUnit, jobAllErrors, JOB_FIELD_STEP,
   accessForOutsiders, isOnCall, safetyItemsFor, jobNum, kmLabel, MAX_CALLS, money, payNumber, seriesDates, seriesDayLabel, SERIES_STEP, AUTO_ACCEPT_DAYS, type AppStatus, type Applicant, type JobDetail, type JobForm, type JobStatus, type JobSummary, type SeriesInfo, type ShiftInfo
 } from '@/lib/jobs';
 import { badWordIn, findBadField } from '@/lib/moderation';
@@ -61,7 +61,8 @@ export function baseOf(viewer: Viewer, lat?: number, lng?: number) {
 
 const SUMMARY_COLS = `
   j.id, j.num, j.title, j.type_id, t.label AS type_label, j.address, j.district, j.lat, j.lng, j.pay, j.unit, j.pay_type,
-  to_char(j.date, 'YYYY-MM-DD') AS date, j.volume, j.crew, j.urgent, j.repeat, j.status, j.created_at, j.employer_id,
+  to_char(j.date, 'YYYY-MM-DD') AS date, to_char(j.start_time, 'HH24:MI') AS start_time, j.volume, j.crew, j.urgent, j.repeat, j.status,
+  j.created_at, j.employer_id,
   (SELECT count(*) FROM hires h WHERE h.job_id = j.id)::int AS hired,
   (SELECT count(*) FROM applications a WHERE a.job_id = j.id AND a.status IN ('sent', 'hired'))::int AS applicants,
   (SELECT a.status FROM applications a WHERE a.job_id = j.id AND a.freelancer_id = $1) AS my_status,
@@ -70,7 +71,7 @@ const SUMMARY_COLS = `
 
 type SummaryRow = {
   id: string; num: string; title: string; type_id: string; type_label: string; address: string; district: string | null;
-  lat: number; lng: number; pay: number; unit: string; pay_type: string | null; date: string; volume: string | null;
+  lat: number; lng: number; pay: number; unit: string; pay_type: string | null; date: string; start_time: string | null; volume: string | null;
   crew: number; urgent: boolean; repeat: string | null; status: JobStatus; created_at: Date; employer_id: string;
   hired: number; applicants: number; my_status: AppStatus | null; distance_km: number | null; org_type: string;
 };
@@ -87,7 +88,7 @@ function toSummary(r: SummaryRow, viewer: Viewer, base?: { lat: number; lng: num
   return {
     num: Number(r.num), title: r.title, typeId: r.type_id, typeLabel: r.type_label,
     address: hidden ? roughAddress(r.address, r.district) : r.address, district: r.district,
-    lat: pt.lat, lng: pt.lng, pay: r.pay, unit: r.unit, payType: r.pay_type, date: r.date, volume: r.volume, crew: r.crew,
+    lat: pt.lat, lng: pt.lng, pay: r.pay, unit: r.unit, payType: r.pay_type, date: r.date, startTime: r.start_time, volume: r.volume, crew: r.crew,
     urgent: r.urgent, repeat: r.repeat, status: r.status, hired: r.hired, applicants: r.applicants,
     mine,
     myStatus: viewer?.role === 'freelancer' ? r.my_status : null,
@@ -716,6 +717,7 @@ export function sanitizeJobForm(raw: unknown): JobForm {
   f.unit = s(r.unit, 30) || 'за заказ';
   f.payType = s(r.payType, 60);
   f.dateISO = typeof r.dateISO === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.dateISO) ? r.dateISO : '';
+  f.startTime = typeof r.startTime === 'string' && START_TIME_RE.test(r.startTime) ? r.startTime : '';
   f.urgent = r.urgent === true;
   f.regular = r.regular === true;
   f.repeat = f.regular ? s(r.repeat, 60) : '';
@@ -799,14 +801,14 @@ export async function createJob(raw: unknown, viewer: Viewer, todayRaw: unknown)
     const crew = parseInt(f.crew, 10) === CREW_ANY ? CREW_ANY : Math.min(12, Math.max(1, parseInt(f.crew, 10) || 1));
     const row = await one<{ id: string; num: string }>(
       `INSERT INTO jobs (employer_id, type_id, title, description, address, lat, lng, district, pay, unit, pay_type, date, volume,
-                         crew, urgent, repeat, repeat_note, requirement, access, tools, meet_name, meet_phone, object_id)
+                         crew, urgent, repeat, repeat_note, requirement, access, tools, meet_name, meet_phone, object_id, start_time)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22,
-               (SELECT id FROM objects WHERE id = $23::uuid AND employer_id = $1))
+               (SELECT id FROM objects WHERE id = $23::uuid AND employer_id = $1), $24::time)
        RETURNING id, num`,
       [viewer.id, type.id, autoTitle(type.label, f.address), f.desc, f.address, f.lat, f.lng, f.district || null,
         payNumber(f.pay), f.unit, f.payType || null, f.dateISO, f.volume || null, crew, f.urgent || ahead <= 1,
         f.regular ? f.repeat : null, f.regular ? f.repeatNote || null : null, f.req || null, f.access, f.tools,
-        f.meetName || null, f.meetPhone || null, f.objectId || null],
+        f.meetName || null, f.meetPhone || null, f.objectId || null, f.startTime || null],
       db
     );
     await syncSeriesEnd(row!.id, db);
@@ -863,11 +865,11 @@ export async function updateJob(num: number, raw: unknown, viewer: Viewer, today
     await query(
       `UPDATE jobs SET type_id = $2, title = $3, description = $4, address = $5, lat = $6, lng = $7, district = $8, pay = $9, unit = $10,
               pay_type = $11, date = $12, volume = $13, crew = $14, urgent = $15, repeat = $16, repeat_note = $17, requirement = $18,
-              access = $19, tools = $20, meet_name = $21, meet_phone = $22, updated_at = now()
+              access = $19, tools = $20, meet_name = $21, meet_phone = $22, start_time = $23::time, updated_at = now()
         WHERE id = $1`,
       [j.id, type.id, autoTitle(type.label, f.address), f.desc, f.address, f.lat, f.lng, f.district || null, payNumber(f.pay), f.unit,
         f.payType || null, f.dateISO, f.volume || null, crew, f.urgent || ahead <= 1, repeat,
-        f.regular ? f.repeatNote || null : null, f.req || null, f.access, f.tools, f.meetName || null, f.meetPhone || null],
+        f.regular ? f.repeatNote || null : null, f.req || null, f.access, f.tools, f.meetName || null, f.meetPhone || null, f.startTime || null],
       db
     );
     await syncSeriesEnd(j.id, db);

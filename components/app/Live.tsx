@@ -66,7 +66,7 @@ export type Todo = {
   /** Работодатель: сданная работа ждёт приёмки. */
   reported: { num: number; title: string }[];
   /** Исполнитель: ближайшая смена, на которую наняли; date пустая — серия по вызову (по снегопаду). */
-  shift: { num: number; title: string; date: string } | null;
+  shift: { num: number; title: string; date: string; startTime: string | null } | null;
   /** Обе стороны: смена закрыта, отзыв ещё не оставлен. */
   reviews: { num: number; title: string }[];
 };
@@ -86,7 +86,7 @@ function todoOf(jobs: MyJob[], emp: boolean): Todo {
   const next = jobs.filter(j => j.myStatus === 'hired' && (j.status === 'open' || j.status === 'staffed'))
     .map(j => ({ j, day: dayOf(j) }))
     .sort((a, b) => Number(!a.day) - Number(!b.day) || a.day.localeCompare(b.day))[0];
-  return { apps: 0, reported: [], shift: next ? { num: next.j.num, title: shortTitle(next.j.title, next.j.address), date: next.day } : null, reviews };
+  return { apps: 0, reported: [], shift: next ? { num: next.j.num, title: shortTitle(next.j.title, next.j.address), date: next.day, startTime: next.j.startTime } : null, reviews };
 }
 
 const LiveCtx = createContext<Ctx | null>(null);

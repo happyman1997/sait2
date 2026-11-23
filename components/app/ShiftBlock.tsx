@@ -5,7 +5,7 @@
 import { useId, useState } from 'react';
 import { css } from '@/lib/css';
 import { uploadForm } from '@/lib/image';
-import { ACCEPT_CONFIRM, COMPLAINT_KINDS, crewOf, dateLabel, dayLabel, DISPUTE_REASONS, hireConfirm, hireDone, isOnCall, isSeries, LEAVE_REASONS, localISO, money, plural, ratingLabel, REPORT_CONFIRM, type DisputeInfo, type JobDetail } from '@/lib/jobs';
+import { ACCEPT_CONFIRM, COMPLAINT_KINDS, crewOf, dateLabel, dayLabel, START_TIMES, timeLabel, DISPUTE_REASONS, hireConfirm, hireDone, isOnCall, isSeries, LEAVE_REASONS, localISO, money, plural, ratingLabel, REPORT_CONFIRM, type DisputeInfo, type JobDetail } from '@/lib/jobs';
 import { ApplicantReviews } from './ApplicantReviews';
 import { Corners, LABEL } from './ui';
 import sty from './ShiftBlock.module.css';
@@ -88,21 +88,22 @@ export function ShiftBlock({ job, isOwner, act, onChat, onReview, busy }: {
   const series = isSeries(job.repeat);
   const canReport = !isOwner && job.myStatus === 'hired' && !reported && !accepted && job.status !== 'cancelled' && (!brigade || s.iAmLead) && !early;
 
+  const at = job.startTime ? ', начало в ' + timeLabel(job.startTime) : '';
   const line = accepted
     ? (s.autoAccepted
       ? (series ? 'Серия закрылась автоматически через 7 дней после последнего выхода.' : 'Смена закрыта автоматически: работодатель не ответил 7 дней — засчитана исполнителю.')
       : (series ? 'Серия завершена · ' : 'Работа принята · ') + dayLabel(s.acceptedAt!))
     : series
       ? (isOwner
-        ? 'Нанято ' + s.hired.length + (crewOf(job) === Infinity ? '' : ' из ' + crewOf(job)) + ' · серия с ' + dateLabel(job.date) + '. Каждый выход сдаётся и принимается отдельно — в «Серии выходов». «Завершить серию» закрывает заказ и открывает отзывы.'
-        : 'Вы в серии с ' + dateLabel(job.date) + '. Каждый выход сдаёте отдельно — «Сдать день» в «Серии выходов»; на приёмку дня у работодателя 7 дней.')
+        ? 'Нанято ' + s.hired.length + (crewOf(job) === Infinity ? '' : ' из ' + crewOf(job)) + ' · серия с ' + dateLabel(job.date) + at + '. Каждый выход сдаётся и принимается отдельно — в «Серии выходов». «Завершить серию» закрывает заказ и открывает отзывы.'
+        : 'Вы в серии с ' + dateLabel(job.date) + at + '. Каждый выход сдаёте отдельно — «Сдать день» в «Серии выходов»; на приёмку дня у работодателя 7 дней.')
     : reported
       ? (isOwner
         ? 'Работа сдана. Примите её — осталось ' + daysLeft(s.autoAcceptAt!) + ' ' + plural(daysLeft(s.autoAcceptAt!), 'день', 'дня', 'дней') + ', потом смена закроется автоматически и будет засчитана исполнителю.'
         : 'Работа сдана — ждём приёмки. Если работодатель не ответит ещё ' + daysLeft(s.autoAcceptAt!) + ' ' + plural(daysLeft(s.autoAcceptAt!), 'день', 'дня', 'дней') + ', смена закроется и будет засчитана вам.')
       : isOwner
-        ? 'Нанято ' + s.hired.length + (crewOf(job) === Infinity ? '' : ' из ' + crewOf(job)) + ' · выход ' + dateLabel(job.date) + '. Примите работу, когда исполнитель закончит.'
-        : 'Вы наняты · выход ' + dateLabel(job.date) + '. Когда закончите — нажмите «Сдать работу», у работодателя будет 7 дней на приёмку.';
+        ? 'Нанято ' + s.hired.length + (crewOf(job) === Infinity ? '' : ' из ' + crewOf(job)) + ' · выход ' + dateLabel(job.date) + at + '. Примите работу, когда исполнитель закончит.'
+        : 'Вы наняты · выход ' + dateLabel(job.date) + at + '. Когда закончите — нажмите «Сдать работу», у работодателя будет 7 дней на приёмку.';
 
   const meet = job.meetPhone
     ? { who: job.meetName || 'встречающий', phone: job.meetPhone }
@@ -286,20 +287,29 @@ export function LeaveShiftForm({ job, act, busy, onClose }: { job: JobDetail; ac
   );
 }
 
-/** Перенос даты выхода работодателем. */
+/** Перенос даты и времени выхода работодателем. */
 export function MoveDateForm({ job, act, busy, onClose }: { job: JobDetail; act: Act; busy: boolean; onClose: () => void }) {
   const [date, setDate] = useState(job.date >= localISO() ? job.date : localISO());
+  const [time, setTime] = useState(job.startTime || '');
+  const same = date === job.date && time === (job.startTime || '');
   return (
     <div ref={reveal} className={'blueprint ' + sty.c0a5aa83}>
       <Corners />
-      <div style={css(LABEL)}>Перенос даты</div>
+      <div style={css(LABEL)}>Перенос даты и времени</div>
       <div className={'field ' + sty.ce5a6d3c}>
-        <label htmlFor="mv-date">Новая дата выхода</label>
+        <label htmlFor="mv-date">Дата выхода</label>
         <input id="mv-date" className="input" type="date" min={localISO()} value={date} onChange={e => setDate(e.target.value)} />
       </div>
-      <div style={css('font-size: 13px; line-height: 1.45; margin-top: 10px; ' + MUTED)}>Нанятые и откликнувшиеся получат уведомление с новой датой.</div>
+      <div className={'field ' + sty.ce5a6d3c}>
+        <label htmlFor="mv-time">Начало</label>
+        <select id="mv-time" className="input" value={time} onChange={e => setTime(e.target.value)}>
+          <option value="">по договорённости</option>
+          {[...new Set([...START_TIMES, ...(job.startTime ? [job.startTime] : [])])].sort().map(t => <option key={t} value={t}>{timeLabel(t)}</option>)}
+        </select>
+      </div>
+      <div style={css('font-size: 13px; line-height: 1.45; margin-top: 10px; ' + MUTED)}>Нанятые и откликнувшиеся получат уведомление с новыми датой и временем.</div>
       <div className={sty.c5c223c4}>
-        <button className="btn btn-primary" disabled={busy || !date} onClick={async () => { if (await act('move', { date, today: localISO() }, 'Дата перенесена — исполнители уведомлены')) onClose(); }} style={css('flex: 1; ' + BTN)}>Перенести</button>
+        <button className="btn btn-primary" disabled={busy || !date || same} onClick={async () => { if (await act('move', { date, time, today: localISO() }, 'Перенесено — исполнители уведомлены')) onClose(); }} style={css('flex: 1; ' + BTN)}>Перенести</button>
         <button className={'btn btn-ghost ' + sty.c4066974} onClick={onClose}>Назад</button>
       </div>
     </div>

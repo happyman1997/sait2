@@ -506,7 +506,7 @@ export function MapApp({ me, initialJob, autoApply, openList = false, startNew =
     setFormState({
       lat: d.lat, lng: d.lng, address: d.address, district: d.district || '', type: d.typeId, typeOther: '', desc: d.description,
       volume: d.volume || '', crew: String(d.crew), req: d.requirement || '', pay: d.pay.toLocaleString('ru-RU'), unit: d.unit,
-      payType: d.payType || '', dateISO: d.date, urgent: d.urgent, regular: !!d.repeat, repeat: d.repeat || '', repeatNote: d.repeatNote || '',
+      payType: d.payType || '', dateISO: d.date, startTime: d.startTime || '', urgent: d.urgent, regular: !!d.repeat, repeat: d.repeat || '', repeatNote: d.repeatNote || '',
       access: d.access, tools: d.tools || '', meetName: d.meetName || '', meetPhone: d.meetPhone || '', objectId: ''
     });
     addrSynced.current = d.address;

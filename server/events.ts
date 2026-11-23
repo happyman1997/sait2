@@ -21,6 +21,8 @@ export type EventRow = {
   urgent?: boolean;
   /** Куда ведёт ссылка в письме и пуше (по умолчанию — карточка заказа). */
   path?: string;
+  /** Важное (напоминание о своей смене) — доставляется сверх лимита в сутки: «новые смены рядом» его не вытесняют. */
+  essential?: boolean;
 };
 
 /** Час и минута в часовом поясе площадки. */
@@ -44,7 +46,7 @@ export function inQuiet(hour: number, from: number, to: number) {
  * рубежом. Он зашифрован, но персональных данных в нём не держим (политика ПДн) — подробности на сайте по ссылке.
  * Оповещения без чужих данных — новый заказ рядом, вызов, перенос даты, изменение условий — как есть.
  */
-const PUSH_AS_IS = new Set(['nearby', 'job', 'move']);
+const PUSH_AS_IS = new Set(['nearby', 'job', 'move', 'reminder']);
 const PUSH_WHAT: Record<string, string> = {
   application: 'Отклики', hire: 'Найм', withdrawal: 'Отказ от выхода', cancel: 'Отмена заказа', report: 'Работа сдана',
   accept: 'Работа принята', settle: 'Отметка об оплате', dispute: 'Спор по расчёту', no_show: 'Отметка «не вышел»',
@@ -55,14 +57,14 @@ export function pushText(kind: string, text: string, num: number | null): string
   return (PUSH_WHAT[kind] || 'Новое уведомление') + (num ? ' · заказ № ' + jobNum(num) : '') + ' — откройте, чтобы посмотреть.';
 }
 
-async function enqueue(rows: { id: string; userId: string; kind: string; text: string; num: number | null; urgent: boolean; path: string | null }[], db: Db) {
+async function enqueue(rows: { id: string; userId: string; kind: string; text: string; num: number | null; urgent: boolean; path: string | null; essential: boolean }[], db: Db) {
   if (!rows.length) return;
   const { hour, minute } = localClock();
   const url = config.publicUrl();
   await query(
     `WITH ev AS (
        SELECT x.*, coalesce(x.path, '/?job=' || x.num) AS link
-         FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::bigint[], $5::bool[], $9::text[], $10::text[]) WITH ORDINALITY AS x(id, user_id, text, num, urgent, path, push, ord)
+         FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::bigint[], $5::bool[], $9::text[], $10::text[], $11::bool[]) WITH ORDINALITY AS x(id, user_id, text, num, urgent, path, push, essential, ord)
      ), s0 AS (
        SELECT ev.*, ns.email AND u.email_verified_at IS NOT NULL AS email, ns.daily_cap, u.email AS addr,
               ns.push AND EXISTS (SELECT 1 FROM push_subscriptions p WHERE p.user_id = ev.user_id) AS webpush,
@@ -79,10 +81,10 @@ async function enqueue(rows: { id: string; userId: string; kind: string; text: s
      ), s AS (
        SELECT * FROM s0 WHERE email OR webpush
      ), muted AS (
-       UPDATE events SET muted = true WHERE id IN (SELECT id FROM s WHERE nth > daily_cap) RETURNING id
+       UPDATE events SET muted = true WHERE id IN (SELECT id FROM s WHERE nth > daily_cap AND NOT essential) RETURNING id
      ), ok AS (
        SELECT *, now() + make_interval(mins => CASE WHEN quiet THEN coalesce(nullif((quiet_to - $6 + 24) % 24, 0), 24) * 60 - $7 ELSE 0 END) AS at
-         FROM s WHERE nth <= daily_cap
+         FROM s WHERE nth <= daily_cap OR essential
      )
      INSERT INTO notification_outbox (user_id, event_id, channel, to_addr, subject, body, next_try_at)
      SELECT user_id, id, 'email', addr, 'Арена Работ: ' || left(text, 80),
@@ -91,7 +93,7 @@ async function enqueue(rows: { id: string; userId: string; kind: string; text: s
      UNION ALL
      SELECT user_id, id, 'push', 'push', coalesce(link, '/'), push, at FROM ok WHERE webpush`,
     [rows.map(r => r.id), rows.map(r => r.userId), rows.map(r => r.text), rows.map(r => r.num), rows.map(r => r.urgent), hour, minute, url, rows.map(r => r.path),
-      rows.map(r => pushText(r.kind, r.text, r.num))], db);
+      rows.map(r => pushText(r.kind, r.text, r.num)), rows.map(r => r.essential)], db);
 }
 
 /** Запись событий пачкой: журнал, живое уведомление, очередь доставки. Константное число запросов на любую пачку. */
@@ -105,7 +107,7 @@ export async function addEvents(rows: EventRow[], db: Db = pool()) {
        FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::text[], $5::uuid[], $6::bool[], $7::bool[]) AS x(id, u, k, t, j, g, s)`,
     [list.map(r => r.id), list.map(r => r.userId), list.map(r => r.kind), list.map(r => r.text), list.map(r => r.jobId ?? null), list.map(r => !!r.urgent), list.map(r => !!r.silent)], db);
   await publishMany(list.filter(r => !r.silent).map(r => ({ userIds: [r.userId], e: { t: 'event' as const, text: r.text, num: r.num ?? null } })), db);
-  await enqueue(list.filter(r => r.deliver).map(r => ({ id: r.id, userId: r.userId, kind: r.kind, text: r.text, num: r.num ?? null, urgent: !!r.urgent, path: r.path ?? null })), db);
+  await enqueue(list.filter(r => r.deliver).map(r => ({ id: r.id, userId: r.userId, kind: r.kind, text: r.text, num: r.num ?? null, urgent: !!r.urgent, path: r.path ?? null, essential: !!r.essential })), db);
 }
 
 /**

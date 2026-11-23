@@ -18,6 +18,8 @@ export type JobSummary = {
   unit: string;
   payType: string | null;
   date: string;              // YYYY-MM-DD
+  /** Начало смены «HH:MM» (местное время площадки); null — по договорённости. В серии — одно на все дни. */
+  startTime: string | null;
   volume: string | null;
   crew: number;
   urgent: boolean;
@@ -231,6 +233,9 @@ export const hireConfirm = (name: string) => 'Нанять ' + name + '? Отк�
 export const hireDone = (name: string) => 'Найм оформлен: ' + name + ' — чат открыт';
 export const REVIEW_EDIT_MIN = 10;
 export const HIRE_GREETING = 'Здравствуйте! Вы наняты на этот заказ. Подтвердите, пожалуйста, время выхода.';
+/** Приветствие при найме: время уже есть в заказе — просим подтвердить его, а не назвать. */
+export const hireGreeting = (startTime: string | null | undefined) =>
+  startTime ? 'Здравствуйте! Вы наняты на этот заказ. Подтвердите, пожалуйста, выход в ' + timeLabel(startTime) + '.' : HIRE_GREETING;
 export const REPORT_MESSAGE = 'Работа выполнена — прошу принять.';
 export const LEAVE_REASONS = ['не смогу выйти', 'болезнь', 'нашёл другую смену', 'не договорились по условиям', 'далеко ехать'];
 export const COMPLAINT_KINDS = {
@@ -287,6 +292,8 @@ export type JobForm = {
   unit: string;
   payType: string;
   dateISO: string;
+  /** «HH:MM» или '' — по договорённости. */
+  startTime: string;
   urgent: boolean;
   regular: boolean;
   repeat: string;
@@ -301,7 +308,7 @@ export type JobForm = {
 
 export const emptyJobForm = (): JobForm => ({
   lat: null, lng: null, address: '', district: '', type: '', typeOther: '', desc: '', volume: '', crew: '1', req: '',
-  pay: '', unit: 'за заказ', payType: PAY_TYPES[0], dateISO: '', urgent: false, regular: false, repeat: '', repeatNote: '',
+  pay: '', unit: 'за заказ', payType: PAY_TYPES[0], dateISO: '', startTime: '', urgent: false, regular: false, repeat: '', repeatNote: '',
   access: [], tools: '', meetName: '', meetPhone: '', objectId: ''
 });
 
@@ -369,6 +376,22 @@ export function kmLabel(km: number): string {
 /** Рейтинг: «4,8». */
 export function ratingLabel(r: number): string {
   return r.toFixed(1).replace('.', ',');
+}
+
+/** Время начала: «HH:MM» (минуты кратны 5). */
+export const START_TIME_RE = /^([01]\d|2[0-3]):[0-5][05]$/;
+/** Варианты в форме: с 4:00 (снег чистят до работы) до 23:30 каждые полчаса. */
+export const START_TIMES: string[] = Array.from({ length: 40 }, (_, i) => {
+  const m = 240 + i * 30;
+  return String(Math.floor(m / 60)).padStart(2, '0') + ':' + (m % 60 ? '30' : '00');
+});
+/** «09:00» → «9:00». */
+export function timeLabel(t: string | null | undefined): string {
+  return t ? t.replace(/^0(\d)/, '$1') : '';
+}
+/** Дата и время выхода: «25 ноября, 9:00»; в серии — «с 25 ноября, 9:00»; без времени — только дата. */
+export function whenLabel(j: { date: string; startTime?: string | null; repeat?: string | null }): string {
+  return (j.repeat ? 'с ' : '') + dateLabel(j.date) + (j.startTime ? ', ' + timeLabel(j.startTime) : '');
 }
 
 export function dateLabel(iso: string): string {

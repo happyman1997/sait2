@@ -232,7 +232,7 @@ export async function saveSettings(viewer: U | null, raw: unknown): Promise<Sett
 const KIND_LABEL: Record<string, string> = {
   account: 'Аккаунт', job: 'Заказ', application: 'Отклик', hire: 'Найм', cancel: 'Отмена', withdrawal: 'Отказ', no_show: 'Не вышел',
   report: 'Работа сдана', accept: 'Приёмка', move: 'Перенос', settle: 'Расчёт', review: 'Отзыв', complaint: 'Жалоба', nearby: 'Рядом', dispute: 'Спор',
-  support: 'Поддержка'
+  support: 'Поддержка', reminder: 'Напоминание'
 };
 
 export async function listEvents(viewer: U | null, limit = 30) {

@@ -1,5 +1,5 @@
 // Фоновые задачи: автоприёмка через 7 дней, очистка устаревших служебных записей и брошенных файлов,
-// напоминания поддержке о сроке ответа, сводка заказов в Telegram-канал.
+// напоминания поддержке о сроке ответа, напоминания о сменах (reminders.ts), сводка заказов в Telegram-канал.
 // Запускаются из процесса приложения (instrumentation.ts) раз в 10 минут или внешним cron: `npm run cron`.
 // pg_try_advisory_lock не даёт двум инстансам выполнять одно и то же одновременно.
 import { postDailyDigest } from './channel';
@@ -7,6 +7,7 @@ import { pool } from './db';
 import { processOutbox } from './events';
 import { sweepFiles } from './files';
 import { recheckNpd } from './verify';
+import { remindShifts } from './reminders';
 import { autoAcceptDue } from './shifts';
 import { remindSla } from './support';
 
@@ -43,6 +44,8 @@ export async function runDueTasks(): Promise<{ skipped: boolean; autoAccepted: n
           `DELETE FROM ${t} x USING jobs j WHERE x.job_id = j.id AND ${PAST_3Y}`)
       ]) cleaned += (await c.query(sql)).rowCount || 0;
       cleaned += await sweepFiles().catch(e => { console.error('[files]', (e as Error).message); return 0; });
+      // Напоминания о сменах — до отправки очереди: уйдут в этом же запуске.
+      await remindShifts().catch(e => console.error('[reminders]', (e as Error).message));
       const { sent } = await processOutbox();
       await recheckNpd().catch(e => console.error('[npd]', (e as Error).message));
       await remindSla().catch(e => console.error('[sla]', (e as Error).message));

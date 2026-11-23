@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { ACCESS, MONTHS_GEN, PAY_TYPES, REPEATS, TOOLS, UNITS } from '@/lib/catalog';
 import { css } from '@/lib/css';
-import { localISO, type JobForm } from '@/lib/jobs';
+import { localISO, START_TIMES, timeLabel, type JobForm } from '@/lib/jobs';
 import { ALERT, Corners, errFieldStyle, FIELD_ERR, LABEL, optStyle } from './ui';
 import type { JobTypeRow } from './FiltersPanel';
 import sty from './JobFormPanel.module.css';
@@ -215,6 +215,14 @@ export function JobFormPanel({ form, setForm, step, goStep, errs, formError, onN
               </select>
             </div>
             <DatePicker value={form.dateISO} onPick={v => setForm({ dateISO: v }, 'date')} error={errs.date} />
+            <div className="field">
+              <label htmlFor="jf-time">Начало</label>
+              <select id="jf-time" className="input" value={form.startTime} onChange={e => setForm({ startTime: e.target.value })}>
+                <option value="">по договорённости</option>
+                {[...new Set([...START_TIMES, ...(form.startTime ? [form.startTime] : [])])].sort().map(t => <option key={t} value={t}>{timeLabel(t)}</option>)}
+              </select>
+              <div className={sty.timeHint}>Время видно в заказе сразу — меньше переписки, а перед выходом исполнитель получит напоминание.</div>
+            </div>
             <label className={sty.c78f23aa}>
               <input type="checkbox" checked={form.urgent} onChange={e => setForm({ urgent: e.target.checked })} className={sty.ca42a1ef} />
               Срочный заказ — выход сегодня или завтра

@@ -2,8 +2,8 @@
 // Отметки выхода и геометки нет (решение заказчика), споры — в disputes.ts. Деньги идут напрямую между сторонами.
 import { CREW_ANY } from '@/lib/catalog';
 import {
-  SAFETY_ITEMS, dateLabel, isOnCall, isSeries, MAX_CALLS, seriesDayLabel, SERIES_STEP,
-  AUTO_ACCEPT_DAYS, COMPLAINT_KINDS, daysAhead, HIRE_GREETING, jobNum, LEAVE_REASONS, REPORT_MESSAGE, REVIEW_EDIT_MIN,
+  SAFETY_ITEMS, START_TIME_RE, dateLabel, timeLabel, isOnCall, isSeries, MAX_CALLS, seriesDayLabel, SERIES_STEP,
+  AUTO_ACCEPT_DAYS, COMPLAINT_KINDS, daysAhead, hireGreeting, jobNum, LEAVE_REASONS, REPORT_MESSAGE, REVIEW_EDIT_MIN,
   type AppStatus, type ChatMessage, type ChatThread, type JobDetail, type JobStatus, type MyJob
 } from '@/lib/jobs';
 import { badWordIn, findBadField } from '@/lib/moderation';
@@ -25,11 +25,12 @@ const LATE_MARK_DAYS = 90;
 const NOTICES = ['больше суток', 'меньше суток'];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-type JobRow = { id: string; num: number; employer_id: string; status: JobStatus; crew: number; title: string; date: string; repeat: string | null };
+type JobRow = { id: string; num: number; employer_id: string; status: JobStatus; crew: number; title: string; date: string; start_time: string | null; repeat: string | null };
 
 async function lockJob(num: number, db: Db): Promise<JobRow> {
   const j = await one<JobRow & { num: string }>(
-    `SELECT id, num, employer_id, status, crew, title, to_char(date, 'YYYY-MM-DD') AS date, repeat FROM jobs WHERE num = $1 FOR UPDATE`,
+    `SELECT id, num, employer_id, status, crew, title, to_char(date, 'YYYY-MM-DD') AS date, to_char(start_time, 'HH24:MI') AS start_time, repeat
+       FROM jobs WHERE num = $1 FOR UPDATE`,
     [num], db);
   if (!j) throw new AppError(404, 'Заказ не найден.');
   return { ...j, num: Number(j.num) };
@@ -144,7 +145,7 @@ export async function staffAction(num: number, appId: string, action: StaffActio
       // Взятый в основной состав больше не замена на отдельные дни — иначе занял бы два места в один день.
       await query('DELETE FROM series_subs WHERE job_id = $1 AND freelancer_id = $2', [j.id, a.freelancer_id], db);
       // При найме открывается чат — первое сообщение от работодателя.
-      await systemMessage(db, j.id, num, a.freelancer_id, me.id, 'employer', HIRE_GREETING);
+      await systemMessage(db, j.id, num, a.freelancer_id, me.id, 'employer', hireGreeting(j.start_time));
       await refreshStaffing(j, db);
       await addEvents([{ userId: a.freelancer_id, kind: 'hire', text: 'Вас наняли · ' + t + '. Открыт чат с работодателем.', jobId: j.id, num, deliver: true, urgent: true }], db);
       await publish([a.freelancer_id, me.id], { t: 'message', num, thread: a.freelancer_id }, db);
@@ -365,7 +366,10 @@ export async function autoAcceptDue(db: Db = pool()): Promise<number[]> {
   return done;
 }
 
-/** Перенос даты: нельзя закрытую/отменённую; нанятые и откликнувшиеся уведомляются. */
+/**
+ * Перенос даты и/или времени начала: нельзя закрытую/отменённую; нанятые и откликнувшиеся уведомляются.
+ * time: «HH:MM», '' — «по договорённости»; поле не передано — время не меняется.
+ */
 export async function moveDate(num: number, raw: unknown, viewer: Viewer, todayRaw: unknown): Promise<JobDetail> {
   const today = clientToday(todayRaw);
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
@@ -374,19 +378,25 @@ export async function moveDate(num: number, raw: unknown, viewer: Viewer, todayR
   if (ahead == null) throw new AppError(422, 'Укажите новую дату.', 'date');
   if (ahead < 0) throw new AppError(422, 'Новая дата уже прошла — выберите сегодня или позже.', 'date');
   if (ahead > 366) throw new AppError(422, 'Дата выхода — не дальше чем через год.', 'date');
+  const timeGiven = 'time' in r;
+  if (timeGiven && r.time !== '' && !(typeof r.time === 'string' && START_TIME_RE.test(r.time))) throw new AppError(422, 'Выберите время начала из списка.', 'time');
   await tx(async (db) => {
     const j = await lockJob(num, db);
     needOwner(j, viewer);
     if (j.status === 'cancelled' || j.status === 'accepted') throw new AppError(409, 'Смена закрыта или отменена — переносить нельзя.');
-    if (j.date === date) throw new AppError(422, 'Это та же дата.', 'date');
-    if (j.repeat && !isOnCall(j.repeat) && (await seriesHasHistory(j.id, db))) throw new AppError(409, SERIES_FIXED, 'date');
-    await query('UPDATE jobs SET date = $2, urgent = $3, updated_at = now() WHERE id = $1', [j.id, date, ahead <= 1], db);
-    await syncSeriesEnd(j.id, db);
+    const time = timeGiven ? (r.time as string) || null : j.start_time;
+    const dateMoved = j.date !== date, timeMoved = time !== j.start_time;
+    if (!dateMoved && !timeMoved) throw new AppError(422, 'Это те же дата и время.', 'date');
+    if (dateMoved && j.repeat && !isOnCall(j.repeat) && (await seriesHasHistory(j.id, db))) throw new AppError(409, SERIES_FIXED, 'date');
+    await query('UPDATE jobs SET date = $2, urgent = $3, start_time = $4::time, updated_at = now() WHERE id = $1', [j.id, date, ahead <= 1, time], db);
+    if (dateMoved) await syncSeriesEnd(j.id, db);
     invalidateSearch();
     const people = [...(await hiredOf(j.id, db)).map(h => h.freelancer_id), ...(await openApplicants(j.id, db))];
-    const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
-    const label = parseInt(date.slice(8), 10) + ' ' + MONTHS[parseInt(date.slice(5, 7), 10) - 1];
-    await addEvents(people.map(id => ({ userId: id, kind: 'move', text: 'Дата выхода перенесена на ' + label + ' · заказ № ' + jobNum(num) + ' «' + j.title + '»', jobId: j.id, num, deliver: true, urgent: ahead <= 1 })), db);
+    const when = (dateMoved || !j.repeat ? dateLabel(date) : '') + (time ? (dateMoved || !j.repeat ? ', ' : '') + timeLabel(time) : '');
+    const what = !timeMoved ? 'Дата выхода перенесена на ' + dateLabel(date)
+      : !dateMoved && !time ? 'Время начала — теперь по договорённости'
+      : (dateMoved ? 'Выход перенесён на ' : 'Время начала изменилось: ') + when;
+    await addEvents(people.map(id => ({ userId: id, kind: 'move', text: what + ' · заказ № ' + jobNum(num) + ' «' + j.title + '»', jobId: j.id, num, deliver: true, urgent: ahead <= 1 })), db);
     await publish(people, { t: 'job', num }, db);
   });
   return getJob(num, viewer);
@@ -645,7 +655,7 @@ export async function myJobs(viewer: Viewer): Promise<MyJob[]> {
         ORDER BY k1, k2, k3 DESC, k4 DESC LIMIT 300
      )
      SELECT j.id, j.num, j.title, j.type_id, t.label AS type_label, j.address, j.district, j.lat, j.lng, j.pay, j.unit, j.pay_type,
-            to_char(j.date, 'YYYY-MM-DD') AS date, j.volume, j.crew, j.urgent, j.repeat, j.status, j.created_at, j.employer_id,
+            to_char(j.date, 'YYYY-MM-DD') AS date, to_char(j.start_time, 'HH24:MI') AS start_time, j.volume, j.crew, j.urgent, j.repeat, j.status, j.created_at, j.employer_id,
             (SELECT count(*) FROM hires h WHERE h.job_id = j.id)::int AS hired,
             (SELECT count(*) FROM applications a WHERE a.job_id = j.id AND a.status IN ('sent', 'hired'))::int AS applicants,
             ${emp ? 'NULL' : 'a.status'} AS my_status,
@@ -681,6 +691,7 @@ export async function myJobs(viewer: Viewer): Promise<MyJob[]> {
         : { address: x.address as string, lat: x.lat as number, lng: x.lng as number }),
       district: x.district as string | null, addressHidden: !!x.addr_hidden,
       pay: x.pay as number, unit: x.unit as string, payType: x.pay_type as string | null, date: x.date as string,
+      startTime: (x.start_time as string | null) ?? null,
       volume: x.volume as string | null, crew: x.crew as number, urgent: x.urgent as boolean, repeat: x.repeat as string | null,
       status: x.status as JobStatus, hired: x.hired as number, applicants: x.applicants as number,
       mine: emp, myStatus: (x.my_status as AppStatus | null) ?? null, distanceKm: null, createdAt: (x.created_at as Date).toISOString(),

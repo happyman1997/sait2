@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Crumbs, JobCards, JsonLd, SeoPage } from '@/components/seo/Seo';
 import sty from '@/components/seo/Seo.module.css';
-import { crewOf, dateLabel, jobNum, jobStatus, money, type JobDetail } from '@/lib/jobs';
+import { crewOf, dateLabel, whenLabel, jobNum, jobStatus, money, type JobDetail } from '@/lib/jobs';
 import { WORK_INFO, workById } from '@/lib/seo';
 import { AppError } from '@/server/errors';
 import { currentUser } from '@/server/http';
@@ -52,10 +52,10 @@ export default async function JobPage({ params }: Props) {
   // не на что — у него только «Показать на карте».
   const applyHref = !u ? '/auth?apply=' + j.num : u.role === 'freelancer' ? '/?job=' + j.num + '&apply=1' : null;
   const hiring = open && !full;
-  const when = j.repeat ? 'с ' + dateLabel(j.date) : dateLabel(j.date);
+  const when = whenLabel(j);
   const specs: [string, string][] = [
     ['Адрес', j.addressHidden ? j.address + ' (частный заказчик: дом и точная метка — после найма)' : j.address],
-    ['Дата выхода', when],
+    ['Дата и время', j.startTime ? when : when + ', время — по договорённости'],
     ['Повтор', j.repeat ? j.repeat + (j.repeatNote ? ' · ' + j.repeatNote : '') : 'разовый выход'],
     ...(crew > 1 ? [['Людей в смене', crew === Infinity ? 'сколько угодно' : crew + ' чел.'] as [string, string]] : []),
     ['Объём', j.volume || 'по договорённости'],

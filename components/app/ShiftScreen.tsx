@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { css } from '@/lib/css';
-import { dateLabel, jobNum, jobStatus, money, seriesDayLabel, shortTitle, type JobDetail } from '@/lib/jobs';
+import { dateLabel, timeLabel, jobNum, jobStatus, money, seriesDayLabel, shortTitle, type JobDetail } from '@/lib/jobs';
 import { showModeration } from '@/components/ModerationGuard';
 import { useFlash } from '@/components/Toast';
 import { useLive, useLiveEvent } from './Live';
@@ -79,7 +79,7 @@ export function ShiftScreen({ pick = null }: { pick?: number | null }) {
   const subHired = (!shift && job.series?.days.filter(d => d.mySub === 'hired' && d.date && !d.past)) || [];
   const subSent = (!shift && job.series?.days.filter(d => d.mySub === 'sent' && d.date && !d.past)) || [];
   const s = subHired.length && job.status !== 'accepted' && job.status !== 'cancelled' ? { label: 'Вы на замене', cls: 'tag tag-neutral' } : jobStatus(job, role);
-  const when = subHired.length ? 'замена ' + subHired.map(d => seriesDayLabel(d.date!)).join(', ') : dateLabel(job.date);
+  const when = (subHired.length ? 'замена ' + subHired.map(d => seriesDayLabel(d.date!)).join(', ') : dateLabel(job.date)) + (job.startTime ? ', ' + timeLabel(job.startTime) : '');
   const meSafety = shift?.safety.find(x => x.me);
   const canCheck = !isEmp && !!meSafety && job.status !== 'accepted' && job.status !== 'cancelled';
   const toggle = (id: string) => {

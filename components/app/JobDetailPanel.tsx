@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { useRef, useState } from 'react';
 import { css } from '@/lib/css';
-import { crewOf, dateLabel, dayLabel, jobNum, jobStatus, kmLabel, localISO, money, plural, ratingLabel, type JobDetail, type JobSummary } from '@/lib/jobs';
+import { crewOf, dateLabel, dayLabel, whenLabel, jobNum, jobStatus, kmLabel, localISO, money, plural, ratingLabel, type JobDetail, type JobSummary } from '@/lib/jobs';
 import { ApplicantsBlock, LeaveShiftForm, MoveDateForm, reveal, ShiftBlock, type Act, type ReviewOpen } from './ShiftBlock';
 import { SeriesBlock } from './SeriesBlock';
 import { ShareJob } from './ShareJob';
@@ -75,11 +75,11 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
   const s = jobStatus(job, role);
   const st = applyState(job, role, reqOk);
   const crew = crewOf(job);
-  const when = job.repeat ? 'с ' + dateLabel(job.date) : dateLabel(job.date);
+  const when = whenLabel(job);
 
   const specs = [
     { label: 'Адрес', value: job.addressHidden ? job.address + ' (частный заказчик: дом и точная метка — после найма)' : job.address },
-    { label: 'Дата выхода', value: when },
+    { label: 'Дата и время', value: job.startTime ? when : when + ', время — по договорённости' },
     { label: 'Повтор', value: job.repeat ? job.repeat + (job.repeatNote ? ' · ' + job.repeatNote : '') : 'разовый выход' },
     ...(crew > 1 ? [{ label: 'Людей в смене', value: (crew === Infinity ? 'сколько угодно' : crew + ' чел.') + ' · набрано ' + job.hired }] : []),
     { label: 'Объём', value: job.volume || 'по договорённости' },
@@ -296,7 +296,7 @@ export function JobDetailPanel({ job, role, others, onClose, onApply, onWithdraw
             <button className={'btn btn-secondary ' + sty.c98c3d34} onClick={onEdit}>Изменить условия</button>
           )}
           <button className={'btn btn-ghost ' + sty.c98c3d34} onClick={() => { setCancelOpen(true); setMoveOpen(false); }}>{job.hired > 0 ? 'Отменить смену' : 'Отменить заказ'}</button>
-          {!moveOpen && <button className={'btn btn-ghost ' + sty.c98c3d34} onClick={() => setMoveOpen(true)}>Перенести дату выхода</button>}
+          {!moveOpen && <button className={'btn btn-ghost ' + sty.c98c3d34} onClick={() => setMoveOpen(true)}>Перенести дату или время</button>}
         </div>
       )}
       {moveOpen && !cancelOpen && <MoveDateForm job={job} act={act} busy={busy} onClose={() => setMoveOpen(false)} />}

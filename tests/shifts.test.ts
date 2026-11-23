@@ -375,6 +375,31 @@ describe('перенос даты', () => {
     await sh.acceptWork(num, emp);
     await expectErr(sh.moveDate(num, { date: plusDays(4) }, emp, today), /переносить нельзя/);
   });
+
+  it('время начала: в заказе, в приветствии при найме, перенос только времени; «по договорённости» — null', async () => {
+    const { num, ids } = await jobWithApps([fl], { startTime: '09:00' });
+    expect((await jobs.getJob(num, fl)).startTime).toBe('09:00');
+    expect((await jobs.listJobs({ today }, fl)).jobs.find(j => j.num === num)!.startTime).toBe('09:00');
+    await sh.staffAction(num, ids[0], 'hire', emp);
+    const chat = await sh.listMessages(num, fl.id, fl);
+    expect(chat.messages[0].text).toMatch(/выход в 9:00/);
+    // Только время — дата та же; нанятый получает «Время начала изменилось».
+    const d = await sh.moveDate(num, { date: plusDays(3), time: '10:30' }, emp, today);
+    expect(d.startTime).toBe('10:30');
+    expect((await one<{ text: string }>(`SELECT text FROM events WHERE kind = 'move' AND user_id = $1`, [fl.id]))!.text).toMatch(/^Время начала изменилось: \d+ \S+, 10:30/);
+    await expectErr(sh.moveDate(num, { date: plusDays(3), time: '10:30' }, emp, today), /те же/);
+    await expectErr(sh.moveDate(num, { date: plusDays(3), time: '25:00' }, emp, today), /из списка/, 'time');
+    // Без поля time время сохраняется, '' — «по договорённости».
+    expect((await sh.moveDate(num, { date: plusDays(4) }, emp, today)).startTime).toBe('10:30');
+    expect((await sh.moveDate(num, { date: plusDays(4), time: '' }, emp, today)).startTime).toBeNull();
+  });
+
+  it('время начала: неверное значение не сохраняется, правка до найма меняет время', async () => {
+    const j = await jobs.createJob(form({ startTime: '9:7' }), emp, today);
+    expect(j.startTime).toBeNull();
+    const d = await jobs.updateJob(j.num, form({ startTime: '07:30' }), emp, today);
+    expect(d.startTime).toBe('07:30');
+  });
 });
 
 describe('чат', () => {
