@@ -15,13 +15,14 @@
   "startUrl": "/",
   "iconUrl": "https://arenarabot.ru/icons/icon-512.png",
   "maskableIconUrl": "https://arenarabot.ru/icons/maskable-512.png",
+  "monochromeIconUrl": "https://arenarabot.ru/badge-96.png",
   "splashScreenFadeOutDuration": 300,
   "signingKey": {
     "path": "./arena-rabot.keystore",
     "alias": "arena"
   },
-  "appVersionName": "1.0.0",
-  "appVersionCode": 1,
+  "appVersionName": "1.0.1",
+  "appVersionCode": 2,
   "shortcuts": [
     {
       "name": "Карта заказов",
@@ -62,5 +63,5 @@
   "fileHandlers": [],
   "launchHandlerClientMode": "",
   "displayOverride": [],
-  "appVersion": "1.0.0"
+  "appVersion": "1.0.1"
 }
